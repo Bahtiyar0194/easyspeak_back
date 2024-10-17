@@ -102,7 +102,7 @@ return [
     'present'              => 'Поле ":attribute" должно присутствовать.',
     'regex'                => 'Поле ":attribute" имеет ошибочный формат.',
     'required'             => 'Заполните поле ":attribute"',
-    'required_if'          => 'Поле ":attribute" обязательно для заполнения',
+    'required_if'          => 'Заполните поле ":attribute"',
     'required_unless'      => 'Поле ":attribute" обязательно для заполнения',
     'required_with'        => 'Поле ":attribute" обязательно для заполнения, когда :values указано.',
     'required_with_all'    => 'Поле ":attribute" обязательно для заполнения, когда :values указано.',
@@ -143,17 +143,47 @@ return [
     */
 
     'custom' => [
-        'organization_id' => [
-            'numeric' => 'Выберите организацию'
+        'favicon_file' => [
+            'dimensions' => 'Ширина и высота иконки должно быть 192x192 пикселей'
         ],
-        'coverage' => [
-            'min' => 'Выберите охват'
+        'school_domain' => [
+            'regex' => 'Домен должен состоять только из строчных латинских букв без пробела'
         ],
-        'city' => [
-            'numeric' => 'Выберите город'
+        'video_file' => [
+            'required_if' => 'Выберите видеофайл',
         ],
-        'login' => [
-            'regex'   => 'Логин должен состоять только из латинских букв и цифр' 
+        'selected_video_id' => [
+            'required_if' => 'Выберите видеофайл',
+        ],
+        'audio_file' => [
+            'required_if' => 'Выберите аудиофайл',
+        ],
+        'selected_audio_id' => [
+            'required_if' => 'Выберите аудиофайл',
+        ],
+        'image_file' => [
+            'required_if' => 'Выберите файл изображения',
+        ],
+        'selected_image_id' => [
+            'required_if' => 'Выберите файл изображения',
+        ],
+        'roles_count' => [
+            'min' => 'Количество ролей пользователя должно быть не меньше :min',
+        ],
+        'course_mentors_count' => [
+            'min' => 'Добавьте кураторов к данному курсу',
+        ],
+        'members_count' => [
+            'min' => 'Добавьте участников в группу',
+        ],
+        'mentor_id' => [
+            'required' => 'Выберите куратора',
+        ],
+        'group_category_id' => [
+            'required' => 'Выберите категорию группы',
+        ],
+        'task_answer' => [
+            'required' => 'Дайте ответ на задание',
         ]
     ],
 
@@ -184,6 +214,9 @@ return [
         'iin'                   => 'ИИН',
         'password'              => 'Пароль',
         'password_confirmation' => 'Подтверждение пароля',
+
+        'school_name'           => 'Название школы',
+        'school_domain'         => 'Доменное имя школы',
 
         'recovery_code'         => 'Код восстановления пароля',
 

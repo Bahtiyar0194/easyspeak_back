@@ -11,18 +11,13 @@ return [
     | these language lines according to your application's requirements.
     |
     */
-    'registration_title' => 'Тіркелу',
-    'your_sponsor' => 'Сіздің спонсор',
-
-    'congratulations' => ':name құттықтаймыз!',
-    'registration_successful' => 'Тіркелу сәтті өтті.',
-    'get_bonuses' => 'Бонустық ұпайлар мен кэшбэк алыңыз',
-    'download_our_app' => 'Мобильді қосымшаны App Store немесе Google Play дүкенінен жүктеп алыңыз',
-
-    'failed'   => 'Эл.пошта немесе құпия сөз қате енгізілді.',
+    'failed'   => 'E-Mail немесе құпия сөз қате енгізілді.',
     'banned' => 'Сіздің аккаунтыңыз бұғатталды.',
-    'not_found' => 'Мұндай телефон тіркелмеген',
-    'wrong_sms' => 'SMS код қате енгізілді',
-    'user_already_exists' => 'Мұндай телефоны бар қолданушы тіркелген.',
+    'not_found' => 'Мұндай E-Mail бұл мектепте табылмады.',
+    'school_not_found' => 'Мұндай домендік атаумен мектеп табылмады.',
+    'already_been_invited' => 'Мұндай эл-поштасы бар қолданушы бұрын осы курсқа шақырылды',
+    'wrong_recovery_code' => 'Құпия сөзді қалпына келтіру коды қате енгізілді.',
+    'password_was_previously_restored' => 'Осы код бойынша құпия сөз бұрын қалпына келтірілген.',
+    'user_already_exists' => 'Мұндай E-Mail бар пайдаланушы осы мектепте тіркелген.',
     'throttle' => 'Кіру әрекеті тым көп болды. :seconds секундтан соң қайталап көріңіз.',
 ];
