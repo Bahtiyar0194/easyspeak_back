@@ -8,6 +8,7 @@ use App\Models\GroupCategory;
 use App\Models\User;
 use App\Models\Language;
 use App\Models\UserOperation;
+use App\Models\UserRequest;
 
 use Illuminate\Http\Request;
 use Validator;
@@ -22,7 +23,37 @@ class GroupController extends Controller
 
     public function get_group_attributes(Request $request)
     {
-        $mentors = DB::table('users')
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $operators = Group::leftJoin('users', 'users.user_id', '=', 'groups.operator_id')
+        ->where('users.school_id', '=', auth()->user()->school_id)
+        ->where('users.status_type_id', '!=', 2)
+        ->select(
+            'users.user_id',
+            'users.first_name',
+            'users.last_name',
+            DB::raw("CONCAT(users.last_name, ' ', users.first_name) AS full_name"),
+            'users.avatar'
+        )
+        ->distinct()
+        ->orderBy('users.last_name', 'asc')
+        ->get();
+
+        $mentors = Group::leftJoin('users', 'users.user_id', '=', 'groups.mentor_id')
+        ->where('users.school_id', '=', auth()->user()->school_id)
+        ->where('users.status_type_id', '!=', 2)
+        ->select(
+            'users.user_id',
+            'users.first_name',
+            'users.last_name',
+            DB::raw("CONCAT(users.last_name, ' ', users.first_name) AS full_name"),
+            'users.avatar'
+        )
+        ->distinct()
+        ->orderBy('users.last_name', 'asc')
+        ->get();
+
+        $all_mentors = DB::table('users')
             ->where('users.school_id', '=', auth()->user()->school_id)
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
@@ -33,19 +64,48 @@ class GroupController extends Controller
             ->select(
                 'users.user_id',
                 'users.first_name',
-                'users.last_name'
+                'users.last_name',
+                'users.avatar'
             )
             ->distinct()
+            ->orderBy('users.last_name', 'asc')
+            ->get();
+
+        $categories = Group::leftJoin('users', 'users.user_id', '=', 'groups.operator_id')
+            ->leftJoin('group_categories', 'group_categories.category_id', '=', 'groups.group_category_id')
+            ->where('users.school_id', '=', auth()->user()->school_id)
+            ->select(
+                'group_categories.category_id',
+                'group_categories.category_name'
+            )
+            ->distinct()
+            ->orderBy('group_categories.category_name')
             ->get();
 
 
-        $categories = DB::table('group_categories')
+        $all_categories = DB::table('group_categories')
             ->get();
+
+        // Получаем статусы пользователя
+        $statuses = DB::table('groups')
+        ->leftJoin('types_of_status', 'groups.status_type_id', '=', 'types_of_status.status_type_id')
+        ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
+        ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
+        ->select(
+            'groups.status_type_id',
+            'types_of_status_lang.status_type_name'
+        )
+        ->groupBy('groups.status_type_id', 'types_of_status_lang.status_type_name')
+        ->get();
 
         $attributes = new \stdClass();
 
+        $attributes->group_operators = $operators;
         $attributes->group_mentors = $mentors;
+        $attributes->all_mentors = $all_mentors;
         $attributes->group_categories = $categories;
+        $attributes->all_categories = $all_categories;
+        $attributes->group_statuses = $statuses;
 
         return response()->json($attributes, 200);
     }
@@ -54,6 +114,9 @@ class GroupController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
         $per_page = $request->per_page ? $request->per_page : 10;
+        // Получаем параметры сортировки
+        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
+        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
 
         $groups = Group::leftJoin('group_categories', 'groups.group_category_id', '=', 'group_categories.category_id')
             ->leftJoin('users as mentor', 'groups.mentor_id', '=', 'mentor.user_id')
@@ -79,7 +142,7 @@ class GroupController extends Controller
             )
             ->where('mentor.school_id', '=', auth()->user()->school_id)
             ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
-            ->orderBy('groups.created_at', 'desc');
+            ->orderBy($sortKey, $sortDirection);
 
             $isOnlyMentor = auth()->user()->hasOnlyRoles(['mentor']);
 
@@ -89,11 +152,27 @@ class GroupController extends Controller
 
 
         $group_name = $request->group_name;
+        $operators_id = $request->operators;
+        $mentors_id = $request->mentors;
+        $statuses_id = $request->statuses;
         $created_at_from = $request->created_at_from;
         $created_at_to = $request->created_at_to;
 
         if (!empty($group_name)) {
             $groups->where('groups.group_name', 'LIKE', '%' . $group_name . '%');
+        }
+
+        if(!empty($operators_id)){
+            $groups->whereIn('groups.operator_id', $operators_id);
+        }
+
+        if(!empty($mentors_id)){
+            $groups->whereIn('groups.mentor_id', $mentors_id);
+        }
+
+        // Фильтрация по статусу
+        if (!empty($statuses_id)) {
+            $groups->whereIn('groups.status_type_id', $statuses_id);
         }
 
         if ($created_at_from && $created_at_to) {
@@ -291,7 +370,7 @@ class GroupController extends Controller
             ]);
         } elseif ($request->step == 3) {
 
-            $isOwner = auth()->user()->hasRole(['super_admin', 'school_owner']);
+            //$isOwner = auth()->user()->hasRole(['super_admin', 'school_owner']);
 
             $edit_group = Group::find($request->group_id);
             $edit_group->operator_id = auth()->user()->user_id;
@@ -299,7 +378,7 @@ class GroupController extends Controller
             $edit_group->group_category_id = $request->group_category_id;
             $edit_group->group_name = $request->group_name;
             $edit_group->group_description = $request->group_description;
-            $edit_group->status_type_id = $isOwner ? 1 : 16;
+            $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
 
             // Извлекаем user_id из переданных данных
@@ -316,24 +395,24 @@ class GroupController extends Controller
             // Определяем новых участников (есть в новом массиве, но их нет в группе)
             $newMembersToAdd = array_diff($newMemberIds, $currentMembers);
 
-            if ($isOwner) {
-                // Удаляем бывших участников
+            // if ($isOwner) {
+            //     // Удаляем бывших участников
                 GroupMember::whereIn('member_id', $formerMembers)
                     ->where('group_id', $request->group_id)
                     ->delete();
-            } else {
-                // Обрабатываем бывших участников
-                GroupMember::whereIn('member_id', $formerMembers)
-                    ->where('group_id', $request->group_id)
-                    ->update(['status_type_id' => 15]);
-            }
+            // } else {
+            //     // Обрабатываем бывших участников
+            //     GroupMember::whereIn('member_id', $formerMembers)
+            //         ->where('group_id', $request->group_id)
+            //         ->update(['status_type_id' => 15]);
+            // }
 
             // Добавляем новых участников
             foreach ($newMembersToAdd as $memberId) {
                 $new_member = new GroupMember();
                 $new_member->group_id = $edit_group->group_id;
                 $new_member->member_id = $memberId;
-                $new_member->status_type_id = $isOwner ? 1 : 12;
+                $new_member->status_type_id = 1; //$isOwner ? 1 : 12;
                 $new_member->save();
             }
 
@@ -387,6 +466,15 @@ class GroupController extends Controller
             $user_operation->operation_type_id = 4;
             $user_operation->description = $description;
             $user_operation->save();
+
+            // $owner =
+
+            // $user_request = new UserRequest();
+            // $user_request->operator_id = auth()->user()->user_id;
+            // $user_request->recipient_id = 
+            // $user_request->request_type_id = 1;
+            // $user_request->description = $description;
+            // $user_request->save();
 
             return response()->json('success', 200);
         }

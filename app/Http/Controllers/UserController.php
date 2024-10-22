@@ -51,8 +51,9 @@ class UserController extends Controller
         $auth_user = auth()->user();
 
         // Проверяем роли пользователя
-        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner']);
+        $isOwner = $auth_user->hasRole(['school_owner']);
         $isAdmin = $auth_user->hasRole(['school_admin']);
+        $isMentor = $auth_user->hasRole(['mentor']);
 
         // Получаем статусы пользователя
         $statuses = DB::table('users')
@@ -77,9 +78,13 @@ class UserController extends Controller
 
         // Применяем фильтры ролей в зависимости от роли пользователя
         if ($isOwner) {
-            $roles->whereNotIn('types_of_user_roles.role_type_slug', ['super_admin']);
-        } elseif ($isAdmin) {
+            $roles->whereIn('types_of_user_roles.role_type_slug', ['school_admin', 'mentor', 'learner']);
+        } 
+        elseif ($isAdmin) {
             $roles->whereIn('types_of_user_roles.role_type_slug', ['mentor', 'learner']);
+        }
+        elseif ($isMentor) {
+            $roles->whereIn('types_of_user_roles.role_type_slug', ['learner']);
         }
 
         // Получаем список ролей
@@ -107,7 +112,30 @@ class UserController extends Controller
         $isAdmin = $auth_user->hasRole(['school_admin']);
         $isMentor = $auth_user->hasRole(['mentor']);
 
+        // Получаем параметры лимита на страницу
         $per_page = $request->per_page ? $request->per_page : 10;
+        // Получаем параметры сортировки
+        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
+        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
+
+        // Формируем запрос
+        $query = User::where('users.school_id', $auth_user->school_id);
+
+        // Если пользователь владелец, исключаем пользователей с ролью владельца
+        if ($isOwner) {
+            $query->whereDoesntHave('roles', function ($q) {
+                $q->where('role_type_slug', 'school_owner');
+            });
+        }
+        // Если пользователь админ, исключаем пользователей с ролями владельца и администратора
+        elseif ($isAdmin) {
+            $query->whereDoesntHave('roles', function ($q) {
+                $q->whereIn('role_type_slug', ['school_owner', 'school_admin']);
+            });
+        }
+
+        // Возвращаем ID пользователей
+        $userIds = $query->distinct()->pluck('user_id')->toArray();
 
         // Основной запрос для получения пользователей
         $users = User::leftJoin('users_roles', 'users.user_id', '=', 'users_roles.user_id')
@@ -122,11 +150,10 @@ class UserController extends Controller
                 'users.phone',
                 'users.avatar',
                 'users.created_at',
-                DB::raw("GROUP_CONCAT(types_of_user_roles.role_type_slug SEPARATOR ', ') as roles"), // Собираем роли в строку
                 'types_of_status_lang.status_type_name',
                 'types_of_status.color as status_color'
             )
-            ->where('users.school_id', '=', $auth_user->school_id)
+            ->whereIn('users.user_id', $userIds)
             ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
             ->groupBy(
                 'users.user_id',
@@ -137,21 +164,12 @@ class UserController extends Controller
                 'users.avatar',
                 'users.created_at',
                 'types_of_status_lang.status_type_name',
-                'types_of_status.color',
+                'types_of_status.color'
             )
-            ->orderBy('users.created_at', 'desc');
+            ->orderBy($sortKey, $sortDirection);
 
-        // Применяем фильтрацию пользователей по ролям (если админ)
-        if ($isOwner) {
-                                    // Исключаем пользователей с ролями 'school_owner'
-                                    $users->havingRaw("NOT FIND_IN_SET('school_owner', REPLACE(roles, ' ', ''))");
-        }
-        elseIf($isAdmin){
-                        // Исключаем пользователей с ролями 'school_owner' или 'school_admin'
-                        $users->havingRaw("NOT FIND_IN_SET('school_owner', REPLACE(roles, ' ', '')) AND NOT FIND_IN_SET('school_admin', REPLACE(roles, ' ', ''))");
-        }
-        elseif($isMentor){
-            // Присоединяем таблицы для фильтрации по группам ментора. (Показываем пользователей которые состоят в группе ментора)
+        // Если это не владелец, не админ но ментор то присоединяем таблицы для фильтрации по группам ментора. (Показываем пользователей которые состоят в группе ментора)
+        if(!$isOwner && !$isAdmin && $isMentor){
             $users->leftJoin('group_members', 'users.user_id', '=', 'group_members.member_id')
             ->leftJoin('groups', 'groups.group_id', '=', 'group_members.group_id')
             ->where('groups.mentor_id', '=', $auth_user->user_id);
@@ -161,7 +179,7 @@ class UserController extends Controller
         $user_fio = $request->user;
         $email = $request->email;
         $phone = $request->phone;
-        $status_type_id = $request->status_type_id;
+        $statuses_id = $request->statuses;
         $roles_id = $request->roles;
         $created_at_from = $request->created_at_from;
         $created_at_to = $request->created_at_to;
@@ -182,8 +200,8 @@ class UserController extends Controller
         }
 
         // Фильтрация по статусу
-        if (!empty($status_type_id)) {
-            $users->where('users.status_type_id', '=', $status_type_id);
+        if (!empty($statuses_id)) {
+            $users->whereIn('users.status_type_id', $statuses_id);
         }
 
         // Фильтрация по роли

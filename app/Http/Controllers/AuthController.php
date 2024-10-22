@@ -79,9 +79,9 @@ class AuthController extends Controller
         $new_user->status_type_id = 1;
 
         if ($request->first_registration == 'true') {
-            $new_user->current_role_id = 1;
+            $new_user->current_role_id = 2;
         } elseif ($request->first_registration == 'false') {
-            $new_user->current_role_id = 3;
+            $new_user->current_role_id = 5;
         }
 
         $new_user->save();

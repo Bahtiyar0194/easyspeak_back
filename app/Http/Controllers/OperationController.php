@@ -40,6 +40,9 @@ class OperationController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
         $per_page = $request->per_page ? $request->per_page : 10;
+        // Получаем параметры сортировки
+        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
+        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
 
         $operations = UserOperation::leftJoin('types_of_operations', 'types_of_operations.operation_type_id', '=', 'user_operations.operation_type_id')
             ->leftJoin('types_of_operations_lang', 'types_of_operations_lang.operation_type_id', '=', 'types_of_operations.operation_type_id')
@@ -56,9 +59,9 @@ class OperationController extends Controller
             )
             ->where('operator.school_id', '=', auth()->user()->school_id)
             ->where('types_of_operations_lang.lang_id', '=', $language->lang_id)
-            ->orderBy('user_operations.created_at', 'desc');
+            ->orderBy($sortKey, $sortDirection);
 
-        $operation_type_id = $request->operation_type_id;
+        $operation_type_ids = $request->operations;
         $operator = $request->operator;
         $description = $request->description;
         $created_at_from = $request->created_at_from;
@@ -70,8 +73,8 @@ class OperationController extends Controller
         }
 
         // Фильтрация по типу операции
-        if (!empty($operation_type_id)) {
-            $operations->where('user_operations.operation_type_id', '=', $operation_type_id);
+        if (!empty($operation_type_ids)) {
+            $operations->whereIn('user_operations.operation_type_id', $operation_type_ids);
         }
 
         if (!empty($description)) {

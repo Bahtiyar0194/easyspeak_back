@@ -9,5 +9,5 @@ class UserOperation extends Model
 {
     use HasFactory;
     protected $table = 'user_operations';
-    protected $primaryKey = 'id';
+    protected $primaryKey = 'user_operation_id';
 }
