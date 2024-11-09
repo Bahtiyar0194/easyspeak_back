@@ -3,11 +3,13 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\OperationController;
-use App\Models\OperationRole;
+use App\Http\Controllers\CourseController;
+use App\Http\Controllers\DictionaryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -47,6 +49,12 @@ Route::group([
             // Route::post('/change_password', [AuthController::class, 'change_password']);
             Route::post('/logout', [AuthController::class, 'logout']);
         });
+    });
+
+    Route::group([
+        'prefix' => 'media'
+    ], function ($router) {
+        Route::get('/{file_name}', [MediaController::class, 'get_file']);
     });
 
     Route::group([
@@ -99,6 +107,25 @@ Route::group([
             Route::get('/get_operation_attributes', [OperationController::class, 'get_operation_attributes']);
             Route::post('/get', [OperationController::class, 'get_operations']);
             Route::get('/get/{user_operation_id}', [OperationController::class, 'get_operation']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'courses'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_course_attributes', [CourseController::class, 'get_course_attributes']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'dictionary'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_dictionary_attributes', [DictionaryController::class, 'get_dictionary_attributes']);
+            Route::post('/get', [DictionaryController::class, 'get_words']);
+            Route::get('/get/{word_id}', [DictionaryController::class, 'get_word']);
+            Route::post('/add', [DictionaryController::class, 'add'])->middleware('check_roles');
         });
     });
 });

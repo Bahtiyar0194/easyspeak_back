@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateGroupsTable extends Migration
+class CreateSentencesTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,16 +13,14 @@ class CreateGroupsTable extends Migration
      */
     public function up()
     {
-        Schema::create('groups', function (Blueprint $table) {
-            $table->increments('group_id');
-            $table->string('group_name');
-            $table->text('group_description')->nullable();
-            $table->integer('group_category_id')->unsigned();
-            $table->foreign('group_category_id')->references('category_id')->on('group_categories')->onDelete('cascade');
+        Schema::create('sentences', function (Blueprint $table) {
+            $table->increments('sentence_id');
+            $table->string('sentence');
+            $table->string('transcription')->nullable();
+            $table->integer('course_id')->unsigned();
+            $table->foreign('course_id')->references('course_id')->on('courses')->onDelete('cascade');
             $table->integer('operator_id')->unsigned();
             $table->foreign('operator_id')->references('user_id')->on('users')->onDelete('cascade');
-            $table->integer('mentor_id')->unsigned();
-            $table->foreign('mentor_id')->references('user_id')->on('users')->onDelete('cascade');
             $table->integer('status_type_id')->default(1)->unsigned();
             $table->foreign('status_type_id')->references('status_type_id')->on('types_of_status');
             $table->timestamps();
@@ -36,6 +34,6 @@ class CreateGroupsTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('groups');
+        Schema::dropIfExists('sentences');
     }
 }
