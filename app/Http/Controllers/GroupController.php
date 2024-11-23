@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Group;
 use App\Models\GroupMember;
-use App\Models\GroupCategory;
 use App\Models\User;
+use App\Models\Course;
+use App\Models\CourseLevel;
 use App\Models\Language;
 use App\Models\UserOperation;
 use App\Models\UserRequest;
@@ -24,6 +25,33 @@ class GroupController extends Controller
     public function get_group_attributes(Request $request)
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        ->where('courses.show_status_id', '=', 1)
+        ->where('courses_lang.lang_id', '=', $language->lang_id)
+        ->select(
+            'courses.course_id',
+            'courses_lang.course_name'
+        )
+        ->distinct()
+        ->orderBy('courses.course_id', 'asc')
+        ->get();
+
+
+        foreach ($courses as $c => $course) {
+            $levels = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.course_id', '=', $course->course_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->select(
+                'course_levels.level_id',
+                'course_levels_lang.level_name'
+            )
+            ->distinct()
+            ->orderBy('course_levels.level_id', 'asc')
+            ->get();
+
+            $course->levels = $levels;
+        }
 
         $operators = Group::leftJoin('users', 'users.user_id', '=', 'groups.operator_id')
         ->where('users.school_id', '=', auth()->user()->school_id)
@@ -71,21 +99,6 @@ class GroupController extends Controller
             ->orderBy('users.last_name', 'asc')
             ->get();
 
-        $categories = Group::leftJoin('users', 'users.user_id', '=', 'groups.operator_id')
-            ->leftJoin('group_categories', 'group_categories.category_id', '=', 'groups.group_category_id')
-            ->where('users.school_id', '=', auth()->user()->school_id)
-            ->select(
-                'group_categories.category_id',
-                'group_categories.category_name'
-            )
-            ->distinct()
-            ->orderBy('group_categories.category_name')
-            ->get();
-
-
-        $all_categories = DB::table('group_categories')
-            ->get();
-
         // Получаем статусы пользователя
         $statuses = DB::table('groups')
         ->leftJoin('types_of_status', 'groups.status_type_id', '=', 'types_of_status.status_type_id')
@@ -100,11 +113,10 @@ class GroupController extends Controller
 
         $attributes = new \stdClass();
 
+        $attributes->courses = $courses;
         $attributes->group_operators = $operators;
         $attributes->group_mentors = $mentors;
         $attributes->all_mentors = $all_mentors;
-        $attributes->group_categories = $categories;
-        $attributes->all_categories = $all_categories;
         $attributes->group_statuses = $statuses;
 
         return response()->json($attributes, 200);
@@ -118,10 +130,13 @@ class GroupController extends Controller
         $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
         $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
 
-        $groups = Group::leftJoin('group_categories', 'groups.group_category_id', '=', 'group_categories.category_id')
-            ->leftJoin('users as mentor', 'groups.mentor_id', '=', 'mentor.user_id')
+        $groups = Group::leftJoin('users as mentor', 'groups.mentor_id', '=', 'mentor.user_id')
             ->leftJoin('users as operator', 'groups.operator_id', '=', 'operator.user_id')
             ->leftJoin('schools', 'schools.school_id', '=', 'mentor.school_id')
+            ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+            ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
             ->leftJoin('types_of_status', 'types_of_status.status_type_id', '=', 'groups.status_type_id')
             ->leftJoin('types_of_status_lang', 'types_of_status_lang.status_type_id', '=', 'types_of_status.status_type_id')
             ->select(
@@ -129,7 +144,8 @@ class GroupController extends Controller
                 'groups.group_name',
                 'groups.group_description',
                 'groups.created_at',
-                'group_categories.category_name',
+                'course_levels_lang.level_name',
+                'courses_lang.course_name',
                 'mentor.first_name as mentor_first_name',
                 'mentor.last_name as mentor_last_name',
                 'mentor.avatar as mentor_avatar',
@@ -141,6 +157,8 @@ class GroupController extends Controller
                 'types_of_status_lang.status_type_name'
             )
             ->where('mentor.school_id', '=', auth()->user()->school_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->where('courses_lang.lang_id', '=', $language->lang_id)
             ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
             ->orderBy($sortKey, $sortDirection);
 
@@ -152,6 +170,8 @@ class GroupController extends Controller
 
 
         $group_name = $request->group_name;
+        $course_id = $request->course_id;
+        $levels_id = $request->levels;
         $operators_id = $request->operators;
         $mentors_id = $request->mentors;
         $statuses_id = $request->statuses;
@@ -160,6 +180,14 @@ class GroupController extends Controller
 
         if (!empty($group_name)) {
             $groups->where('groups.group_name', 'LIKE', '%' . $group_name . '%');
+        }
+
+        if (!empty($course_id)) {
+            $groups->where('courses.course_id', $course_id);
+        }
+
+        if (!empty($levels_id)) {
+            $groups->whereIn('course_levels.level_id', $levels_id);
         }
 
         if(!empty($operators_id)){
@@ -192,16 +220,16 @@ class GroupController extends Controller
 
     public function get_group(Request $request)
     {
-        $group = Group::leftJoin('group_categories', 'groups.group_category_id', '=', 'group_categories.category_id')
-            ->select(
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $group = Group::select(
                 'groups.group_id',
                 'groups.group_name',
                 'groups.group_description',
+                'groups.level_id',
                 'groups.created_at',
-                'groups.group_category_id',
                 'groups.mentor_id',
-                'groups.operator_id',
-                'group_categories.category_name'
+                'groups.operator_id'
             )
             ->where('groups.group_id', '=', $request->group_id)
             ->first();
@@ -219,7 +247,19 @@ class GroupController extends Controller
         $mentor = User::find($group->mentor_id);
         $operator = User::find($group->operator_id);
 
+        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        ->where('course_levels.level_id', '=', $group->level_id)
+        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+        ->select(
+            'course_levels.course_id',
+            'course_levels.level_id',
+            'course_levels_lang.level_name'
+        )
+        ->distinct()
+        ->first();
+
         $group->group_members = $members;
+        $group->level = $level;
         $group->mentor = $mentor->only(['last_name', 'first_name', 'avatar']);
         $group->operator = $operator->only(['last_name', 'first_name', 'avatar']);
 
@@ -228,12 +268,14 @@ class GroupController extends Controller
 
     public function create(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
         $rules = [];
 
         if ($request->step == 1) {
             $rules = [
                 'group_name' => 'required|string|between:3,300',
-                'group_category_id' => 'required|numeric',
+                'course_id' => 'required|numeric',
+                'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
@@ -260,10 +302,18 @@ class GroupController extends Controller
             }
 
             $mentor = User::find($request->mentor_id);
-            $category = GroupCategory::find($request->group_category_id);
+            $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.level_id', '=', $request->level_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->select(
+                'course_levels.level_id',
+                'course_levels_lang.level_name'
+            )
+            ->distinct()
+            ->first();
 
-            if (!$mentor || !$category) {
-                return response()->json(['error' => 'Mentor or category not found.'], 404);
+            if (!$mentor || !$level) {
+                return response()->json(['error' => 'Mentor or level not found.'], 404);
             }
 
             return response()->json([
@@ -271,18 +321,34 @@ class GroupController extends Controller
                 'data' => [
                     'group_name' => $request->group_name,
                     'group_description' => $request->group_description,
-                    'category_name' => optional($category)->category_name,
+                    'level_name' => $level->level_name,
                     'mentor' => $mentor ? $mentor->only(['last_name', 'first_name', 'avatar']) : null,
                     'members' => $request->members
                 ]
             ]);
         } elseif ($request->step == 3) {
+
+            $mentor = User::find($request->mentor_id);
+            $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.level_id', '=', $request->level_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->select(
+                'course_levels.level_id',
+                'course_levels_lang.level_name'
+            )
+            ->distinct()
+            ->first();
+
+            if (!$mentor || !$level) {
+                return response()->json(['error' => 'Mentor or level not found.'], 404);
+            }
+
             $new_group = new Group();
             $new_group->operator_id = auth()->user()->user_id;
             $new_group->mentor_id = $request->mentor_id;
-            $new_group->group_category_id = $request->group_category_id;
             $new_group->group_name = $request->group_name;
             $new_group->group_description = $request->group_description;
+            $new_group->level_id = $request->level_id;
             $new_group->save();
 
             $group_members = json_decode($request->members);
@@ -300,12 +366,9 @@ class GroupController extends Controller
                 }
             }
 
-            $mentor = User::find($request->mentor_id);
-            $category = GroupCategory::find($request->group_category_id);
-
             $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
-            <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            <p><span>Категория группы:</span> <b>{$level->level_name}</b></p>
             <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
 
             $user_operation = new UserOperation();
@@ -320,12 +383,14 @@ class GroupController extends Controller
 
     public function update(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
         $rules = [];
 
         if ($request->step == 1) {
             $rules = [
                 'group_name' => 'required|string|between:3,300',
-                'group_category_id' => 'required|numeric',
+                'course_id' => 'required|numeric',
+                'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
@@ -352,10 +417,18 @@ class GroupController extends Controller
             }
 
             $mentor = User::find($request->mentor_id);
-            $category = GroupCategory::find($request->group_category_id);
+            $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.level_id', '=', $request->level_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->select(
+                'course_levels.level_id',
+                'course_levels_lang.level_name'
+            )
+            ->distinct()
+            ->first();
 
-            if (!$mentor || !$category) {
-                return response()->json(['error' => 'Mentor or category not found.'], 404);
+            if (!$mentor || !$level) {
+                return response()->json(['error' => 'Mentor or level not found.'], 404);
             }
 
             return response()->json([
@@ -363,7 +436,7 @@ class GroupController extends Controller
                 'data' => [
                     'group_name' => $request->group_name,
                     'group_description' => $request->group_description,
-                    'category_name' => optional($category)->category_name,
+                    'level_name' => $level->level_name,
                     'mentor' => $mentor ? $mentor->only(['last_name', 'first_name', 'avatar']) : null,
                     'members' => $request->members
                 ]
@@ -372,12 +445,27 @@ class GroupController extends Controller
 
             //$isOwner = auth()->user()->hasRole(['super_admin', 'school_owner']);
 
+            $mentor = User::find($request->mentor_id);
+            $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.level_id', '=', $request->level_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            ->select(
+                'course_levels.level_id',
+                'course_levels_lang.level_name'
+            )
+            ->distinct()
+            ->first();
+
+            if (!$mentor || !$level) {
+                return response()->json(['error' => 'Mentor or level not found.'], 404);
+            }
+
             $edit_group = Group::find($request->group_id);
             $edit_group->operator_id = auth()->user()->user_id;
             $edit_group->mentor_id = $request->mentor_id;
-            $edit_group->group_category_id = $request->group_category_id;
             $edit_group->group_name = $request->group_name;
             $edit_group->group_description = $request->group_description;
+            $edit_group->level_id = $request->level_id;
             $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
 
@@ -448,18 +536,13 @@ class GroupController extends Controller
                 })
                 ->toArray();
 
-            // Извлечение информации о кураторе и категории
-            $mentor = User::find($request->mentor_id);
-            $category = GroupCategory::find($request->group_category_id);
-
             // Формирование описания
             $description = "<p><span>Название группы:</span> <b>" . e($request->group_name) . "</b></p>
             <p><span>Куратор:</span> <b>" . $mentor->last_name . " " . $mentor->first_name . "</b></p>
-            <p><span>Категория:</span> <b>" . $category->category_name . "</b></p>
+            <p><span>Категория группы:</span> <b>{$level->level_name}</b></p>
             <p><span>Новые участники:</span> <b>" . implode(', ', $new_members_name) . "</b></p>
             <p><span>Бывшие участники:</span> <b>" . implode(', ', $former_members_name) . "</b></p>
             <p><span>Неизменные участники:</span> <b>" . implode(', ', $unchanged_members_name) . "</b></p>";
-
 
             $user_operation = new UserOperation();
             $user_operation->operator_id = auth()->user()->user_id;

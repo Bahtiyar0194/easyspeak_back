@@ -10,6 +10,8 @@ use App\Http\Controllers\GroupController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DictionaryController;
+use App\Http\Controllers\SentenceController;
+use App\Http\Controllers\TaskController;
 
 /*
 |--------------------------------------------------------------------------
@@ -114,7 +116,7 @@ Route::group([
         'prefix' => 'courses'
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
-            Route::get('/get_course_attributes', [CourseController::class, 'get_course_attributes']);
+            Route::get('/get', [CourseController::class, 'get_courses']);
         });
     });
 
@@ -126,6 +128,33 @@ Route::group([
             Route::post('/get', [DictionaryController::class, 'get_words']);
             Route::get('/get/{word_id}', [DictionaryController::class, 'get_word']);
             Route::post('/add', [DictionaryController::class, 'add'])->middleware('check_roles');
+            Route::post('/update/{word_id}', [DictionaryController::class, 'update'])->middleware('check_roles');
+        });
+    });
+
+    Route::group([
+        'prefix' => 'sentences'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_sentence_attributes', [SentenceController::class, 'get_sentence_attributes']);
+            Route::post('/get', [SentenceController::class, 'get_sentences']);
+            Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
+            Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
+            Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
+        });
+    });
+
+    Route::group([
+        'prefix' => 'tasks'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
+            Route::post('/create_missing_letters_task', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
+            Route::get('/get_missing_letters_task/{task_id}', [TaskController::class, 'get_missing_letters_task']);
+            Route::post('/get', [TaskController::class, 'get_tasks']);
+            // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
+            // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
+            // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
         });
     });
 });

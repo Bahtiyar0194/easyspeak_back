@@ -5,9 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class GroupCategory extends Model
+class CourseSection extends Model
 {
     use HasFactory;
-    protected $table = 'group_categories';
-    protected $primaryKey = 'category_id';
+    protected $table = 'course_sections';
+    protected $primaryKey = 'section_id';
 }

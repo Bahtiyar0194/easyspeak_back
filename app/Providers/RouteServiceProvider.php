@@ -47,6 +47,10 @@ class RouteServiceProvider extends ServiceProvider
                 ->namespace($this->namespace)
                 ->group(base_path('routes/web.php'));
         });
+
+        RateLimiter::for('api', function () {
+            return Limit::perMinute(100); // Увеличьте лимит до 100 запросов в минуту
+        });
     }
 
     /**

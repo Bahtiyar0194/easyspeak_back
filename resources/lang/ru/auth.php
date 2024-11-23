@@ -21,4 +21,6 @@ return [
     'password_was_previously_restored' => 'Пароль по данному коду ранее уже был восстановлен.',
     'user_already_exists' => 'Пользователь с таким E-Mail уже зарегистрирован в этой школе.',
     'throttle' => 'Слишком много попыток входа. Пожалуйста, попробуйте еще раз через :seconds секунд.',
+    'remove_at_least_one_letter_in_each_word' => 'Уберите хотя бы одну букву из каждого слова',
+    'you_cannot_delete_all_the_letters_in_a_word' => 'Вы не можете удалить все буквы в слове'
 ];

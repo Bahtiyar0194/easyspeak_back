@@ -11,6 +11,7 @@ use App\Models\Course;
 use Illuminate\Http\Request;
 use Validator;
 use DB;
+use File;
 use Image;
 use Storage;
 
@@ -181,6 +182,7 @@ class DictionaryController extends Controller
             'dictionary.audio_file',
             'dictionary.created_at',
             'dictionary.operator_id',
+            'dictionary.course_id',
             'courses_lang.course_name',
             'types_of_status.color as status_color',
             'types_of_status_lang.status_type_name'
@@ -252,9 +254,13 @@ class DictionaryController extends Controller
         }
 
         $audio_file = $request->file('audio_file');
-        $audio_file_name = $audio_file->hashName();
-        $audio_file->storeAs('/public/', $audio_file_name);
-        $new_word->audio_file = $audio_file_name;
+
+        if($audio_file){
+            $audio_file = $request->file('audio_file');
+            $audio_file_name = $audio_file->hashName();
+            $audio_file->storeAs('/public/', $audio_file_name);
+            $new_word->audio_file = $audio_file_name;
+        }
 
         $new_word->course_id = $request->course_id;
         $new_word->operator_id = $auth_user->user_id;
@@ -281,5 +287,107 @@ class DictionaryController extends Controller
         // $user_operation->save();
 
         return response()->json($new_word, 200);
+    }
+
+    public function update(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $image_max_file_size = UploadConfiguration::where('file_type_id', '=', 3)
+        ->first()->max_file_size_mb;
+    
+        $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
+        ->first()->max_file_size_mb;
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+
+        $validator = Validator::make($request->all(), [
+            'word' => 'required|string|between:2,100',
+            'transcription' => 'required|string|between:2,100',
+            'word_kk' => 'required|string|between:2,100',
+            'word_ru' => 'required|string|between:2,100',
+            'course_id' => 'required|numeric',
+            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
+            'audio_file' => 'required_if:current_word_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $edit_word = Dictionary::find($request->word_id);
+
+        if(isset($edit_word)){
+            $edit_word->word = $request->word;
+            $edit_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
+
+            $image_file = $request->file('image_file');
+
+            if($image_file){
+                if(isset($edit_word->image_file)){
+                    $path = storage_path('/app/public/'.$edit_word->image_file);
+                    File::delete($path);
+                }
+
+                $image_file_name = $image_file->hashName();
+                $resized_image = Image::make($image_file)->resize(500, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                })->stream('png', 80);
+                Storage::disk('local')->put('/public/'.$image_file_name, $resized_image);
+                $edit_word->image_file = $image_file_name;
+            }
+            else{
+                if(isset($edit_word->image_file) && $request->current_word_image == 'false'){
+                    $path = storage_path('/app/public/'.$edit_word->image_file);
+                    File::delete($path);
+                    $edit_word->image_file = null;
+                }
+            }
+    
+            $audio_file = $request->file('audio_file');
+
+            if($audio_file){
+                if(isset($edit_word->audio_file)){
+                    $path = storage_path('/app/public/'.$edit_word->audio_file);
+                    File::delete($path);
+                }
+
+                $audio_file_name = $audio_file->hashName();
+                $audio_file->storeAs('/public/', $audio_file_name);
+                $edit_word->audio_file = $audio_file_name;
+            }
+
+            $edit_word->course_id = $request->course_id;
+            $edit_word->operator_id = $auth_user->user_id;
+            $edit_word->save();
+
+            DictionaryTranslate::where('word_id', $edit_word->word_id)
+            ->delete();
+
+
+            $new_word_translate = new DictionaryTranslate();
+            $new_word_translate->word_translate = $request->word_kk;
+            $new_word_translate->word_id = $edit_word->word_id;
+            $new_word_translate->lang_id = 1;
+            $new_word_translate->save();
+    
+            $new_word_translate = new DictionaryTranslate();
+            $new_word_translate->word_translate = $request->word_ru;
+            $new_word_translate->word_id = $edit_word->word_id;
+            $new_word_translate->lang_id = 2;
+            $new_word_translate->save();
+    
+            // $description = "Имя: {$new_user->last_name} {$new_user->first_name};\n E-Mail: {$request->email};\n Телефон: {$request->phone};\n Роли: " . implode(",", $role_names) . ".";
+    
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = $auth_user->user_id;
+            // $user_operation->operation_type_id = 1;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+    
+            return response()->json($edit_word, 200);
+        }
     }
 }
