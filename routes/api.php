@@ -149,9 +149,17 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
-            Route::post('/create_missing_letters_task', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
-            Route::get('/get_missing_letters_task/{task_id}', [TaskController::class, 'get_missing_letters_task']);
             Route::post('/get', [TaskController::class, 'get_tasks']);
+
+            Route::post('/missing_letters', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
+            Route::get('/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
+
+            Route::post('/match_words_by_pictures', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
+            Route::get('/match_words_by_pictures/{task_id}', [TaskController::class, 'get_match_words_by_pictures_task']);
+
+            Route::post('/form_a_sentence_out_of_the_words', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
+            Route::get('/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'get_form_a_sentence_out_of_the_words_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');

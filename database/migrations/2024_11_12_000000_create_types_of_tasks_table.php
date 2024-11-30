@@ -17,6 +17,8 @@ class CreateTypesOfTasksTable extends Migration
             $table->increments('task_type_id');
             $table->string('task_type_slug');
             $table->string('task_type_component');
+            $table->string('icon');
+            $table->integer('sort_num');
             $table->integer('show_status_id')->default(1)->unsigned();
             $table->foreign('show_status_id')->references('show_status_id')->on('show_status');
             $table->timestamps();

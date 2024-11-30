@@ -161,6 +161,12 @@ class DictionaryController extends Controller
             $words->where('dictionary.created_at', '<=', $created_at_to . ' 23:59:59');
         }
 
+        //
+
+        if ($request->image_file) {
+            $words->whereNotNull('dictionary.image_file');
+        }
+
         // Возвращаем пагинированный результат
         return response()->json($words->paginate($per_page)->onEachSide(1), 200);
     }
@@ -229,7 +235,7 @@ class DictionaryController extends Controller
             'word_kk' => 'required|string|between:2,100',
             'word_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
-            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
+            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size,
             'audio_file' => 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
         ]);
 
@@ -239,7 +245,7 @@ class DictionaryController extends Controller
 
 
         $new_word = new Dictionary();
-        $new_word->word = $request->word;
+        $new_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
         $new_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
         $image_file = $request->file('image_file');
@@ -267,13 +273,13 @@ class DictionaryController extends Controller
         $new_word->save();
 
         $new_word_translate = new DictionaryTranslate();
-        $new_word_translate->word_translate = $request->word_kk;
+        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_kk));
         $new_word_translate->word_id = $new_word->word_id;
         $new_word_translate->lang_id = 1;
         $new_word_translate->save();
 
         $new_word_translate = new DictionaryTranslate();
-        $new_word_translate->word_translate = $request->word_ru;
+        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_ru));
         $new_word_translate->word_id = $new_word->word_id;
         $new_word_translate->lang_id = 2;
         $new_word_translate->save();
@@ -309,7 +315,7 @@ class DictionaryController extends Controller
             'word_kk' => 'required|string|between:2,100',
             'word_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
-            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
+            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size,
             'audio_file' => 'required_if:current_word_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
         ]);
 
@@ -320,7 +326,7 @@ class DictionaryController extends Controller
         $edit_word = Dictionary::find($request->word_id);
 
         if(isset($edit_word)){
-            $edit_word->word = $request->word;
+            $edit_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
             $edit_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
             $image_file = $request->file('image_file');
@@ -368,13 +374,13 @@ class DictionaryController extends Controller
 
 
             $new_word_translate = new DictionaryTranslate();
-            $new_word_translate->word_translate = $request->word_kk;
+            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_kk));
             $new_word_translate->word_id = $edit_word->word_id;
             $new_word_translate->lang_id = 1;
             $new_word_translate->save();
     
             $new_word_translate = new DictionaryTranslate();
-            $new_word_translate->word_translate = $request->word_ru;
+            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_ru));
             $new_word_translate->word_id = $edit_word->word_id;
             $new_word_translate->lang_id = 2;
             $new_word_translate->save();

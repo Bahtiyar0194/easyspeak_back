@@ -4,16 +4,16 @@ namespace App\Http\Controllers;
 use App\Models\Sentence;
 use App\Models\SentenceTranslate;
 use App\Models\Language;
-// use App\Models\UploadConfiguration;
+use App\Models\UploadConfiguration;
 use App\Models\User;
 use App\Models\Course;
 
 use Illuminate\Http\Request;
 use Validator;
 use DB;
-// use File;
-// use Image;
-// use Storage;
+use File;
+use Image;
+use Storage;
 
 class SentenceController extends Controller
 {
@@ -103,7 +103,7 @@ class SentenceController extends Controller
             'sentences.sentence',
             // 'sentences.transcription',
             // 'sentences.image_file',
-            // 'sentences.audio_file',
+            'sentences.audio_file',
             'sentences.created_at',
             'courses_lang.course_name',
             'operator.first_name as operator_first_name',
@@ -179,7 +179,7 @@ class SentenceController extends Controller
             'sentences.sentence',
             // 'sentences.transcription',
             // 'sentences.image_file',
-            // 'sentences.audio_file',
+            'sentences.audio_file',
             'sentences.created_at',
             'sentences.operator_id',
             'sentences.course_id',
@@ -217,8 +217,8 @@ class SentenceController extends Controller
         // $image_max_file_size = UploadConfiguration::where('file_type_id', '=', 3)
         // ->first()->max_file_size_mb;
     
-        // $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
-        // ->first()->max_file_size_mb;
+        $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
+        ->first()->max_file_size_mb;
 
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
@@ -230,7 +230,7 @@ class SentenceController extends Controller
             'sentence_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
             // 'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
-            // 'audio_file' => 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
+            'audio_file' => 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
         ]);
 
         if ($validator->fails()) {
@@ -239,7 +239,7 @@ class SentenceController extends Controller
 
 
         $new_sentence = new Sentence();
-        $new_sentence->sentence = $request->sentence;
+        $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
         $new_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
         // $image_file = $request->file('image_file');
@@ -253,27 +253,27 @@ class SentenceController extends Controller
         //     $new_sentence->image_file = $image_file_name;
         // }
 
-        // $audio_file = $request->file('audio_file');
+        $audio_file = $request->file('audio_file');
 
-        // if($audio_file){
-        //     $audio_file = $request->file('audio_file');
-        //     $audio_file_name = $audio_file->hashName();
-        //     $audio_file->storeAs('/public/', $audio_file_name);
-        //     $new_sentence->audio_file = $audio_file_name;
-        // }
+        if($audio_file){
+            $audio_file = $request->file('audio_file');
+            $audio_file_name = $audio_file->hashName();
+            $audio_file->storeAs('/public/', $audio_file_name);
+            $new_sentence->audio_file = $audio_file_name;
+        }
 
         $new_sentence->course_id = $request->course_id;
         $new_sentence->operator_id = $auth_user->user_id;
         $new_sentence->save();
 
         $new_sentence_translate = new SentenceTranslate();
-        $new_sentence_translate->sentence_translate = $request->sentence_kk;
+        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_kk));
         $new_sentence_translate->sentence_id = $new_sentence->sentence_id;
         $new_sentence_translate->lang_id = 1;
         $new_sentence_translate->save();
 
         $new_sentence_translate = new SentenceTranslate();
-        $new_sentence_translate->sentence_translate = $request->sentence_ru;
+        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_ru));
         $new_sentence_translate->sentence_id = $new_sentence->sentence_id;
         $new_sentence_translate->lang_id = 2;
         $new_sentence_translate->save();
@@ -297,8 +297,8 @@ class SentenceController extends Controller
         // $image_max_file_size = UploadConfiguration::where('file_type_id', '=', 3)
         // ->first()->max_file_size_mb;
     
-        // $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
-        // ->first()->max_file_size_mb;
+        $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
+        ->first()->max_file_size_mb;
 
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
@@ -310,7 +310,7 @@ class SentenceController extends Controller
             'sentence_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
             // 'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
-            // 'audio_file' => 'required_if:current_sentence_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
+            'audio_file' => 'required_if:current_sentence_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
         ]);
 
         if ($validator->fails()) {
@@ -320,7 +320,7 @@ class SentenceController extends Controller
         $edit_sentence = Sentence::find($request->sentence_id);
 
         if(isset($edit_sentence)){
-            $edit_sentence->sentence = $request->sentence;
+            $edit_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
             // $edit_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
             // $image_file = $request->file('image_file');
@@ -346,18 +346,18 @@ class SentenceController extends Controller
             //     }
             // }
     
-            // $audio_file = $request->file('audio_file');
+            $audio_file = $request->file('audio_file');
 
-            // if($audio_file){
-            //     if(isset($edit_sentence->audio_file)){
-            //         $path = storage_path('/app/public/'.$edit_sentence->audio_file);
-            //         File::delete($path);
-            //     }
+            if($audio_file){
+                if(isset($edit_sentence->audio_file)){
+                    $path = storage_path('/app/public/'.$edit_sentence->audio_file);
+                    File::delete($path);
+                }
 
-            //     $audio_file_name = $audio_file->hashName();
-            //     $audio_file->storeAs('/public/', $audio_file_name);
-            //     $edit_sentence->audio_file = $audio_file_name;
-            // }
+                $audio_file_name = $audio_file->hashName();
+                $audio_file->storeAs('/public/', $audio_file_name);
+                $edit_sentence->audio_file = $audio_file_name;
+            }
 
             $edit_sentence->course_id = $request->course_id;
             $edit_sentence->operator_id = $auth_user->user_id;
@@ -367,13 +367,13 @@ class SentenceController extends Controller
             ->delete();
 
             $new_sentence_translate = new SentenceTranslate();
-            $new_sentence_translate->sentence_translate = $request->sentence_kk;
+            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_kk));
             $new_sentence_translate->sentence_id = $edit_sentence->sentence_id;
             $new_sentence_translate->lang_id = 1;
             $new_sentence_translate->save();
     
             $new_sentence_translate = new SentenceTranslate();
-            $new_sentence_translate->sentence_translate = $request->sentence_ru;
+            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_ru));
             $new_sentence_translate->sentence_id = $edit_sentence->sentence_id;
             $new_sentence_translate->lang_id = 2;
             $new_sentence_translate->save();
