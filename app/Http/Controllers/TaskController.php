@@ -743,16 +743,218 @@ class TaskController extends Controller
         ->where('task_sentences.task_id', '=', $request->task_id)
         ->where('sentences_translate.lang_id', '=', $language->lang_id)  
         ->distinct()
-        ->get();
+        ->get()
+        ->toArray();
 
         if(count($task_sentences) === 0){
             return response()->json('task sentences is not found', 404);
         }
 
+        shuffle($task_sentences);
+
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->sentences = $task_sentences;
+
+        return response()->json($task, 200);
+    }
+
+    public function create_learning_words_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:2',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'course_id' => 'required|numeric',
+                'level_id' => 'required|numeric',
+                'section_id' => 'required|numeric',
+                'lesson_id' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_image' => 'required|boolean',
+                'show_word' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'options_num' => 'required|numeric',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'in_the_main_lang' => 'required|boolean',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            $new_task = new Task();
+            $new_task->task_slug = $request->task_slug;
+            $new_task->task_type_id = 4;
+            $new_task->lesson_id = $request->lesson_id;
+            $new_task->operator_id = auth()->user()->user_id;
+            $new_task->save();
+
+            $new_task_lang = new TaskLang();
+            $new_task_lang->task_name = $request->task_name_kk;
+            $new_task_lang->task_id = $new_task->task_id;
+            $new_task_lang->lang_id = 1;
+            $new_task_lang->save();
+
+            $new_task_lang = new TaskLang();
+            $new_task_lang->task_name = $request->task_name_ru;
+            $new_task_lang->task_id = $new_task->task_id;
+            $new_task_lang->lang_id = 2;
+            $new_task_lang->save();
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $new_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+                }
+            }
+
+            $new_task_option = new TaskOption();
+            $new_task_option->task_id = $new_task->task_id;
+            $new_task_option->show_audio_button = $request->show_audio_button;
+            $new_task_option->show_image = $request->show_image;
+            $new_task_option->show_word = $request->show_word;
+            $new_task_option->show_transcription = $request->show_transcription;
+            $new_task_option->show_translate = $request->show_translate;
+            $new_task_option->options_num = $request->options_num;
+            $new_task_option->seconds_per_word = $request->seconds_per_word;
+            $new_task_option->in_the_main_lang = $request->in_the_main_lang;
+            $new_task_option->save();
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_learning_words_task(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
+        }
+
+        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
+        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
+        ->select(
+            'task_words.task_word_id',
+            'dictionary.word',
+            'dictionary.transcription',
+            'dictionary.image_file',
+            'dictionary.audio_file',
+            'dictionary_translate.word_translate'
+        )
+        ->where('task_words.task_id', '=', $request->task_id)
+        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
+        ->inRandomOrder()
+        ->distinct()
+        ->get();
+
+        if(count($task_words) === 0){
+            return response()->json('task words is not found', 404);
+        }
+
+        foreach ($task_words as $key => $word) {
+            // Получаем случайные слова-ответы для вариативности
+            $answer_options = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
+            ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
+            ->select(
+                'task_words.task_word_id',
+                'dictionary.word',
+                'dictionary.transcription',
+                'dictionary_translate.word_translate'
+            )
+            ->where('task_words.task_word_id', '!=', $word->task_word_id) // Исключаем текущее слово
+            ->where('task_words.task_id', '=', $request->task_id)
+            ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
+            ->inRandomOrder()
+            ->limit($task_options->options_num - 1)
+            ->distinct()
+            ->get(); 
+
+            // Вставляем текущий перевод как правильный ответ
+            $correct_answer = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
+            ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
+            ->select(
+                'task_words.task_word_id',
+                'dictionary.word',
+                'dictionary.transcription',
+                'dictionary_translate.word_translate'
+            )
+            ->where('task_words.task_word_id', '=', $word->task_word_id) // Исключаем текущее слово
+            ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
+            ->first(); 
+
+            $answers = $answer_options->toArray();
+            array_push($answers, $correct_answer);
+
+            // Перемешиваем варианты
+            shuffle($answers);
+
+            // Добавляем ответы в структуру
+            $word->answer_options = $answers;
+        }
+
+        $task = new \stdClass();
+
+        $task->options = $task_options;
+        $task->words = $task_words;
 
         return response()->json($task, 200);
     }
