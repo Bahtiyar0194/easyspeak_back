@@ -662,7 +662,10 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
-                'step' => 'required|numeric'
+                'seconds_per_sentence' => 'required|numeric|min:30',
+                'in_the_main_lang' => 'required|boolean',
+                'step' => 'required|numeric',
+
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -703,6 +706,8 @@ class TaskController extends Controller
 
             $new_task_option = new TaskOption();
             $new_task_option->task_id = $new_task->task_id;
+            $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
+            $new_task_option->in_the_main_lang = $request->in_the_main_lang;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
