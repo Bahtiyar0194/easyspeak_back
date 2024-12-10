@@ -163,6 +163,9 @@ Route::group([
             Route::post('/learning_words', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
             Route::get('/learning_words/{task_id}', [TaskController::class, 'get_learning_words_task']);
 
+            Route::post('/form_a_word_out_of_the_letters', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
+            Route::get('/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'get_form_a_word_out_of_the_letters_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
