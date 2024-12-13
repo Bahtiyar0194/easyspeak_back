@@ -22,5 +22,7 @@ return [
     'user_already_exists' => 'Пользователь с таким E-Mail уже зарегистрирован в этой школе.',
     'throttle' => 'Слишком много попыток входа. Пожалуйста, попробуйте еще раз через :seconds секунд.',
     'remove_at_least_one_letter_in_each_word' => 'Уберите хотя бы одну букву из каждого слова',
-    'you_cannot_delete_all_the_letters_in_a_word' => 'Вы не можете удалить все буквы в слове'
+    'you_cannot_delete_all_the_letters_in_a_word' => 'Вы не можете удалить все буквы в слове',
+    'remove_one_word_in_each_sentence' => 'Вы должны удалить по одному слову из каждого предложения кликнув по ним',
+    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Для каждого предложения необходимо добавить два или более вариантов пропущенных слов'
 ];

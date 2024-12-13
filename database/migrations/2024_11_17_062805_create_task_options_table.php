@@ -27,6 +27,7 @@ class CreateTaskOptionsTable extends Migration
             $table->integer('seconds_per_word')->nullable();
             $table->integer('seconds_per_sentence')->nullable();
             $table->boolean('in_the_main_lang')->nullable();
+            $table->boolean('find_word_with_options')->nullable();
             $table->integer('options_num')->nullable();
             $table->timestamps();
         });

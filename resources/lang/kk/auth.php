@@ -21,5 +21,7 @@ return [
     'user_already_exists' => 'Мұндай E-Mail бар пайдаланушы осы мектепте тіркелген.',
     'throttle' => 'Кіру әрекеті тым көп болды. :seconds секундтан соң қайталап көріңіз.',
     'remove_at_least_one_letter_in_each_word' => 'Әр сөзден кем дегенде бір әріпті алып тастауыңыз қажет',
-    'you_cannot_delete_all_the_letters_in_a_word' => 'Бір сөздегі барлық әріптерді өшіруге болмайды'
+    'you_cannot_delete_all_the_letters_in_a_word' => 'Бір сөздегі барлық әріптерді өшіруге болмайды',
+    'remove_one_word_in_each_sentence' => 'Әр сөйлемнен бір сөзді алып тастауыңыз қажет',
+    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Әр сөйлем үшін жетіспейтін сөздердің екі немесе одан да көп нұсқаларын қосу қажет'
 ];

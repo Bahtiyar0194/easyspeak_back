@@ -19,6 +19,7 @@ class CreateTaskSentencesTable extends Migration
             $table->foreign('task_id')->references('task_id')->on('tasks')->onDelete('cascade');
             $table->integer('sentence_id')->unsigned();
             $table->foreign('sentence_id')->references('sentence_id')->on('sentences')->onDelete('cascade');
+            $table->integer('missing_word_position')->nullable();
             $table->timestamps();
         });
     }

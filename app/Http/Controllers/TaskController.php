@@ -9,6 +9,7 @@ use App\Models\TaskType;
 use App\Models\TaskWord;
 use App\Models\MissingLetter;
 use App\Models\TaskSentence;
+use App\Models\MissingWord;
 use App\Models\Language;
 
 use App\Models\Course;
@@ -676,10 +677,9 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
-                'seconds_per_sentence' => 'required|numeric|min:30',
+                'seconds_per_sentence' => 'required|numeric|min:10',
                 'in_the_main_lang' => 'required|boolean',
-                'step' => 'required|numeric',
-
+                'step' => 'required|numeric'
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -1177,6 +1177,211 @@ class TaskController extends Controller
 
         $task->options = $task_options;
         $task->words = $task_words;
+
+        return response()->json($task, 200);
+    }
+
+    public function create_fill_in_the_blanks_in_the_sentence_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:2',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'sentences' => 'required',
+                'find_word_with_options' => 'required|boolean',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentence) {
+                    if(!isset($sentence->removedWordIndex)){
+                        return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
+                    }
+
+                    if($request->find_word_with_options == 1){
+                        if(!isset($sentence->removedWordOptions) || count($sentence->removedWordOptions) < 2){
+                            return response()->json(['words_failed' => [trans('auth.you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence')]], 422);
+                        }
+                    }
+                }
+
+                return response()->json([
+                    'step' => 3
+                ], 200);
+            }
+        }
+        elseif ($request->step == 4) {
+            $rules = [
+                'course_id' => 'required|numeric',
+                'level_id' => 'required|numeric',
+                'section_id' => 'required|numeric',
+                'lesson_id' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            $new_task = new Task();
+            $new_task->task_slug = $request->task_slug;
+            $new_task->task_type_id = 6;
+            $new_task->lesson_id = $request->lesson_id;
+            $new_task->operator_id = auth()->user()->user_id;
+            $new_task->save();
+
+            $new_task_lang = new TaskLang();
+            $new_task_lang->task_name = $request->task_name_kk;
+            $new_task_lang->task_id = $new_task->task_id;
+            $new_task_lang->lang_id = 1;
+            $new_task_lang->save();
+
+            $new_task_lang = new TaskLang();
+            $new_task_lang->task_name = $request->task_name_ru;
+            $new_task_lang->task_id = $new_task->task_id;
+            $new_task_lang->lang_id = 2;
+            $new_task_lang->save();
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentence) {
+                    $new_task_sentence = new TaskSentence();
+                    $new_task_sentence->task_id = $new_task->task_id;
+                    $new_task_sentence->sentence_id = $sentence->sentence_id;
+                    $new_task_sentence->missing_word_position = $sentence->removedWordIndex;
+                    $new_task_sentence->save();
+
+                    if($request->find_word_with_options == 1){
+                        if(count($sentence->removedWordOptions) > 0){
+                            foreach ($sentence->removedWordOptions as $key => $option) {
+                                $new_missing_word = new MissingWord();
+                                $new_missing_word->word = $option;
+                                $new_missing_word->task_sentence_id = $new_task_sentence->task_sentence_id;
+                                $new_missing_word->is_correct = ($key === 0 ? true : false);
+                                $new_missing_word->save();
+                            }
+                        }
+                    }
+                }
+            }
+
+            $new_task_option = new TaskOption();
+            $new_task_option->task_id = $new_task->task_id;
+            $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
+            $new_task_option->find_word_with_options = $request->find_word_with_options;
+            $new_task_option->save();
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_fill_in_the_blanks_in_the_sentence_task(Request $request){
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
+        }
+
+        $task_sentences = TaskSentence::leftJoin('sentences', 'task_sentences.sentence_id', '=', 'sentences.sentence_id')
+        ->leftJoin('sentences_translate', 'sentences.sentence_id', '=', 'sentences_translate.sentence_id')
+        ->select(
+            'task_sentences.task_sentence_id',
+            'task_sentences.missing_word_position',
+            'sentences.sentence',
+            'sentences.audio_file',
+            'sentences_translate.sentence_translate'
+        )
+        ->where('task_sentences.task_id', '=', $request->task_id)
+        ->where('sentences_translate.lang_id', '=', $language->lang_id)  
+        ->distinct()
+        ->inRandomOrder()
+        ->get();
+
+        if(count($task_sentences) === 0){
+            return response()->json('task sentences is not found', 404);
+        }
+
+        if($task_options->find_word_with_options == 1){
+            foreach ($task_sentences as $sentence) {
+                $missing_words = MissingWord::where('task_sentence_id', '=', $sentence->task_sentence_id)
+                ->select(
+                    'missing_words.missing_word_id',
+                    'missing_words.word',
+                    'missing_words.is_correct',
+                )
+                ->inRandomOrder()
+                ->get();
+    
+                $sentence->missingWords = $missing_words;
+            }
+        }
+
+        $task = new \stdClass();
+
+        $task->options = $task_options;
+        $task->sentences = $task_sentences;
 
         return response()->json($task, 200);
     }
