@@ -68,6 +68,7 @@ class CourseController extends Controller
                     ->where('lessons_lang.lang_id', '=', $language->lang_id)
                     ->select(
                         'lessons.lesson_id',
+                        'lessons.sort_num',
                         'lessons_lang.lesson_name',
                         'types_of_lessons_lang.lesson_type_name'
                     )
