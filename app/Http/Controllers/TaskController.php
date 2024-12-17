@@ -39,7 +39,8 @@ class TaskController extends Controller
             'types_of_tasks.task_type_slug',
             'types_of_tasks.icon',
             'types_of_tasks.task_type_component',
-            'types_of_tasks_lang.task_type_name'
+            'types_of_tasks_lang.task_type_name',
+            'types_of_tasks.sort_num'
         )
         ->where('types_of_tasks.show_status_id', '=', 1)
         ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)
