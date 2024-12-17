@@ -140,6 +140,7 @@ class TaskController extends Controller
                     ->select(
                         'lessons.lesson_id',
                         'lessons_lang.lesson_name',
+                        'lessons.sort_num',
                         'types_of_lessons_lang.lesson_type_name'
                     )
                     ->distinct()
