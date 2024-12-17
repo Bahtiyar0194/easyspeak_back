@@ -18,6 +18,9 @@ class CreateTaskOptionsTable extends Migration
             $table->integer('task_id')->unsigned();
             $table->foreign('task_id')->references('task_id')->on('tasks')->onDelete('cascade');
             $table->boolean('show_audio_button')->default(false)->nullable();
+            $table->boolean('play_audio_at_the_begin')->default(false)->nullable();
+            $table->boolean('play_audio_with_the_correct_answer')->default(false)->nullable();
+            $table->boolean('play_error_sound_with_the_incorrect_answer')->default(false)->nullable();
             $table->boolean('show_image')->default(false)->nullable();
             $table->boolean('show_word')->nullable();
             $table->boolean('show_transcription')->default(false)->nullable();

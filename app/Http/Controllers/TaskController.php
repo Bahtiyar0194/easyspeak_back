@@ -518,7 +518,7 @@ class TaskController extends Controller
                 'show_audio_button' => 'required|boolean',
                 'show_transcription' => 'required|boolean',
                 'show_translate' => 'required|boolean',
-                'step' => 'required|numeric',
+                'step' => 'required|numeric'
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -677,6 +677,8 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'in_the_main_lang' => 'required|boolean',
                 'step' => 'required|numeric'
@@ -720,6 +722,8 @@ class TaskController extends Controller
 
             $new_task_option = new TaskOption();
             $new_task_option->task_id = $new_task->task_id;
+            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
+            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
             $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
             $new_task_option->in_the_main_lang = $request->in_the_main_lang;
             $new_task_option->save();
@@ -823,6 +827,9 @@ class TaskController extends Controller
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
                 'show_audio_button' => 'required|boolean',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
                 'show_image' => 'required|boolean',
                 'show_word' => 'required|boolean',
                 'show_transcription' => 'required|boolean',
@@ -871,10 +878,12 @@ class TaskController extends Controller
             $new_task_option = new TaskOption();
             $new_task_option->task_id = $new_task->task_id;
             $new_task_option->show_audio_button = $request->show_audio_button;
+            $new_task_option->play_audio_at_the_begin = $request->play_audio_at_the_begin;
+            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
+            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
             $new_task_option->show_image = $request->show_image;
             $new_task_option->show_word = $request->show_word;
             $new_task_option->show_transcription = $request->show_transcription;
-            $new_task_option->show_translate = $request->show_translate;
             $new_task_option->options_num = $request->options_num;
             $new_task_option->seconds_per_word = $request->seconds_per_word;
             $new_task_option->in_the_main_lang = $request->in_the_main_lang;
@@ -1051,12 +1060,13 @@ class TaskController extends Controller
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
                 'show_audio_button' => 'required|boolean',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
                 'show_image' => 'required|boolean',
-                // 'show_word' => 'required|boolean',
                 'show_transcription' => 'required|boolean',
                 'show_translate' => 'required|boolean',
                 'seconds_per_word' => 'required|numeric|min:3',
-                // 'in_the_main_lang' => 'required|boolean',
                 'step' => 'required|numeric',
             ];
 
@@ -1106,13 +1116,14 @@ class TaskController extends Controller
             $new_task_option = new TaskOption();
             $new_task_option->task_id = $new_task->task_id;
             $new_task_option->show_audio_button = $request->show_audio_button;
+            $new_task_option->play_audio_at_the_begin = $request->play_audio_at_the_begin;
+            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
+            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
             $new_task_option->show_image = $request->show_image;
-            // $new_task_option->show_word = $request->show_word;
             $new_task_option->show_transcription = $request->show_transcription;
             $new_task_option->show_translate = $request->show_translate;
             $new_task_option->options_num = $request->options_num;
             $new_task_option->seconds_per_word = $request->seconds_per_word;
-            // $new_task_option->in_the_main_lang = $request->in_the_main_lang;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -1190,6 +1201,7 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
+                'impression_limit' => 'required|min:1',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'step' => 'required|numeric'
             ];
@@ -1316,6 +1328,7 @@ class TaskController extends Controller
             $new_task_option->task_id = $new_task->task_id;
             $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
             $new_task_option->find_word_with_options = $request->find_word_with_options;
+            $new_task_option->impression_limit = $request->impression_limit;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
