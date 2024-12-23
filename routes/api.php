@@ -169,6 +169,9 @@ Route::group([
             Route::post('/fill_in_the_blanks_in_the_sentence', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
             Route::get('/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'get_fill_in_the_blanks_in_the_sentence_task']);
 
+            Route::post('/match_paired_words', [TaskController::class, 'create_match_paired_words_task'])->middleware('check_roles');
+            Route::get('/match_paired_words/{task_id}', [TaskController::class, 'get_match_paired_words_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
