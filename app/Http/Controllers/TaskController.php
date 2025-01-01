@@ -353,6 +353,9 @@ class TaskController extends Controller
                 'show_image' => 'required|boolean',
                 'show_transcription' => 'required|boolean',
                 'show_translate' => 'required|boolean',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -406,6 +409,9 @@ class TaskController extends Controller
             $new_task_option->show_transcription = $request->show_transcription;
             $new_task_option->show_translate = $request->show_translate;
             $new_task_option->impression_limit = $request->impression_limit;
+            $new_task_option->seconds_per_word = $request->seconds_per_word;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -425,54 +431,72 @@ class TaskController extends Controller
 
     public function get_missing_letters_task(Request $request)
     {
-        // Получаем язык из заголовка
+        // Проверка языка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
-        ->first();
-
-        if(!isset($task_options)){
-            return response()->json('task option is not found', 404);
+    
+        if (!$language) {
+            return response()->json(['error' => 'Language not found'], 404);
         }
-
+    
+        // Проверка наличия task_id
+        if (!$request->task_id) {
+            return response()->json(['error' => 'Task ID is required'], 400);
+        }
+    
+        $task_options = TaskOption::where('task_id', '=', $request->task_id)->first();
+    
+        if (!$task_options) {
+            return response()->json(['error' => 'Task option not found'], 404);
+        }
+    
+        // Получение слов для задачи
         $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-        ->select(
-            'task_words.task_word_id',
-            'dictionary.word',
-            'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
-            'dictionary_translate.word_translate'
-        )
-        ->where('task_words.task_id', '=', $request->task_id)
-        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
-
-        if(count($task_words) === 0){
-            return response()->json('task words is not found', 404);
-        }
-
-        foreach ($task_words as $word) {
-            $missing_letters = MissingLetter::where('task_word_id', '=', $word->task_word_id)
+            ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
             ->select(
-                'missing_letters.position',
+                'task_words.task_word_id',
+                'dictionary.word',
+                'dictionary.transcription',
+                'dictionary.image_file',
+                'dictionary.audio_file',
+                'dictionary_translate.word_translate'
             )
-            ->orderBy('position', 'asc')
-            ->pluck('position')->toArray();
-
-            $word->missingLetters = $missing_letters;
+            ->where('task_words.task_id', '=', $request->task_id)
+            ->where('dictionary_translate.lang_id', '=', $language->lang_id);
+    
+        // Случайный порядок, если указан
+        if ($task_options->random_order == 1) {
+            $task_words->inRandomOrder();
         }
-
-        $task = new \stdClass();
-
-        $task->options = $task_options;
-        $task->words = $task_words;
-
-        return response()->json($task, 200);
+    
+        $task_words = $task_words->get();
+    
+        if ($task_words->isEmpty()) {
+            return response()->json(['error' => 'Task words not found'], 404);
+        }
+    
+        // Оптимизация получения отсутствующих букв
+        $task_word_ids = $task_words->pluck('task_word_id');
+    
+        $missing_letters = MissingLetter::whereIn('task_word_id', $task_word_ids)
+            ->select('task_word_id', 'position')
+            ->orderBy('position', 'asc')
+            ->get()
+            ->groupBy('task_word_id');
+    
+        // Добавление отсутствующих букв к словам
+        foreach ($task_words as $word) {
+            $word->missingLetters = $missing_letters->get($word->task_word_id, collect())->pluck('position');
+        }
+    
+        // Подготовка ответа
+        $response = [
+            'options' => $task_options,
+            'words' => $task_words,
+        ];
+    
+        return response()->json($response, 200);
     }
+    
 
     public function create_match_words_by_pictures_task(Request $request)
     {
@@ -522,6 +546,9 @@ class TaskController extends Controller
                 'show_audio_button' => 'required|boolean',
                 'show_transcription' => 'required|boolean',
                 'show_translate' => 'required|boolean',
+                'impression_limit' => 'required|min:2',
+                'seconds_per_word' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
             ];
 
@@ -567,6 +594,9 @@ class TaskController extends Controller
             $new_task_option->show_transcription = $request->show_transcription;
             $new_task_option->show_translate = $request->show_translate;
             $new_task_option->impression_limit = $request->impression_limit;
+            $new_task_option->seconds_per_word = $request->seconds_per_word;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -589,6 +619,15 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        if (!$language) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+    
+        // Проверка наличия task_id
+        if (!$request->task_id) {
+            return response()->json(['error' => 'Task ID is required'], 400);
+        }
+
         $task_options = TaskOption::where('task_id', '=', $request->task_id)
         ->first();
 
@@ -602,28 +641,21 @@ class TaskController extends Controller
             'task_words.task_word_id',
             'dictionary.word',
             'dictionary.transcription',
+            'dictionary.image_file',
             'dictionary.audio_file',
             'dictionary_translate.word_translate'
         )
         ->where('task_words.task_id', '=', $request->task_id)
         ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
+        ->distinct();
 
-        $task_pictures = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-        ->select(
-            'task_words.task_word_id',
-            'dictionary.image_file',
-        )
-        ->where('task_words.task_id', '=', $request->task_id)
-        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
+        if($task_options->random_order == 1){
+            $task_words->inRandomOrder();
+        }
 
-        if(count($task_words) === 0 || count($task_pictures) === 0){
+        $task_words = $task_words->get();
+
+        if(count($task_words) === 0){
             return response()->json('task words is not found', 404);
         }
 
@@ -631,7 +663,6 @@ class TaskController extends Controller
 
         $task->options = $task_options;
         $task->words = $task_words;
-        $task->pictures = $task_pictures;
 
         return response()->json($task, 200);
     }
@@ -685,6 +716,7 @@ class TaskController extends Controller
                 'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'in_the_main_lang' => 'required|boolean',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
             ];
 
@@ -730,6 +762,8 @@ class TaskController extends Controller
             $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
             $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
             $new_task_option->in_the_main_lang = $request->in_the_main_lang;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -769,9 +803,13 @@ class TaskController extends Controller
         )
         ->where('task_sentences.task_id', '=', $request->task_id)
         ->where('sentences_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
+        ->distinct();
+
+        if($task_options->random_order == 1){
+            $task_sentences->inRandomOrder();
+        }
+
+        $task_sentences = $task_sentences->get();
 
         if(count($task_sentences) === 0){
             return response()->json('task sentences is not found', 404);
@@ -840,6 +878,7 @@ class TaskController extends Controller
                 'options_num' => 'required|numeric',
                 'seconds_per_word' => 'required|numeric|min:3',
                 'in_the_main_lang' => 'required|boolean',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -891,6 +930,8 @@ class TaskController extends Controller
             $new_task_option->options_num = $request->options_num;
             $new_task_option->seconds_per_word = $request->seconds_per_word;
             $new_task_option->in_the_main_lang = $request->in_the_main_lang;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -932,9 +973,13 @@ class TaskController extends Controller
         )
         ->where('task_words.task_id', '=', $request->task_id)
         ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->inRandomOrder()
-        ->distinct()
-        ->get();
+        ->distinct();
+
+        if($task_options->random_order == 1){
+            $task_words->inRandomOrder();
+        }
+
+        $task_words = $task_words->get();
 
         if(count($task_words) === 0){
             return response()->json('task words is not found', 404);
@@ -1071,6 +1116,7 @@ class TaskController extends Controller
                 'show_transcription' => 'required|boolean',
                 'show_translate' => 'required|boolean',
                 'seconds_per_word' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -1128,6 +1174,8 @@ class TaskController extends Controller
             $new_task_option->show_translate = $request->show_translate;
             $new_task_option->options_num = $request->options_num;
             $new_task_option->seconds_per_word = $request->seconds_per_word;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -1169,9 +1217,13 @@ class TaskController extends Controller
         )
         ->where('task_words.task_id', '=', $request->task_id)
         ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
+        ->distinct();
+
+        if($task_options->random_order == 1){
+            $task_words->inRandomOrder();
+        }
+
+        $task_words = $task_words->get();
 
         if(count($task_words) === 0){
             return response()->json('task words is not found', 404);
@@ -1207,6 +1259,7 @@ class TaskController extends Controller
                 'task_name_ru' => 'required',
                 'impression_limit' => 'required|min:1',
                 'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
             ];
 
@@ -1333,6 +1386,8 @@ class TaskController extends Controller
             $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
             $new_task_option->find_word_with_options = $request->find_word_with_options;
             $new_task_option->impression_limit = $request->impression_limit;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -1372,9 +1427,13 @@ class TaskController extends Controller
         )
         ->where('task_sentences.task_id', '=', $request->task_id)
         ->where('sentences_translate.lang_id', '=', $language->lang_id)  
-        ->distinct()
-        ->inRandomOrder()
-        ->get();
+        ->distinct();
+
+        if($task_options->random_order == 1){
+            $task_sentences->inRandomOrder();
+        }
+
+        $task_sentences = $task_sentences->get();
 
         if(count($task_sentences) === 0){
             return response()->json('task sentences is not found', 404);
@@ -1448,15 +1507,9 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
-                // 'show_audio_button' => 'required|boolean',
-                // 'play_audio_at_the_begin' => 'required|boolean',
-                // 'play_audio_with_the_correct_answer' => 'required|boolean',
-                // 'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
-                // 'show_image' => 'required|boolean',
-                // 'show_word' => 'required|boolean',
-                // 'show_transcription' => 'required|boolean',
-                // 'options_num' => 'required|numeric',
+                'impression_limit' => 'required|min:1',
                 'seconds_per_word' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -1498,7 +1551,7 @@ class TaskController extends Controller
                             $new_word_section_item = new WordSectionItem();
                             $new_word_section_item->word_section_id = $new_word_section->word_section_id;
                             $new_word_section_item->word_id = $section_item->word_id;
-                            $new_word_section_item->target = isset($section_item->target) ? true : false;
+                            $new_word_section_item->target = (isset($section_item->target) && $section_item->target == 'true') ? true : false;
                             $new_word_section_item->save();
                         }
                     }
@@ -1507,16 +1560,13 @@ class TaskController extends Controller
 
             $new_task_option = new TaskOption();
             $new_task_option->task_id = $new_task->task_id;
-            // $new_task_option->show_audio_button = $request->show_audio_button;
-            // $new_task_option->play_audio_at_the_begin = $request->play_audio_at_the_begin;
-            // $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
-            // $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
-            // $new_task_option->show_image = $request->show_image;
-            // $new_task_option->show_word = $request->show_word;
-            // $new_task_option->show_transcription = $request->show_transcription;
-            // $new_task_option->options_num = $request->options_num;
+            $new_task_option->impression_limit = $request->impression_limit;
             $new_task_option->seconds_per_word = $request->seconds_per_word;
-            // $new_task_option->in_the_main_lang = $request->in_the_main_lang;
+            $new_task_option->match_by_typing = isset($request->match_by_typing) ? true : false;
+            $new_task_option->match_by_clicking = isset($request->match_by_clicking) ? true : false;
+            $new_task_option->match_by_drag_and_drop = isset($request->match_by_drag_and_drop) ? true : false;
+            $new_task_option->random_order = isset($request->random_order) ? true : false;
+            $new_task_option->max_attempts = $request->max_attempts;
             $new_task_option->save();
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -1550,9 +1600,13 @@ class TaskController extends Controller
             'word_sections.word_section_id',
             'word_sections.task_id'
         )
-        ->where('word_sections.task_id', '=', $request->task_id)
-        ->inRandomOrder()
-        ->get();
+        ->where('word_sections.task_id', '=', $request->task_id);
+
+        if($task_options->random_order == 1){
+            $word_sections->inRandomOrder();
+        }
+
+        $word_sections = $word_sections->get();
 
         if(count($word_sections) === 0){
             return response()->json('word sections is not found', 404);
@@ -1567,14 +1621,14 @@ class TaskController extends Controller
                 'word_section_items.word_id',
                 'word_section_items.target',
                 'dictionary.word',
-                'dictionary.audio_file',
-                'dictionary_translate.word_translate'
+                'dictionary_translate.word_translate',
+                'dictionary.audio_file'
             )
             ->where('word_section_items.word_section_id', '=', $section->word_section_id)
             ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
             ->distinct()
-            ->inRandomOrder()
             ->get();
+
 
             $section->words = $section_items;
         }

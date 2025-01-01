@@ -14,10 +14,11 @@ class AddRandomOrderToTaskOptionsTable extends Migration
     public function up()
     {
         Schema::table('task_options', function (Blueprint $table) {
-            $table->boolean('random_order')->default(true)->nullable();
-            $table->boolean('by_typing')->nullable();
-            $table->boolean('by_clicking')->nullable();
-            $table->boolean('by_drag_and_drop')->nullable();
+            $table->boolean('random_order')->default(true);
+            $table->boolean('match_by_typing')->nullable();
+            $table->boolean('match_by_clicking')->nullable();
+            $table->boolean('match_by_drag_and_drop')->nullable();
+            $table->integer('max_attempts')->default(0);
         });
     }
 
