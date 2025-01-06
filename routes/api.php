@@ -172,6 +172,12 @@ Route::group([
             Route::post('/match_paired_words', [TaskController::class, 'create_match_paired_words_task'])->middleware('check_roles');
             Route::get('/match_paired_words/{task_id}', [TaskController::class, 'get_match_paired_words_task']);
 
+            Route::post('/find_an_extra_word', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
+            Route::get('/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
+
+            Route::post('/true_or_false', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
+            Route::get('/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
