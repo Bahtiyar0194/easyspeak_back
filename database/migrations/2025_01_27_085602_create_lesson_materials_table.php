@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateLessonsLangTable extends Migration
+class CreateLessonMaterialsTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,14 +13,14 @@ class CreateLessonsLangTable extends Migration
      */
     public function up()
     {
-        Schema::create('lessons_lang', function (Blueprint $table) {
-            $table->increments('id');
-            $table->string('lesson_name');
-            $table->text('lesson_description');
+        Schema::create('lesson_materials', function (Blueprint $table) {
+            $table->increments('lesson_material_id');
             $table->integer('lesson_id')->unsigned();
             $table->foreign('lesson_id')->references('lesson_id')->on('lessons')->onDelete('cascade');
-            $table->integer('lang_id')->unsigned();
-            $table->foreign('lang_id')->references('lang_id')->on('languages');
+            $table->integer('file_id')->unsigned()->onDelete('cascade')->nullable();
+            $table->foreign('file_id')->references('file_id')->on('files');
+            $table->integer('block_id')->unsigned()->onDelete('cascade')->nullable();
+            $table->foreign('block_id')->references('block_id')->on('blocks');
             $table->timestamps();
         });
     }
@@ -32,6 +32,6 @@ class CreateLessonsLangTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('lessons');
+        Schema::dropIfExists('lesson_materials');
     }
 }

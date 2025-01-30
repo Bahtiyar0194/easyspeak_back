@@ -13,14 +13,22 @@ use App\Models\MissingWord;
 use App\Models\WordSection;
 use App\Models\WordSectionItem;
 use App\Models\Language;
+use App\Models\UploadConfiguration;
 
 use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 
+use App\Models\MediaFile;
+use App\Models\MaterialType;
+use App\Models\TaskMaterial;
+
 use Validator;
 use DB;
+use File;
+use Image;
+use Storage;
 
 use Illuminate\Http\Request;
 
@@ -135,13 +143,11 @@ class TaskController extends Controller
                     $lessons = Task::leftJoin('lessons', 'tasks.lesson_id', '=', 'lessons.lesson_id')
                     ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
                     ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
-                    ->leftJoin('lessons_lang', 'lessons.lesson_id', '=', 'lessons_lang.lesson_id')
                     ->where('lessons.section_id', '=', $section->section_id)
                     ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
-                    ->where('lessons_lang.lang_id', '=', $language->lang_id)
                     ->select(
                         'lessons.lesson_id',
-                        'lessons_lang.lesson_name',
+                        'lessons.lesson_name',
                         'lessons.sort_num',
                         'types_of_lessons_lang.lesson_type_name'
                     )
@@ -179,7 +185,6 @@ class TaskController extends Controller
         ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
         ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
         ->leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
-        ->leftJoin('lessons_lang', 'lessons_lang.lesson_id', '=', 'lessons.lesson_id')
         ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
         ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
         ->leftJoin('course_levels_lang', 'course_levels_lang.level_id', '=', 'course_levels.level_id')
@@ -196,7 +201,7 @@ class TaskController extends Controller
             'types_of_tasks_lang.task_type_name',
             'tasks_lang.task_name',
             'tasks.created_at',
-            'lessons_lang.lesson_name',
+            'lessons.lesson_name',
             'course_sections.section_name',
             'course_levels_lang.level_name',
             'courses_lang.course_name',
@@ -206,8 +211,7 @@ class TaskController extends Controller
             'types_of_status.color as status_color',
             'types_of_status_lang.status_type_name'
         )     
-        ->where('tasks_lang.lang_id', '=', $language->lang_id)  
-        ->where('lessons_lang.lang_id', '=', $language->lang_id)  
+        ->where('tasks_lang.lang_id', '=', $language->lang_id)
         ->where('course_levels_lang.lang_id', '=', $language->lang_id)  
         ->where('courses_lang.lang_id', '=', $language->lang_id)  
         ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)     
@@ -277,6 +281,33 @@ class TaskController extends Controller
         return response()->json($tasks->paginate($per_page)->onEachSide(1), 200);
     }
 
+    public function get_lesson_tasks(Request $request){
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
+        ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
+        ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
+        ->select(
+            'tasks.task_id',
+            'tasks.task_slug',
+            'tasks.task_type_id',
+            'types_of_tasks.task_type_component',
+            'types_of_tasks.icon',
+            'types_of_tasks_lang.task_type_name',
+            'tasks_lang.task_name',
+            'tasks.created_at'
+        )     
+        ->where('tasks_lang.lang_id', '=', $language->lang_id)
+        ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)    
+        ->where('tasks.lesson_id', '=', $request->lesson_id) 
+        ->distinct()
+        ->orderBy('tasks.task_id', 'asc')
+        ->get();
+
+        return response()->json($tasks, 200);
+    }
+
     public function create_missing_letters_task(Request $request)
     {
         $rules = [];
@@ -326,25 +357,6 @@ class TaskController extends Controller
                 ], 200);
             }
         } elseif ($request->step == 3) {
-            $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 3
-            ], 200);
-        }
-        elseif ($request->step == 4) {
             $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
@@ -521,25 +533,6 @@ class TaskController extends Controller
         }
         elseif ($request->step == 2) {
             $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
-            $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
@@ -690,25 +683,6 @@ class TaskController extends Controller
         }
         elseif ($request->step == 2) {
             $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
-            $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
@@ -845,25 +819,6 @@ class TaskController extends Controller
             ], 200);
         }
         elseif ($request->step == 2) {
-            $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
             $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
@@ -1086,25 +1041,6 @@ class TaskController extends Controller
         }
         elseif ($request->step == 3) {
             $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 3
-            ], 200);
-        }
-        elseif ($request->step == 4) {
-            $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
@@ -1317,27 +1253,53 @@ class TaskController extends Controller
                         }
                     }
                 }
-
-                return response()->json([
-                    'step' => 3
-                ], 200);
             }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
         }
-        elseif ($request->step == 4) {
-            $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
+        elseif($request->step == 4){
+            $rules = [];
+
+            $task_materials = json_decode($request->task_materials);
+
+            $video_max_file_size = UploadConfiguration::where('material_type_id', '=', 1)
+            ->first()->max_file_size_mb;
+        
+            $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first()->max_file_size_mb;
+
+            $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
+            ->first()->max_file_size_mb;
+
+            if(count($task_materials) > 0){
+                foreach ($task_materials as $key => $material) {
+                    if($material->uploadingNewFile == true){
+                        $rules['file_name_'.$key] = 'required';
+                        
+                        if($material->material_type_slug == 'video'){
+                            $rules['file_'.$key] = 'required|file|mimes:mp4,mov,avi,wmv,mkv|max_mb:'.$video_max_file_size;
+                        }
+                        elseif($material->material_type_slug == 'audio'){
+                            $rules['file_'.$key] = 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size;
+                        }
+                        elseif($material->material_type_slug == 'image'){
+                            $rules['file_'.$key] = 'required|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size;
+                        }
+                    }
+                    else{
+                        $rules['file_from_library_'.$key] = 'required|numeric';
+                    }
+                }
+            }
 
             $validator = Validator::make($request->all(), $rules);
 
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-            
+
             $new_task = new Task();
             $new_task->task_slug = $request->task_slug;
             $new_task->task_type_id = 6;
@@ -1378,6 +1340,51 @@ class TaskController extends Controller
                             }
                         }
                     }
+                }
+            }
+
+            if(count($task_materials) > 0){
+                foreach ($task_materials as $key => $material) {
+                    if($material->uploadingNewFile == true){
+
+                        $file = $request->file('file_'.$key);
+
+                        if($file){
+                            $file_name = $file->hashName();
+
+                            if($material->material_type_slug == 'video' || $material->material_type_slug == 'audio'){
+                                $file->storeAs('/public/', $file_name);
+                            }
+                            elseif($material->material_type_slug == 'image'){
+                                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                                    $constraint->aspectRatio();
+                                })->stream('png', 80);
+                                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                            }
+
+                            $material_type = MaterialType::where('material_type_slug', '=', $material->material_type_slug)
+                            ->first();
+
+                            if (!$material_type) {
+                                return response()->json(['error' => 'Material type is not found'], 404);
+                            }
+
+                            $new_file = new MediaFile();
+                            $new_file->file_name = $request['file_name_'.$key];
+                            $new_file->target = $file_name;
+                            $new_file->size = $file->getSize() / 1048576;
+                            $new_file->material_type_id = $material_type->material_type_id;
+                            $new_file->save();
+                        }
+                    }
+                    else{
+                        $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
+                    }
+
+                    $new_task_material = new TaskMaterial();
+                    $new_task_material->task_id = $new_task->task_id;
+                    $new_task_material->file_id = $material->uploadingNewFile == true ? $new_file->file_id : $findFile->file_id;
+                    $new_task_material->save();
                 }
             }
 
@@ -1454,10 +1461,24 @@ class TaskController extends Controller
             }
         }
 
+        $task_materials = TaskMaterial::leftJoin('files', 'task_materials.file_id', '=', 'files.file_id')
+        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
+        ->leftJoin('blocks', 'task_materials.block_id', '=', 'blocks.block_id')
+        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
+        ->select(
+            'task_materials.task_material_id',
+            'files.target',
+            'file_types.material_type_slug as file_material_type_slug',
+            'block_types.material_type_slug as block_material_type_slug'
+        )
+        ->where('task_materials.task_id', '=', $request->task_id)
+        ->get();
+    
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->sentences = $task_sentences;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -1484,25 +1505,6 @@ class TaskController extends Controller
             ], 200);
         }
         elseif ($request->step == 2) {
-            $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
             $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
@@ -1695,25 +1697,6 @@ class TaskController extends Controller
         }
         elseif ($request->step == 2) {
             $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
-            $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
@@ -1895,13 +1878,14 @@ class TaskController extends Controller
                 ], 200);
             }
         }
-        elseif ($request->step == 3) {
+        if ($request->step == 3) {
             $rules = [
-                'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
-                'section_id' => 'required|numeric',
-                'lesson_id' => 'required|numeric',
-                'step' => 'required|numeric',
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -1915,14 +1899,36 @@ class TaskController extends Controller
             ], 200);
         }
         if ($request->step == 4) {
-            $rules = [
-                'task_slug' => 'required',
-                'task_name_kk' => 'required',
-                'task_name_ru' => 'required',
-                'seconds_per_sentence' => 'required|numeric|min:10',
-                'max_attempts' => 'required|numeric',
-                'step' => 'required|numeric'
-            ];
+            $rules = [];
+
+            $task_materials = json_decode($request->task_materials);
+
+            $video_max_file_size = UploadConfiguration::where('material_type_id', '=', 1)
+            ->first()->max_file_size_mb;
+        
+            $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first()->max_file_size_mb;
+
+            $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
+            ->first()->max_file_size_mb;
+
+            if(count($task_materials) > 0){
+                foreach ($task_materials as $key => $material) {
+                    if($material->uploadingNewFile == true){
+                        $rules['file_name_'.$key] = 'required';
+                        
+                        if($material->material_type_slug == 'video'){
+                            $rules['file_'.$key] = 'required|file|mimes:mp4,mov,avi,wmv,mkv|max_mb:'.$video_max_file_size;
+                        }
+                        elseif($material->material_type_slug == 'audio'){
+                            $rules['file_'.$key] = 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size;
+                        }
+                        elseif($material->material_type_slug == 'image'){
+                            $rules['file_'.$key] = 'required|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size;
+                        }
+                    }
+                }
+            }
 
             $validator = Validator::make($request->all(), $rules);
 
@@ -1958,6 +1964,54 @@ class TaskController extends Controller
                     $new_task_sentence->sentence_id = $sentence->sentence_id;
                     $new_task_sentence->is_true = $sentence->isTrue;
                     $new_task_sentence->save();
+                }
+            }
+
+            if(count($task_materials) > 0){
+                foreach ($task_materials as $key => $material) {
+                    if($material->uploadingNewFile == true){
+
+                        $file = $request->file('file_'.$key);
+
+                        if($file){
+                            $file_name = $file->hashName();
+
+                            if($material->material_type_slug == 'video'){
+                                $file->storeAs('/public/', $file_name);
+                            }
+                            elseif($material->material_type_slug == 'audio'){
+                                $file->storeAs('/public/', $file_name);
+                            }
+                            elseif($material->material_type_slug == 'image'){
+                                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                                    $constraint->aspectRatio();
+                                })->stream('png', 80);
+                                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                            }
+
+                            $material_type = MaterialType::where('material_type_slug', '=', $material->material_type_slug)
+                            ->first();
+
+                            if (!$material_type) {
+                                return response()->json(['error' => 'Material type is not found'], 404);
+                            }
+
+                            $new_file = new MediaFile();
+                            $new_file->file_name = $request['file_name_'.$key];
+                            $new_file->target = $file_name;
+                            $new_file->size = $file->getSize() / 1048576;
+                            $new_file->material_type_id = $material_type->material_type_id;
+                            $new_file->save();
+                        }
+                    }
+                    else{
+                        return response()->json(['error' => 'Library is not working'], 404);
+                    }
+
+                    $new_task_material = new TaskMaterial();
+                    $new_task_material->task_id = $new_task->task_id;
+                    $new_task_material->file_id = $new_file->file_id;
+                    $new_task_material->save();
                 }
             }
 

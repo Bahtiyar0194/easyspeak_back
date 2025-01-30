@@ -220,10 +220,10 @@ class DictionaryController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $image_max_file_size = UploadConfiguration::where('file_type_id', '=', 3)
+        $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
         ->first()->max_file_size_mb;
     
-        $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
+        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
         ->first()->max_file_size_mb;
 
         // Получаем текущего аутентифицированного пользователя
@@ -300,10 +300,10 @@ class DictionaryController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $image_max_file_size = UploadConfiguration::where('file_type_id', '=', 3)
+        $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
         ->first()->max_file_size_mb;
     
-        $audio_max_file_size = UploadConfiguration::where('file_type_id', '=', 2)
+        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
         ->first()->max_file_size_mb;
 
         // Получаем текущего аутентифицированного пользователя

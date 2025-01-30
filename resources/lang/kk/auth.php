@@ -19,6 +19,7 @@ return [
     'wrong_recovery_code' => 'Құпия сөзді қалпына келтіру коды қате енгізілді.',
     'password_was_previously_restored' => 'Осы код бойынша құпия сөз бұрын қалпына келтірілген.',
     'user_already_exists' => 'Мұндай E-Mail бар пайдаланушы осы мектепте тіркелген.',
+    'section_already_exists' => 'Мұндай аты бар бөлім бұл деңгейде тіркелген.',
     'throttle' => 'Кіру әрекеті тым көп болды. :seconds секундтан соң қайталап көріңіз.',
     'remove_at_least_one_letter_in_each_word' => 'Әр сөзден кем дегенде бір әріпті алып тастауыңыз қажет',
     'you_cannot_delete_all_the_letters_in_a_word' => 'Бір сөздегі барлық әріптерді өшіруге болмайды',

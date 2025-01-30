@@ -276,6 +276,7 @@ return [
         'course_category_id'    => 'Категория курса',
         'course_lang_id'        => 'Язык курса',
         'level_type_id'         => 'Уровень прохождения курса',
+        'section_name'          => 'Название главы',
         'author_id'             => 'Автор курса',
         'course_cost'           => 'Стоимость курса',
         'course_poster_file'    => 'Обложка курса',
@@ -293,6 +294,7 @@ return [
 
         'lesson_name'           => 'Название урока',
         'lesson_description'    => 'Описание урока',
+        'lesson_type_id'        => 'Тип урока',
 
         'file_name'             => 'Название файла',
         'video_name'            => 'Название видео',

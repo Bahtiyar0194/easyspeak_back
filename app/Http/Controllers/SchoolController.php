@@ -183,8 +183,8 @@ class SchoolController extends Controller{
     }
 
     public function upload_logo(Request $request){
-        $file_type_id = 3;
-        $max_image_file_size = UploadConfiguration::where('file_type_id', '=', $file_type_id)
+        $material_type_id = 3;
+        $max_image_file_size = UploadConfiguration::where('material_type_id', '=', $material_type_id)
         ->first()->max_file_size_mb;
 
         $validator = Validator::make($request->all(), [
@@ -272,8 +272,8 @@ class SchoolController extends Controller{
 
 
     public function upload_favicon(Request $request){
-        $file_type_id = 3;
-        $max_image_file_size = UploadConfiguration::where('file_type_id', '=', $file_type_id)
+        $material_type_id = 3;
+        $max_image_file_size = UploadConfiguration::where('material_type_id', '=', $material_type_id)
         ->first()->max_file_size_mb;
 
         $validator = Validator::make($request->all(), [

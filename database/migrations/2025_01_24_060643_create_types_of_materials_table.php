@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateTypesOfMediaFilesTable extends Migration
+class CreateTypesOfMaterialsTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,9 +13,12 @@ class CreateTypesOfMediaFilesTable extends Migration
      */
     public function up()
     {
-        Schema::create('types_of_media_files', function (Blueprint $table) {
-            $table->increments('file_type_id');
-            $table->string('file_type_slug');
+        Schema::create('types_of_materials', function (Blueprint $table) {
+            $table->increments('material_type_id');
+            $table->string('material_type_slug');
+            $table->string('material_type_category');
+            $table->string('icon');
+            $table->string('component');
             $table->integer('show_status_id')->default(1)->unsigned();
             $table->foreign('show_status_id')->references('show_status_id')->on('show_status');
             $table->timestamps();
@@ -29,6 +32,6 @@ class CreateTypesOfMediaFilesTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('types_of_media_files');
+        Schema::dropIfExists('types_of_materials');
     }
 }

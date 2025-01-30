@@ -15,8 +15,8 @@ class CreateUploadConfigurationTable extends Migration
     {
         Schema::create('upload_configuration', function (Blueprint $table) {
             $table->increments('id');
-            $table->integer('file_type_id')->unsigned();
-            $table->foreign('file_type_id')->references('file_type_id')->on('types_of_media_files')->onDelete('cascade');
+            $table->integer('material_type_id')->unsigned();
+            $table->foreign('material_type_id')->references('material_type_id')->on('types_of_materials')->onDelete('cascade');
             $table->float('max_file_size_mb')->nullable();
             $table->timestamps();
         });

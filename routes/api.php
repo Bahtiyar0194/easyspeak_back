@@ -56,7 +56,14 @@ Route::group([
     Route::group([
         'prefix' => 'media'
     ], function ($router) {
-        Route::get('/{file_name}', [MediaController::class, 'get_file']);
+
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_attributes', [MediaController::class, 'get_attributes']);
+            Route::post('/get', [MediaController::class, 'get_files']);
+            Route::post('/add', [MediaController::class, 'add_file'])->middleware('check_roles');
+        });
+
+        Route::get('get/{file_name}', [MediaController::class, 'get_file']);
     });
 
     Route::group([
@@ -117,6 +124,15 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get', [CourseController::class, 'get_courses']);
+            Route::get('/get_levels/{course_slug}', [CourseController::class, 'get_levels']);
+            Route::get('/get_level/{course_slug}/{level_slug}', [CourseController::class, 'get_level']);
+            Route::get('/{course_slug}/{level_slug}/get_lessons', [CourseController::class, 'get_lessons']);
+            Route::get('/{course_slug}/{level_slug}/get_lesson/{lesson_id}', [CourseController::class, 'get_lesson']);
+            Route::get('/get_lesson_types', [CourseController::class, 'get_lesson_types']);
+            Route::get('/get_structure', [CourseController::class, 'get_courses_structure']);
+
+            Route::post('/{course_slug}/{level_slug}/add_section', [CourseController::class, 'add_section'])->middleware('check_roles');
+            Route::post('/{course_slug}/{level_slug}/{section_id}/add_lesson', [CourseController::class, 'add_lesson'])->middleware('check_roles');
         });
     });
 
@@ -150,32 +166,33 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
             Route::post('/get', [TaskController::class, 'get_tasks']);
+            Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
 
-            Route::post('/missing_letters', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
+            Route::post('/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
             Route::get('/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
 
-            Route::post('/match_words_by_pictures', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
+            Route::post('/match_words_by_pictures/{lesson_id}', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
             Route::get('/match_words_by_pictures/{task_id}', [TaskController::class, 'get_match_words_by_pictures_task']);
 
-            Route::post('/form_a_sentence_out_of_the_words', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
+            Route::post('/form_a_sentence_out_of_the_words/{lesson_id}', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
             Route::get('/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'get_form_a_sentence_out_of_the_words_task']);
 
-            Route::post('/learning_words', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
+            Route::post('/learning_words/{lesson_id}', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
             Route::get('/learning_words/{task_id}', [TaskController::class, 'get_learning_words_task']);
 
-            Route::post('/form_a_word_out_of_the_letters', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
+            Route::post('/form_a_word_out_of_the_letters/{lesson_id}', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
             Route::get('/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'get_form_a_word_out_of_the_letters_task']);
 
-            Route::post('/fill_in_the_blanks_in_the_sentence', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
+            Route::post('/fill_in_the_blanks_in_the_sentence/{lesson_id}', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
             Route::get('/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'get_fill_in_the_blanks_in_the_sentence_task']);
 
-            Route::post('/match_paired_words', [TaskController::class, 'create_match_paired_words_task'])->middleware('check_roles');
+            Route::post('/match_paired_words/{lesson_id}', [TaskController::class, 'create_match_paired_words_task'])->middleware('check_roles');
             Route::get('/match_paired_words/{task_id}', [TaskController::class, 'get_match_paired_words_task']);
 
-            Route::post('/find_an_extra_word', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
+            Route::post('/find_an_extra_word/{lesson_id}', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
             Route::get('/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
 
-            Route::post('/true_or_false', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
+            Route::post('/true_or_false/{lesson_id}', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
             Route::get('/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
 
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);

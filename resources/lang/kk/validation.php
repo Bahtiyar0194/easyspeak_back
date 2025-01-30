@@ -263,6 +263,7 @@ return [
         'course_category_id'    => 'Курстың санаты',
         'course_lang_id'        => 'Курстың тілі',
         'level_type_id'         => 'Курстың өту деңгейі',
+        'section_name'          => 'Тараудың атауы',
         'author_id'             => 'Курстың авторы',
         'course_cost'           => 'Курстың бағасы',
         'course_poster_file'    => 'Курстың мұқабасы',
@@ -280,6 +281,7 @@ return [
 
         'lesson_name'           => 'Сабақтың атауы',
         'lesson_description'    => 'Сабақтың қысқаша сипаттамасы',
+        'lesson_type_id'        => 'Сабақтың түрі',
 
         'file_name'             => 'Файлдың аты',
         'video_name'            => 'Бейнежазбаның аты',
