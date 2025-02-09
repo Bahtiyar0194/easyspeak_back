@@ -10,6 +10,7 @@ use App\Models\MediaFile;
 use App\Models\UploadConfiguration;
 use File;
 use Storage;
+use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -23,6 +24,15 @@ class MediaController extends Controller
     public function get_attributes(Request $request){    
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        $totalDiskSpace = disk_total_space("/");
+        $freeDiskSpace = disk_free_space("/");
+        $usedDiskSpace = $totalDiskSpace - $freeDiskSpace;
+
+        $disk = new \stdClass();
+        $disk->total_space = round($totalDiskSpace / (1024 ** 3));
+        $disk->free_space = round($freeDiskSpace / (1024 ** 3));
+        $disk->used_space = round($usedDiskSpace / (1024 ** 3));
+        
         $all_file_types = MaterialType::leftJoin('types_of_materials_lang', 'types_of_materials.material_type_id', '=', 'types_of_materials_lang.material_type_id')
         ->select(
             'types_of_materials.material_type_id',
@@ -38,7 +48,7 @@ class MediaController extends Controller
         ->get();
 
         $attributes = new \stdClass();
-
+        $attributes->disk = $disk;
         $attributes->all_file_types = $all_file_types;
 
         return response()->json($attributes, 200);
@@ -148,24 +158,15 @@ class MediaController extends Controller
             return response()->json(['error' => 'Material type is not found'], 404);
         }
 
-        $video_max_file_size = UploadConfiguration::where('material_type_id', '=', $material_type->material_type_id)
-        ->first()->max_file_size_mb;
-    
-        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', $material_type->material_type_id)
-        ->first()->max_file_size_mb;
-
-        $image_max_file_size = UploadConfiguration::where('material_type_id', '=', $material_type->material_type_id)
-        ->first()->max_file_size_mb;
-
-        if($material_type->material_type_slug == 'video'){
-            $rules['upload_file'] = 'required|file|mimes:mp4,mov,avi,wmv,mkv|max_mb:'.$video_max_file_size;
-        }
-        elseif($material_type->material_type_slug == 'audio'){
-            $rules['upload_file'] = 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size;
-        }
-        elseif($material_type->material_type_slug == 'image'){
-            $rules['upload_file'] = 'required|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size;
-        }
+        $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+        ->where('types_of_materials.material_type_slug', '=', $material_type->material_type_slug)
+        ->select(
+            'upload_configuration.max_file_size_mb',
+            'upload_configuration.mimes'
+        )
+        ->first();
+        
+        $rules['upload_file'] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
 
         $validator = Validator::make($request->all(), $rules);
 
@@ -178,14 +179,14 @@ class MediaController extends Controller
         if($file){
             $file_name = $file->hashName();
 
-            if($material_type->material_type_slug == 'video' || $material_type->material_type_slug == 'audio'){
-                $file->storeAs('/public/', $file_name);
-            }
-            elseif($material_type->material_type_slug == 'image'){
+            if($material_type->material_type_slug == 'image'){
                 $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
                     $constraint->aspectRatio();
                 })->stream('png', 80);
                 Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+            }
+            else{
+                $file->storeAs('/public/', $file_name);
             }
 
             $new_file = new MediaFile();

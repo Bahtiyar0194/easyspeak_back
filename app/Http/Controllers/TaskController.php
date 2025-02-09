@@ -21,6 +21,7 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 
 use App\Models\MediaFile;
+use App\Models\Block;
 use App\Models\MaterialType;
 use App\Models\TaskMaterial;
 
@@ -1264,32 +1265,33 @@ class TaskController extends Controller
 
             $task_materials = json_decode($request->task_materials);
 
-            $video_max_file_size = UploadConfiguration::where('material_type_id', '=', 1)
-            ->first()->max_file_size_mb;
-        
-            $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-            ->first()->max_file_size_mb;
-
-            $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-            ->first()->max_file_size_mb;
-
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-                    if($material->uploadingNewFile == true){
-                        $rules['file_name_'.$key] = 'required';
-                        
-                        if($material->material_type_slug == 'video'){
-                            $rules['file_'.$key] = 'required|file|mimes:mp4,mov,avi,wmv,mkv|max_mb:'.$video_max_file_size;
+                    if($material->material_type_category == 'file'){
+                        if($request['upload_task_file_'.$key] == 'true'){
+                            $rules['file_name_'.$key] = 'required';
+                            
+                            $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+                            ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
+                            ->select(
+                                'upload_configuration.max_file_size_mb',
+                                'upload_configuration.mimes'
+                            )
+                            ->first();
+                            
+                            $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
                         }
-                        elseif($material->material_type_slug == 'audio'){
-                            $rules['file_'.$key] = 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size;
-                        }
-                        elseif($material->material_type_slug == 'image'){
-                            $rules['file_'.$key] = 'required|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size;
+                        else{
+                            $rules['file_from_library_'.$key] = 'required|numeric';
                         }
                     }
-                    else{
-                        $rules['file_from_library_'.$key] = 'required|numeric';
+                    elseif($material->material_type_category == 'block'){
+                        if($material->material_type_slug == 'text'){
+                            $rules['text_'.$key] = 'required|string|min:8';
+                        }
+                        elseif($material->material_type_slug == 'table'){
+                            $rules['table_'.$key] = 'required|string|min:3';
+                        }
                     }
                 }
             }
@@ -1345,45 +1347,58 @@ class TaskController extends Controller
 
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-                    if($material->uploadingNewFile == true){
-
-                        $file = $request->file('file_'.$key);
-
-                        if($file){
-                            $file_name = $file->hashName();
-
-                            if($material->material_type_slug == 'video' || $material->material_type_slug == 'audio'){
-                                $file->storeAs('/public/', $file_name);
-                            }
-                            elseif($material->material_type_slug == 'image'){
-                                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                    $constraint->aspectRatio();
-                                })->stream('png', 80);
-                                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                            }
-
-                            $material_type = MaterialType::where('material_type_slug', '=', $material->material_type_slug)
-                            ->first();
-
-                            if (!$material_type) {
-                                return response()->json(['error' => 'Material type is not found'], 404);
-                            }
-
-                            $new_file = new MediaFile();
-                            $new_file->file_name = $request['file_name_'.$key];
-                            $new_file->target = $file_name;
-                            $new_file->size = $file->getSize() / 1048576;
-                            $new_file->material_type_id = $material_type->material_type_id;
-                            $new_file->save();
-                        }
-                    }
-                    else{
-                        $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
-                    }
 
                     $new_task_material = new TaskMaterial();
                     $new_task_material->task_id = $new_task->task_id;
-                    $new_task_material->file_id = $material->uploadingNewFile == true ? $new_file->file_id : $findFile->file_id;
+
+                    if($material->material_type_category == 'file'){
+                        if($request['upload_task_file_'.$key] == 'true'){
+
+                            $file = $request->file('file_'.$key);
+
+                            if($file){
+                                $file_name = $file->hashName();
+
+                                if($material->material_type_slug == 'image'){
+                                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                                        $constraint->aspectRatio();
+                                    })->stream('png', 80);
+                                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                                }
+                                else{
+                                    $file->storeAs('/public/', $file_name);
+                                }
+
+                                $new_file = new MediaFile();
+                                $new_file->file_name = $request['file_name_'.$key];
+                                $new_file->target = $file_name;
+                                $new_file->size = $file->getSize() / 1048576;
+                                $new_file->material_type_id = $material->material_type_id;
+                                $new_file->save();
+                            }
+                        }
+                        else{
+                            $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
+                        }
+
+                        $new_task_material->file_id = $request['upload_task_file_'.$key] == 'true' ? $new_file->file_id : $findFile->file_id;
+                    }
+                    elseif($material->material_type_category == 'block'){
+                        $new_block = new Block();
+
+                        if($material->material_type_slug == 'text'){
+                            $new_block->content = $request['text_'.$key];
+                        }
+                        elseif($material->material_type_slug == 'table'){
+                            $new_block->content = $request['table_'.$key];
+                        }
+            
+                        $new_block->material_type_id = $material->material_type_id;
+                        $new_block->save();
+            
+                        $new_task_material->block_id = $new_block->block_id;
+                    }
+
                     $new_task_material->save();
                 }
             }
@@ -1468,6 +1483,7 @@ class TaskController extends Controller
         ->select(
             'task_materials.task_material_id',
             'files.target',
+            'blocks.content',
             'file_types.material_type_slug as file_material_type_slug',
             'block_types.material_type_slug as block_material_type_slug'
         )
@@ -1903,28 +1919,32 @@ class TaskController extends Controller
 
             $task_materials = json_decode($request->task_materials);
 
-            $video_max_file_size = UploadConfiguration::where('material_type_id', '=', 1)
-            ->first()->max_file_size_mb;
-        
-            $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-            ->first()->max_file_size_mb;
-
-            $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-            ->first()->max_file_size_mb;
-
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-                    if($material->uploadingNewFile == true){
-                        $rules['file_name_'.$key] = 'required';
-                        
-                        if($material->material_type_slug == 'video'){
-                            $rules['file_'.$key] = 'required|file|mimes:mp4,mov,avi,wmv,mkv|max_mb:'.$video_max_file_size;
+                    if($material->material_type_category == 'file'){
+                        if($request['upload_task_file_'.$key] == 'true'){
+                            $rules['file_name_'.$key] = 'required';
+                            
+                            $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+                            ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
+                            ->select(
+                                'upload_configuration.max_file_size_mb',
+                                'upload_configuration.mimes'
+                            )
+                            ->first();
+                            
+                            $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
                         }
-                        elseif($material->material_type_slug == 'audio'){
-                            $rules['file_'.$key] = 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size;
+                        else{
+                            $rules['file_from_library_'.$key] = 'required|numeric';
                         }
-                        elseif($material->material_type_slug == 'image'){
-                            $rules['file_'.$key] = 'required|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size;
+                    }
+                    elseif($material->material_type_category == 'block'){
+                        if($material->material_type_slug == 'text'){
+                            $rules['text_'.$key] = 'required|string|min:8';
+                        }
+                        elseif($material->material_type_slug == 'table'){
+                            $rules['table_'.$key] = 'required|string|min:3';
                         }
                     }
                 }
@@ -1969,48 +1989,58 @@ class TaskController extends Controller
 
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-                    if($material->uploadingNewFile == true){
-
-                        $file = $request->file('file_'.$key);
-
-                        if($file){
-                            $file_name = $file->hashName();
-
-                            if($material->material_type_slug == 'video'){
-                                $file->storeAs('/public/', $file_name);
-                            }
-                            elseif($material->material_type_slug == 'audio'){
-                                $file->storeAs('/public/', $file_name);
-                            }
-                            elseif($material->material_type_slug == 'image'){
-                                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                    $constraint->aspectRatio();
-                                })->stream('png', 80);
-                                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                            }
-
-                            $material_type = MaterialType::where('material_type_slug', '=', $material->material_type_slug)
-                            ->first();
-
-                            if (!$material_type) {
-                                return response()->json(['error' => 'Material type is not found'], 404);
-                            }
-
-                            $new_file = new MediaFile();
-                            $new_file->file_name = $request['file_name_'.$key];
-                            $new_file->target = $file_name;
-                            $new_file->size = $file->getSize() / 1048576;
-                            $new_file->material_type_id = $material_type->material_type_id;
-                            $new_file->save();
-                        }
-                    }
-                    else{
-                        return response()->json(['error' => 'Library is not working'], 404);
-                    }
 
                     $new_task_material = new TaskMaterial();
                     $new_task_material->task_id = $new_task->task_id;
-                    $new_task_material->file_id = $new_file->file_id;
+
+                    if($material->material_type_category == 'file'){
+                        if($request['upload_task_file_'.$key] == 'true'){
+
+                            $file = $request->file('file_'.$key);
+
+                            if($file){
+                                $file_name = $file->hashName();
+
+                                if($material->material_type_slug == 'image'){
+                                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                                        $constraint->aspectRatio();
+                                    })->stream('png', 80);
+                                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                                }
+                                else{
+                                    $file->storeAs('/public/', $file_name);
+                                }
+
+                                $new_file = new MediaFile();
+                                $new_file->file_name = $request['file_name_'.$key];
+                                $new_file->target = $file_name;
+                                $new_file->size = $file->getSize() / 1048576;
+                                $new_file->material_type_id = $material->material_type_id;
+                                $new_file->save();
+                            }
+                        }
+                        else{
+                            $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
+                        }
+
+                        $new_task_material->file_id = $request['upload_task_file_'.$key] == 'true' ? $new_file->file_id : $findFile->file_id;
+                    }
+                    elseif($material->material_type_category == 'block'){
+                        $new_block = new Block();
+
+                        if($material->material_type_slug == 'text'){
+                            $new_block->content = $request['text_'.$key];
+                        }
+                        elseif($material->material_type_slug == 'table'){
+                            $new_block->content = $request['table_'.$key];
+                        }
+            
+                        $new_block->material_type_id = $material->material_type_id;
+                        $new_block->save();
+            
+                        $new_task_material->block_id = $new_block->block_id;
+                    }
+
                     $new_task_material->save();
                 }
             }
@@ -2071,10 +2101,25 @@ class TaskController extends Controller
             return response()->json('task sentences is not found', 404);
         }
 
+        $task_materials = TaskMaterial::leftJoin('files', 'task_materials.file_id', '=', 'files.file_id')
+        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
+        ->leftJoin('blocks', 'task_materials.block_id', '=', 'blocks.block_id')
+        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
+        ->select(
+            'task_materials.task_material_id',
+            'files.target',
+            'blocks.content',
+            'file_types.material_type_slug as file_material_type_slug',
+            'block_types.material_type_slug as block_material_type_slug'
+        )
+        ->where('task_materials.task_id', '=', $request->task_id)
+        ->get();
+
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->sentences = $task_sentences;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }

@@ -18,6 +18,7 @@ class CreateUploadConfigurationTable extends Migration
             $table->integer('material_type_id')->unsigned();
             $table->foreign('material_type_id')->references('material_type_id')->on('types_of_materials')->onDelete('cascade');
             $table->float('max_file_size_mb')->nullable();
+            $table->string('mimes');
             $table->timestamps();
         });
     }

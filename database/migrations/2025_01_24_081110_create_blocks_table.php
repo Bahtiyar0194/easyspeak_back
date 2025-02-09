@@ -15,7 +15,7 @@ class CreateBlocksTable extends Migration
     {
         Schema::create('blocks', function (Blueprint $table) {
             $table->increments('block_id');
-            $table->string('content');
+            $table->text('content');
             $table->integer('material_type_id')->unsigned();
             $table->foreign('material_type_id')->references('material_type_id')->on('types_of_materials');
             $table->timestamps();

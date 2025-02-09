@@ -6,12 +6,20 @@ use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\LessonType;
+use App\Models\MaterialType;
+use App\Models\LessonMaterial;
 use App\Models\Task;
 use App\Models\Language;
+use App\Models\MediaFile;
+use App\Models\Block;
+use App\Models\UploadConfiguration;
 
 use Illuminate\Http\Request;
 use Validator;
 use DB;
+use File;
+use Image;
+use Storage;
 
 class CourseController extends Controller
 {
@@ -189,6 +197,14 @@ class CourseController extends Controller
             ->orderBy('lessons.sort_num', 'asc')
             ->get();
 
+            foreach ($lessons as $l => $lesson) {
+                $lesson_tasks = Task::where('lesson_id', '=', $lesson->lesson_id)
+                ->where('status_type_id', '=', 1)
+                ->get();
+
+                $lesson->tasks = $lesson_tasks;
+            }
+
             $section->lessons = $lessons;
         }
 
@@ -246,9 +262,45 @@ class CourseController extends Controller
         )
         ->first();
 
+        $lesson_materials = LessonMaterial::leftJoin('files', 'lesson_materials.file_id', '=', 'files.file_id')
+        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
+        ->leftJoin('blocks', 'lesson_materials.block_id', '=', 'blocks.block_id')
+        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
+        ->select(
+            'lesson_materials.lesson_material_id',
+            'files.target',
+            'blocks.content',
+            'file_types.material_type_slug as file_material_type_slug',
+            'block_types.material_type_slug as block_material_type_slug'
+        )
+        ->where('lesson_materials.lesson_id', '=', $lesson->lesson_id)
+        ->get();
+
+        $lesson->materials = $lesson_materials;
+
         $data->lesson = $lesson;
         
         return response()->json($data, 200);
+    }
+
+    public function get_material_types(Request $request){
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $all_material_types = MaterialType::leftJoin('types_of_materials_lang', 'types_of_materials.material_type_id', '=', 'types_of_materials_lang.material_type_id')
+        ->select(
+            'types_of_materials.material_type_id',
+            'types_of_materials.material_type_slug',
+            'types_of_materials.material_type_category',
+            'types_of_materials.icon',
+            'types_of_materials_lang.material_type_name'
+        )
+        ->where('types_of_materials.show_status_id', '=', 1)
+        ->where('types_of_materials_lang.lang_id', '=', $language->lang_id)
+        ->distinct()
+        ->orderBy('types_of_materials.material_type_id', 'asc')
+        ->get();
+
+        return response()->json($all_material_types, 200);
     }
 
     public function get_lesson_types(Request $request){
@@ -312,7 +364,7 @@ class CourseController extends Controller
     
         return response()->json($new_section, 200);
     }
-    
+
     public function add_lesson(Request $request)
     {
         // Валидация входных данных
@@ -365,6 +417,107 @@ class CourseController extends Controller
         $new_lesson->save();
 
         return response()->json($new_lesson, 200);
+    }
+    
+    public function add_material(Request $request)
+    {
+        $material_type = MaterialType::where('material_type_slug', '=', $request->material_type_slug)
+        ->first();
+
+        if (!$material_type) {
+            return response()->json(['error' => 'Material type is not found'], 404);
+        }
+
+        // Инициализируем массив правил
+        $rules = [];
+
+        if($material_type->material_type_category == 'file'){
+            if($request['upload_lesson_file'] == 'true'){
+                $rules['lesson_file_name'] = 'required';
+                
+                $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+                ->where('types_of_materials.material_type_slug', '=', $material_type->material_type_slug)
+                ->select(
+                    'upload_configuration.max_file_size_mb',
+                    'upload_configuration.mimes'
+                )
+                ->first();
+                
+                $rules['lesson_file'] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+            }
+            else{
+                $rules['lesson_file_from_library'] = 'required|numeric';
+            }
+        }
+        elseif($material_type->material_type_category == 'block'){
+            if($material_type->material_type_slug == 'text'){
+                $rules['lesson_text'] = 'required|string|min:8';
+            }
+            elseif($material_type->material_type_slug == 'table'){
+                $rules['lesson_table'] = 'required|string|min:3';
+            }
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $new_lesson_material = new LessonMaterial();
+        $new_lesson_material->lesson_id = $request->lesson_id;
+
+        if($material_type->material_type_category == 'file'){
+            if($request['upload_lesson_file'] == 'true'){
+
+                $file = $request->file('lesson_file');
+
+                if($file){
+                    $file_name = $file->hashName();
+
+                    if($material_type->material_type_slug == 'image'){
+                        $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                            $constraint->aspectRatio();
+                        })->stream('png', 80);
+                        Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                    }
+                    else{
+                        $file->storeAs('/public/', $file_name);
+                    }
+
+                    $new_file = new MediaFile();
+                    $new_file->file_name = $request['lesson_file_name'];
+                    $new_file->target = $file_name;
+                    $new_file->size = $file->getSize() / 1048576;
+                    $new_file->material_type_id = $material_type->material_type_id;
+                    $new_file->save();
+                }
+            }
+            else{
+                $findFile = MediaFile::findOrFail($request['lesson_file_from_library']);
+            }
+
+            $new_lesson_material->file_id = $request['upload_lesson_file'] == 'true' ? $new_file->file_id : $findFile->file_id;
+        }
+        elseif($material_type->material_type_category == 'block'){
+            $new_block = new Block();
+
+            if($material_type->material_type_slug == 'text'){
+                $new_block->content = $request->lesson_text;
+            }
+            elseif($material_type->material_type_slug == 'table'){
+                $new_block->content = $request->lesson_table;
+            }
+
+            $new_block->material_type_id = $material_type->material_type_id;
+            $new_block->save();
+
+            $new_lesson_material->block_id = $new_block->block_id;
+        }
+
+        $new_lesson_material->save();
+
+        return response()->json($new_lesson_material, 200);
     }
 
     public function get_courses_structure(Request $request)
