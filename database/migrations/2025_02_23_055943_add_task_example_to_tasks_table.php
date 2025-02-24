@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddIsTrueToTaskSentencesTable extends Migration
+class AddTaskExampleToTasksTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,8 +13,8 @@ class AddIsTrueToTaskSentencesTable extends Migration
      */
     public function up()
     {
-        Schema::table('task_sentences', function (Blueprint $table) {
-            $table->boolean('is_true')->nullable();
+        Schema::table('tasks', function (Blueprint $table) {
+            $table->text('task_example')->nullable();
         });
     }
 
@@ -25,7 +25,7 @@ class AddIsTrueToTaskSentencesTable extends Migration
      */
     public function down()
     {
-        Schema::table('task_sentences', function (Blueprint $table) {
+        Schema::table('tasks', function (Blueprint $table) {
             //
         });
     }

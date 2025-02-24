@@ -24,5 +24,6 @@ return [
     'remove_at_least_one_letter_in_each_word' => 'Әр сөзден кем дегенде бір әріпті алып тастауыңыз қажет',
     'you_cannot_delete_all_the_letters_in_a_word' => 'Бір сөздегі барлық әріптерді өшіруге болмайды',
     'remove_one_word_in_each_sentence' => 'Әр сөйлемнен бір сөзді алып тастауыңыз қажет',
-    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Әр сөйлем үшін жетіспейтін сөздердің екі немесе одан да көп нұсқаларын қосу қажет'
+    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Әр сөйлем үшін жетіспейтін сөздердің екі немесе одан да көп нұсқаларын қосу қажет',
+    'you_cannot_remove_a_word_with_one_letter' => 'Сөзде бір әріптен кем болмауы қажет',
 ];

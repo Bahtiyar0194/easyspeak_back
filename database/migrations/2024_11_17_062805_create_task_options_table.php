@@ -30,8 +30,14 @@ class CreateTaskOptionsTable extends Migration
             $table->integer('seconds_per_word')->nullable();
             $table->integer('seconds_per_sentence')->nullable();
             $table->boolean('in_the_main_lang')->nullable();
-            $table->boolean('find_word_with_options')->nullable();
+            $table->string('find_word_option')->nullable();
             $table->integer('options_num')->nullable();
+            $table->boolean('random_order')->default(true);
+            $table->boolean('match_by_typing')->nullable();
+            $table->boolean('match_by_clicking')->nullable();
+            $table->boolean('match_by_drag_and_drop')->nullable();
+            $table->integer('max_attempts')->default(0);
+            $table->string('show_materials_option')->nullable();
             $table->timestamps();
         });
     }

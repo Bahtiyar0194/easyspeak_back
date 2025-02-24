@@ -13,17 +13,13 @@ use App\Models\MissingWord;
 use App\Models\WordSection;
 use App\Models\WordSectionItem;
 use App\Models\Language;
-use App\Models\UploadConfiguration;
 
 use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 
-use App\Models\MediaFile;
-use App\Models\Block;
-use App\Models\MaterialType;
-use App\Models\TaskMaterial;
+use App\Services\TaskService;
 
 use Validator;
 use DB;
@@ -35,8 +31,12 @@ use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
-    public function __construct(Request $request)
+
+    protected $taskService;
+
+    public function __construct(Request $request, TaskService $taskService)
     {
+        $this->taskService = $taskService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -197,6 +197,7 @@ class TaskController extends Controller
         ->select(
             'tasks.task_id',
             'tasks.task_slug',
+            'tasks.task_example',
             'tasks.task_type_id',
             'types_of_tasks.task_type_component',
             'types_of_tasks_lang.task_type_name',
@@ -292,6 +293,7 @@ class TaskController extends Controller
         ->select(
             'tasks.task_id',
             'tasks.task_slug',
+            'tasks.task_example',
             'tasks.task_type_id',
             'types_of_tasks.task_type_component',
             'types_of_tasks.icon',
@@ -377,25 +379,21 @@ class TaskController extends Controller
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-            
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 1;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 1);
 
             $words = json_decode($request->words);
 
@@ -415,17 +413,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->show_audio_button = $request->show_audio_button;
-            $new_task_option->show_image = $request->show_image;
-            $new_task_option->show_transcription = $request->show_transcription;
-            $new_task_option->show_translate = $request->show_translate;
-            $new_task_option->impression_limit = $request->impression_limit;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -444,49 +436,20 @@ class TaskController extends Controller
 
     public function get_missing_letters_task(Request $request)
     {
-        // Проверка языка
+        // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-    
-        if (!$language) {
-            return response()->json(['error' => 'Language not found'], 404);
+
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
         }
-    
-        // Проверка наличия task_id
-        if (!$request->task_id) {
-            return response()->json(['error' => 'Task ID is required'], 400);
-        }
-    
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)->first();
-    
-        if (!$task_options) {
-            return response()->json(['error' => 'Task option not found'], 404);
-        }
-    
-        // Получение слов для задачи
-        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-            ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-            ->select(
-                'task_words.task_word_id',
-                'dictionary.word',
-                'dictionary.transcription',
-                'dictionary.image_file',
-                'dictionary.audio_file',
-                'dictionary_translate.word_translate'
-            )
-            ->where('task_words.task_id', '=', $request->task_id)
-            ->where('dictionary_translate.lang_id', '=', $language->lang_id);
-    
-        // Случайный порядок, если указан
-        if ($task_options->random_order == 1) {
-            $task_words->inRandomOrder();
-        }
-    
-        $task_words = $task_words->get();
-    
-        if ($task_words->isEmpty()) {
-            return response()->json(['error' => 'Task words not found'], 404);
-        }
-    
+
+        $task_words = $this->taskService->getTaskWords($find_task->task_id, $language, $task_options);
+
         // Оптимизация получения отсутствующих букв
         $task_word_ids = $task_words->pluck('task_word_id');
     
@@ -500,14 +463,16 @@ class TaskController extends Controller
         foreach ($task_words as $word) {
             $word->missingLetters = $missing_letters->get($word->task_word_id, collect())->pluck('position');
         }
-    
-        // Подготовка ответа
-        $response = [
-            'options' => $task_options,
-            'words' => $task_words,
-        ];
-    
-        return response()->json($response, 200);
+        
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+
+        $task = new \stdClass();
+
+        $task->options = $task_options;
+        $task->words = $task_words;
+        $task->materials = $task_materials;
+
+        return response()->json($task, 200);
     }
     
 
@@ -551,25 +516,21 @@ class TaskController extends Controller
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-            
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 2;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif($request->step == 3){
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 2);
 
             $words = json_decode($request->words);
 
@@ -582,16 +543,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->show_audio_button = $request->show_audio_button;
-            $new_task_option->show_transcription = $request->show_transcription;
-            $new_task_option->show_translate = $request->show_translate;
-            $new_task_option->impression_limit = $request->impression_limit;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -613,14 +569,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        if (!$language) {
-            return response()->json(['error' => 'Language not found'], 404);
-        }
-    
-        // Проверка наличия task_id
-        if (!$request->task_id) {
-            return response()->json(['error' => 'Task ID is required'], 400);
-        }
+        $find_task = Task::findOrFail($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $request->task_id)
         ->first();
@@ -629,34 +578,15 @@ class TaskController extends Controller
             return response()->json('task option is not found', 404);
         }
 
-        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-        ->select(
-            'task_words.task_word_id',
-            'dictionary.word',
-            'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
-            'dictionary_translate.word_translate'
-        )
-        ->where('task_words.task_id', '=', $request->task_id)
-        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
+        $task_words = $this->taskService->getTaskWords($find_task->task_id, $language, $task_options);
 
-        if($task_options->random_order == 1){
-            $task_words->inRandomOrder();
-        }
-
-        $task_words = $task_words->get();
-
-        if(count($task_words) === 0){
-            return response()->json('task words is not found', 404);
-        }
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
 
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->words = $task_words;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -701,24 +631,8 @@ class TaskController extends Controller
                 return response()->json($validator->errors(), 422);
             }
             
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 3;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 3);
 
             $sentences = json_decode($request->sentences);
 
@@ -731,15 +645,8 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
-            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
-            $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
-            $new_task_option->in_the_main_lang = $request->in_the_main_lang;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -761,6 +668,8 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        $find_task = Task::findOrFail($request->task_id);
+
         $task_options = TaskOption::where('task_id', '=', $request->task_id)
         ->first();
 
@@ -768,27 +677,7 @@ class TaskController extends Controller
             return response()->json('task option is not found', 404);
         }
 
-        $task_sentences = TaskSentence::leftJoin('sentences', 'task_sentences.sentence_id', '=', 'sentences.sentence_id')
-        ->leftJoin('sentences_translate', 'sentences.sentence_id', '=', 'sentences_translate.sentence_id')
-        ->select(
-            'task_sentences.task_sentence_id',
-            'sentences.sentence',
-            'sentences.audio_file',
-            'sentences_translate.sentence_translate'
-        )
-        ->where('task_sentences.task_id', '=', $request->task_id)
-        ->where('sentences_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
-
-        if($task_options->random_order == 1){
-            $task_sentences->inRandomOrder();
-        }
-
-        $task_sentences = $task_sentences->get();
-
-        if(count($task_sentences) === 0){
-            return response()->json('task sentences is not found', 404);
-        }
+        $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
 
         $task = new \stdClass();
 
@@ -843,25 +732,21 @@ class TaskController extends Controller
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-            
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 4;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 4);
 
             $words = json_decode($request->words);
 
@@ -874,21 +759,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->show_audio_button = $request->show_audio_button;
-            $new_task_option->play_audio_at_the_begin = $request->play_audio_at_the_begin;
-            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
-            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
-            $new_task_option->show_image = $request->show_image;
-            $new_task_option->show_word = $request->show_word;
-            $new_task_option->show_transcription = $request->show_transcription;
-            $new_task_option->options_num = $request->options_num;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->in_the_main_lang = $request->in_the_main_lang;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+            
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -910,36 +785,16 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
             return response()->json('task option is not found', 404);
         }
 
-        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-        ->select(
-            'task_words.task_word_id',
-            'dictionary.word',
-            'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
-            'dictionary_translate.word_translate'
-        )
-        ->where('task_words.task_id', '=', $request->task_id)
-        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
-
-        if($task_options->random_order == 1){
-            $task_words->inRandomOrder();
-        }
-
-        $task_words = $task_words->get();
-
-        if(count($task_words) === 0){
-            return response()->json('task words is not found', 404);
-        }
+        $task_words = $this->taskService->getTaskWords($find_task->task_id, $language, $task_options);
 
         foreach ($task_words as $key => $word) {
             // Получаем случайные слова-ответы для вариативности
@@ -952,7 +807,7 @@ class TaskController extends Controller
                 'dictionary_translate.word_translate'
             )
             ->where('task_words.task_word_id', '!=', $word->task_word_id) // Исключаем текущее слово
-            ->where('task_words.task_id', '=', $request->task_id)
+            ->where('task_words.task_id', '=', $find_task->task_id)
             ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
             ->inRandomOrder()
             ->limit($task_options->options_num - 1)
@@ -982,10 +837,13 @@ class TaskController extends Controller
             $word->answer_options = $answers;
         }
 
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+    
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->words = $task_words;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -1063,24 +921,21 @@ class TaskController extends Controller
                 return response()->json($validator->errors(), 422);
             }
             
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 5;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 5);
 
             $words = json_decode($request->words);
 
@@ -1100,20 +955,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->show_audio_button = $request->show_audio_button;
-            $new_task_option->play_audio_at_the_begin = $request->play_audio_at_the_begin;
-            $new_task_option->play_audio_with_the_correct_answer = $request->play_audio_with_the_correct_answer;
-            $new_task_option->play_error_sound_with_the_incorrect_answer = $request->play_error_sound_with_the_incorrect_answer;
-            $new_task_option->show_image = $request->show_image;
-            $new_task_option->show_transcription = $request->show_transcription;
-            $new_task_option->show_translate = $request->show_translate;
-            $new_task_option->options_num = $request->options_num;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1135,36 +981,16 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
             return response()->json('task option is not found', 404);
         }
 
-        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
-        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-        ->select(
-            'task_words.task_word_id',
-            'dictionary.word',
-            'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
-            'dictionary_translate.word_translate'
-        )
-        ->where('task_words.task_id', '=', $request->task_id)
-        ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
-
-        if($task_options->random_order == 1){
-            $task_words->inRandomOrder();
-        }
-
-        $task_words = $task_words->get();
-
-        if(count($task_words) === 0){
-            return response()->json('task words is not found', 404);
-        }
+        $task_words = $this->taskService->getTaskWords($request->task_id, $language, $task_options);
 
         foreach ($task_words as $word) {
             $missing_letters = MissingLetter::where('task_word_id', '=', $word->task_word_id)
@@ -1177,10 +1003,13 @@ class TaskController extends Controller
             $word->missingLetters = $missing_letters;
         }
 
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+        
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->words = $task_words;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -1230,7 +1059,7 @@ class TaskController extends Controller
         elseif ($request->step == 3) {
             $rules = [
                 'sentences' => 'required',
-                'find_word_with_options' => 'required|boolean',
+                'find_word_option' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -1244,13 +1073,26 @@ class TaskController extends Controller
 
             if (count($sentences) > 0) {
                 foreach ($sentences as $sentence) {
-                    if(!isset($sentence->removedWordIndex)){
-                        return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
-                    }
+                    if($request->find_word_option == 'with_options'){
+                        if(!isset($sentence->removedWordIndex)){
+                            return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
+                        }
 
-                    if($request->find_word_with_options == 1){
                         if(!isset($sentence->removedWordOptions) || count($sentence->removedWordOptions) < 2){
                             return response()->json(['words_failed' => [trans('auth.you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence')]], 422);
+                        }
+                    }
+                    else{
+                        if(!isset($sentence->removedWordsIndex) || count($sentence->removedWordsIndex) == 0){
+                            return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
+                        }
+
+                        if($request->find_word_option == 'with_first_letter'){
+                            foreach ($sentence->removedWordsIndex as $wordIndex) {
+                                if(strlen(explode(" ", $sentence->sentence)[$wordIndex]) <= 1){
+                                    return response()->json(['words_failed' => [trans('auth.you_cannot_remove_a_word_with_one_letter')]], 422);
+                                }
+                            }
                         }
                     }
                 }
@@ -1261,65 +1103,16 @@ class TaskController extends Controller
             ], 200);
         }
         elseif($request->step == 4){
-            $rules = [];
 
-            $task_materials = json_decode($request->task_materials);
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            if(count($task_materials) > 0){
-                foreach ($task_materials as $key => $material) {
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-                            $rules['file_name_'.$key] = 'required';
-                            
-                            $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
-                            ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
-                            ->select(
-                                'upload_configuration.max_file_size_mb',
-                                'upload_configuration.mimes'
-                            )
-                            ->first();
-                            
-                            $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
-                        }
-                        else{
-                            $rules['file_from_library_'.$key] = 'required|numeric';
-                        }
-                    }
-                    elseif($material->material_type_category == 'block'){
-                        if($material->material_type_slug == 'text'){
-                            $rules['text_'.$key] = 'required|string|min:8';
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $rules['table_'.$key] = 'required|string|min:3';
-                        }
-                    }
-                }
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
             }
 
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 6;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 6);
 
             $sentences = json_decode($request->sentences);
 
@@ -1328,16 +1121,27 @@ class TaskController extends Controller
                     $new_task_sentence = new TaskSentence();
                     $new_task_sentence->task_id = $new_task->task_id;
                     $new_task_sentence->sentence_id = $sentence->sentence_id;
-                    $new_task_sentence->missing_word_position = $sentence->removedWordIndex;
                     $new_task_sentence->save();
 
-                    if($request->find_word_with_options == 1){
+                    if($request->find_word_option == 'with_options'){
                         if(count($sentence->removedWordOptions) > 0){
                             foreach ($sentence->removedWordOptions as $key => $option) {
                                 $new_missing_word = new MissingWord();
-                                $new_missing_word->word = $option;
+                                if($key === 0 && isset($sentence->removedWordIndex)){
+                                    $new_missing_word->word_position = $sentence->removedWordIndex;
+                                }
+                                $new_missing_word->word_option = $option;
                                 $new_missing_word->task_sentence_id = $new_task_sentence->task_sentence_id;
-                                $new_missing_word->is_correct = ($key === 0 ? true : false);
+                                $new_missing_word->save();
+                            }
+                        }
+                    }
+                    else{
+                        if(count($sentence->removedWordsIndex) > 0){
+                            foreach ($sentence->removedWordsIndex as $key => $wordIndex) {
+                                $new_missing_word = new MissingWord();
+                                $new_missing_word->word_position = $wordIndex;
+                                $new_missing_word->task_sentence_id = $new_task_sentence->task_sentence_id;
                                 $new_missing_word->save();
                             }
                         }
@@ -1345,72 +1149,11 @@ class TaskController extends Controller
                 }
             }
 
-            if(count($task_materials) > 0){
-                foreach ($task_materials as $key => $material) {
-
-                    $new_task_material = new TaskMaterial();
-                    $new_task_material->task_id = $new_task->task_id;
-
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-
-                            $file = $request->file('file_'.$key);
-
-                            if($file){
-                                $file_name = $file->hashName();
-
-                                if($material->material_type_slug == 'image'){
-                                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                        $constraint->aspectRatio();
-                                    })->stream('png', 80);
-                                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                                }
-                                else{
-                                    $file->storeAs('/public/', $file_name);
-                                }
-
-                                $new_file = new MediaFile();
-                                $new_file->file_name = $request['file_name_'.$key];
-                                $new_file->target = $file_name;
-                                $new_file->size = $file->getSize() / 1048576;
-                                $new_file->material_type_id = $material->material_type_id;
-                                $new_file->save();
-                            }
-                        }
-                        else{
-                            $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
-                        }
-
-                        $new_task_material->file_id = $request['upload_task_file_'.$key] == 'true' ? $new_file->file_id : $findFile->file_id;
-                    }
-                    elseif($material->material_type_category == 'block'){
-                        $new_block = new Block();
-
-                        if($material->material_type_slug == 'text'){
-                            $new_block->content = $request['text_'.$key];
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $new_block->content = $request['table_'.$key];
-                        }
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
             
-                        $new_block->material_type_id = $material->material_type_id;
-                        $new_block->save();
-            
-                        $new_task_material->block_id = $new_block->block_id;
-                    }
-
-                    $new_task_material->save();
-                }
-            }
-
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
-            $new_task_option->find_word_with_options = $request->find_word_with_options;
-            $new_task_option->impression_limit = $request->impression_limit;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1431,64 +1174,30 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
             return response()->json('task option is not found', 404);
         }
 
-        $task_sentences = TaskSentence::leftJoin('sentences', 'task_sentences.sentence_id', '=', 'sentences.sentence_id')
-        ->leftJoin('sentences_translate', 'sentences.sentence_id', '=', 'sentences_translate.sentence_id')
-        ->select(
-            'task_sentences.task_sentence_id',
-            'task_sentences.missing_word_position',
-            'sentences.sentence',
-            'sentences.audio_file',
-            'sentences_translate.sentence_translate'
-        )
-        ->where('task_sentences.task_id', '=', $request->task_id)
-        ->where('sentences_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
+        $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
 
-        if($task_options->random_order == 1){
-            $task_sentences->inRandomOrder();
+        foreach ($task_sentences as $sentence) {
+            $missing_words = MissingWord::where('task_sentence_id', '=', $sentence->task_sentence_id)
+            ->select(
+                'missing_words.missing_word_id',
+                'missing_words.word_position',
+                'missing_words.word_option'
+            )
+            ->get();
+
+            $sentence->missingWords = $missing_words;
         }
 
-        $task_sentences = $task_sentences->get();
-
-        if(count($task_sentences) === 0){
-            return response()->json('task sentences is not found', 404);
-        }
-
-        if($task_options->find_word_with_options == 1){
-            foreach ($task_sentences as $sentence) {
-                $missing_words = MissingWord::where('task_sentence_id', '=', $sentence->task_sentence_id)
-                ->select(
-                    'missing_words.missing_word_id',
-                    'missing_words.word',
-                    'missing_words.is_correct',
-                )
-                ->inRandomOrder()
-                ->get();
-    
-                $sentence->missingWords = $missing_words;
-            }
-        }
-
-        $task_materials = TaskMaterial::leftJoin('files', 'task_materials.file_id', '=', 'files.file_id')
-        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
-        ->leftJoin('blocks', 'task_materials.block_id', '=', 'blocks.block_id')
-        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
-        ->select(
-            'task_materials.task_material_id',
-            'files.target',
-            'blocks.content',
-            'file_types.material_type_slug as file_material_type_slug',
-            'block_types.material_type_slug as block_material_type_slug'
-        )
-        ->where('task_materials.task_id', '=', $request->task_id)
-        ->get();
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
     
         $task = new \stdClass();
 
@@ -1547,25 +1256,21 @@ class TaskController extends Controller
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-            
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 7;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 7);
 
             $sections = json_decode($request->sections);
 
@@ -1587,16 +1292,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->impression_limit = $request->impression_limit;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->match_by_typing = isset($request->match_by_typing) ? true : false;
-            $new_task_option->match_by_clicking = isset($request->match_by_clicking) ? true : false;
-            $new_task_option->match_by_drag_and_drop = isset($request->match_by_drag_and_drop) ? true : false;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1611,6 +1311,7 @@ class TaskController extends Controller
 
             return response()->json('success', 200);
         }
+
     }
 
     public function get_match_paired_words_task(Request $request)
@@ -1618,7 +1319,9 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
@@ -1629,7 +1332,7 @@ class TaskController extends Controller
             'word_sections.word_section_id',
             'word_sections.task_id'
         )
-        ->where('word_sections.task_id', '=', $request->task_id);
+        ->where('word_sections.task_id', '=', $find_task->task_id);
 
         if($task_options->random_order == 1){
             $word_sections->inRandomOrder();
@@ -1662,10 +1365,13 @@ class TaskController extends Controller
             $section->words = $section_items;
         }
 
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->word_sections = $word_sections;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -1728,24 +1434,20 @@ class TaskController extends Controller
                 return response()->json($validator->errors(), 422);
             }
             
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 8;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
 
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 8);
 
             $sections = json_decode($request->sections);
 
@@ -1767,13 +1469,11 @@ class TaskController extends Controller
                 }
             }
 
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->impression_limit = $request->impression_limit;
-            $new_task_option->seconds_per_word = $request->seconds_per_word;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1795,7 +1495,9 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
@@ -1839,10 +1541,13 @@ class TaskController extends Controller
             $section->words = $section_items;
         }
 
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+
         $task = new \stdClass();
 
         $task->options = $task_options;
         $task->word_sections = $word_sections;
+        $task->materials = $task_materials;
 
         return response()->json($task, 200);
     }
@@ -1884,7 +1589,7 @@ class TaskController extends Controller
 
             if (count($sentences) > 0) {
                 foreach ($sentences as $sentence) {
-                    if(!isset($sentence->isTrue)){
+                    if(!isset($sentence->answer)){
                         return response()->json(['answers_failed' => [trans('Answers failed')]], 422);
                     }
                 }
@@ -1915,65 +1620,15 @@ class TaskController extends Controller
             ], 200);
         }
         if ($request->step == 4) {
-            $rules = [];
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
 
-            $task_materials = json_decode($request->task_materials);
-
-            if(count($task_materials) > 0){
-                foreach ($task_materials as $key => $material) {
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-                            $rules['file_name_'.$key] = 'required';
-                            
-                            $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
-                            ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
-                            ->select(
-                                'upload_configuration.max_file_size_mb',
-                                'upload_configuration.mimes'
-                            )
-                            ->first();
-                            
-                            $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
-                        }
-                        else{
-                            $rules['file_from_library_'.$key] = 'required|numeric';
-                        }
-                    }
-                    elseif($material->material_type_category == 'block'){
-                        if($material->material_type_slug == 'text'){
-                            $rules['text_'.$key] = 'required|string|min:8';
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $rules['table_'.$key] = 'required|string|min:3';
-                        }
-                    }
-                }
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
             }
 
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            $new_task = new Task();
-            $new_task->task_slug = $request->task_slug;
-            $new_task->task_type_id = 9;
-            $new_task->lesson_id = $request->lesson_id;
-            $new_task->operator_id = auth()->user()->user_id;
-            $new_task->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_kk;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 1;
-            $new_task_lang->save();
-
-            $new_task_lang = new TaskLang();
-            $new_task_lang->task_name = $request->task_name_ru;
-            $new_task_lang->task_id = $new_task->task_id;
-            $new_task_lang->lang_id = 2;
-            $new_task_lang->save();
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 9);
 
             $sentences = json_decode($request->sentences);
 
@@ -1982,75 +1637,16 @@ class TaskController extends Controller
                     $new_task_sentence = new TaskSentence();
                     $new_task_sentence->task_id = $new_task->task_id;
                     $new_task_sentence->sentence_id = $sentence->sentence_id;
-                    $new_task_sentence->is_true = $sentence->isTrue;
+                    $new_task_sentence->answer = $sentence->answer;
                     $new_task_sentence->save();
                 }
             }
 
-            if(count($task_materials) > 0){
-                foreach ($task_materials as $key => $material) {
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
 
-                    $new_task_material = new TaskMaterial();
-                    $new_task_material->task_id = $new_task->task_id;
-
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-
-                            $file = $request->file('file_'.$key);
-
-                            if($file){
-                                $file_name = $file->hashName();
-
-                                if($material->material_type_slug == 'image'){
-                                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                        $constraint->aspectRatio();
-                                    })->stream('png', 80);
-                                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                                }
-                                else{
-                                    $file->storeAs('/public/', $file_name);
-                                }
-
-                                $new_file = new MediaFile();
-                                $new_file->file_name = $request['file_name_'.$key];
-                                $new_file->target = $file_name;
-                                $new_file->size = $file->getSize() / 1048576;
-                                $new_file->material_type_id = $material->material_type_id;
-                                $new_file->save();
-                            }
-                        }
-                        else{
-                            $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
-                        }
-
-                        $new_task_material->file_id = $request['upload_task_file_'.$key] == 'true' ? $new_file->file_id : $findFile->file_id;
-                    }
-                    elseif($material->material_type_category == 'block'){
-                        $new_block = new Block();
-
-                        if($material->material_type_slug == 'text'){
-                            $new_block->content = $request['text_'.$key];
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $new_block->content = $request['table_'.$key];
-                        }
-            
-                        $new_block->material_type_id = $material->material_type_id;
-                        $new_block->save();
-            
-                        $new_task_material->block_id = $new_block->block_id;
-                    }
-
-                    $new_task_material->save();
-                }
-            }
-
-            $new_task_option = new TaskOption();
-            $new_task_option->task_id = $new_task->task_id;
-            $new_task_option->seconds_per_sentence = $request->seconds_per_sentence;
-            $new_task_option->random_order = isset($request->random_order) ? true : false;
-            $new_task_option->max_attempts = $request->max_attempts;
-            $new_task_option->save();
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -2071,49 +1667,18 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $task_options = TaskOption::where('task_id', '=', $request->task_id)
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
 
         if(!isset($task_options)){
             return response()->json('task option is not found', 404);
         }
 
-        $task_sentences = TaskSentence::leftJoin('sentences', 'task_sentences.sentence_id', '=', 'sentences.sentence_id')
-        ->leftJoin('sentences_translate', 'sentences.sentence_id', '=', 'sentences_translate.sentence_id')
-        ->select(
-            'task_sentences.task_sentence_id',
-            'task_sentences.is_true',
-            'sentences.sentence',
-            'sentences.audio_file',
-            'sentences_translate.sentence_translate'
-        )
-        ->where('task_sentences.task_id', '=', $request->task_id)
-        ->where('sentences_translate.lang_id', '=', $language->lang_id)  
-        ->distinct();
+        $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
 
-        if($task_options->random_order == 1){
-            $task_sentences->inRandomOrder();
-        }
-
-        $task_sentences = $task_sentences->get();
-
-        if(count($task_sentences) === 0){
-            return response()->json('task sentences is not found', 404);
-        }
-
-        $task_materials = TaskMaterial::leftJoin('files', 'task_materials.file_id', '=', 'files.file_id')
-        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
-        ->leftJoin('blocks', 'task_materials.block_id', '=', 'blocks.block_id')
-        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
-        ->select(
-            'task_materials.task_material_id',
-            'files.target',
-            'blocks.content',
-            'file_types.material_type_slug as file_material_type_slug',
-            'block_types.material_type_slug as block_material_type_slug'
-        )
-        ->where('task_materials.task_id', '=', $request->task_id)
-        ->get();
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
 
         $task = new \stdClass();
 

@@ -15,10 +15,10 @@ class CreateMissingWordsTable extends Migration
     {
         Schema::create('missing_words', function (Blueprint $table) {
             $table->increments('missing_word_id');
-            $table->string('word');
+            $table->integer('word_position')->nullable();
+            $table->string('word_option')->nullable();
             $table->integer('task_sentence_id')->unsigned();
             $table->foreign('task_sentence_id')->references('task_sentence_id')->on('task_sentences')->onDelete('cascade');
-            $table->boolean('is_correct');
             $table->timestamps();
         });
     }

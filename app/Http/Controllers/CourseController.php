@@ -203,6 +203,11 @@ class CourseController extends Controller
                 ->get();
 
                 $lesson->tasks = $lesson_tasks;
+
+                $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
+                ->get();
+
+                $lesson->materials = $lesson_materials;
             }
 
             $section->lessons = $lessons;

@@ -25,5 +25,6 @@ return [
     'remove_at_least_one_letter_in_each_word' => 'Уберите хотя бы одну букву из каждого слова',
     'you_cannot_delete_all_the_letters_in_a_word' => 'Вы не можете удалить все буквы в слове',
     'remove_one_word_in_each_sentence' => 'Вы должны удалить по одному слову из каждого предложения кликнув по ним',
-    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Для каждого предложения необходимо добавить два или более вариантов пропущенных слов'
+    'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Для каждого предложения необходимо добавить два или более вариантов пропущенных слов',
+    'you_cannot_remove_a_word_with_one_letter' => 'Вы не можете удалить слово с одной буквой',
 ];
