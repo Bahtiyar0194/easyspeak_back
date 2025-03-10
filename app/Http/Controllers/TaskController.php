@@ -296,7 +296,7 @@ class TaskController extends Controller
             'tasks.task_slug',
             'tasks.task_example',
             'tasks.task_type_id',
-            `tasks`.`sort_num`,
+            `tasks.sort_num`,
             'types_of_tasks.task_type_component',
             'types_of_tasks.icon',
             'types_of_tasks_lang.task_type_name',
