@@ -17,8 +17,10 @@ class CreateSentencesTable extends Migration
             $table->increments('sentence_id');
             $table->string('sentence');
             $table->string('transcription')->nullable();
-            $table->string('image_file')->nullable();
-            $table->string('audio_file')->nullable();
+            $table->integer('image_file_id')->unsigned()->onDelete('cascade')->nullable();
+            $table->foreign('image_file_id')->references('file_id')->on('files');
+            $table->integer('audio_file_id')->unsigned()->onDelete('cascade')->nullable();
+            $table->foreign('audio_file_id')->references('file_id')->on('files');
             $table->integer('course_id')->unsigned();
             $table->foreign('course_id')->references('course_id')->on('courses')->onDelete('cascade');
             $table->integer('operator_id')->unsigned();

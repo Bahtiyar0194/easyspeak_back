@@ -17,6 +17,7 @@ class CreateTaskOptionsTable extends Migration
             $table->increments('task_option_id');
             $table->integer('task_id')->unsigned();
             $table->foreign('task_id')->references('task_id')->on('tasks')->onDelete('cascade');
+            $table->boolean('show_task_title_translate')->default(true);
             $table->boolean('show_audio_button')->default(false)->nullable();
             $table->boolean('play_audio_at_the_begin')->default(false)->nullable();
             $table->boolean('play_audio_with_the_correct_answer')->default(false)->nullable();
@@ -29,6 +30,7 @@ class CreateTaskOptionsTable extends Migration
             $table->integer('impression_limit')->nullable();
             $table->integer('seconds_per_word')->nullable();
             $table->integer('seconds_per_sentence')->nullable();
+            $table->integer('seconds_per_section')->nullable();
             $table->boolean('in_the_main_lang')->nullable();
             $table->string('find_word_option')->nullable();
             $table->integer('options_num')->nullable();
@@ -38,6 +40,7 @@ class CreateTaskOptionsTable extends Migration
             $table->boolean('match_by_drag_and_drop')->nullable();
             $table->integer('max_attempts')->default(0);
             $table->string('show_materials_option')->nullable();
+            $table->string('sentence_material_type_slug')->nullable();
             $table->timestamps();
         });
     }

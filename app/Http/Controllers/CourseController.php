@@ -177,10 +177,6 @@ class CourseController extends Controller
         ->orderBy('section_id', 'asc')
         ->get();
 
-        if (count($sections) == 0) {
-            return response()->json(['error' => 'Sections not found'], 404);
-        }
-
         foreach ($sections as $s => $section) {
             $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
             ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
@@ -302,8 +298,13 @@ class CourseController extends Controller
         ->where('types_of_materials.show_status_id', '=', 1)
         ->where('types_of_materials_lang.lang_id', '=', $language->lang_id)
         ->distinct()
-        ->orderBy('types_of_materials.material_type_id', 'asc')
-        ->get();
+        ->orderBy('types_of_materials.material_type_id', 'asc');
+
+        if($request->material_type_category == 'file'){
+            $all_material_types->where('types_of_materials.material_type_category', '=', 'file');
+        }
+
+        $all_material_types = $all_material_types->get();
 
         return response()->json($all_material_types, 200);
     }

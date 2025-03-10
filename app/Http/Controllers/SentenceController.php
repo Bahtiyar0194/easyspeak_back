@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\UploadConfiguration;
 use App\Models\User;
 use App\Models\Course;
+use App\Models\MediaFile;
 
 use Illuminate\Http\Request;
 use Validator;
@@ -98,12 +99,13 @@ class SentenceController extends Controller
         ->leftJoin('users as operator', 'sentences.operator_id', '=', 'operator.user_id')
         ->leftJoin('types_of_status', 'sentences.status_type_id', '=', 'types_of_status.status_type_id')
         ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
+        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'sentences.sentence_id',
             'sentences.sentence',
-            // 'sentences.transcription',
-            // 'sentences.image_file',
-            'sentences.audio_file',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
             'sentences.created_at',
             'courses_lang.course_name',
             'operator.first_name as operator_first_name',
@@ -174,12 +176,13 @@ class SentenceController extends Controller
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
         ->leftJoin('types_of_status', 'sentences.status_type_id', '=', 'types_of_status.status_type_id')
         ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
+        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'sentences.sentence_id',
             'sentences.sentence',
-            // 'sentences.transcription',
-            // 'sentences.image_file',
-            'sentences.audio_file',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
             'sentences.created_at',
             'sentences.operator_id',
             'sentences.course_id',
@@ -214,52 +217,62 @@ class SentenceController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        // $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-        // ->first()->max_file_size_mb;
-    
-        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-        ->first()->max_file_size_mb;
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'sentence' => 'required|string|between:2,100|unique:sentences',
-            // 'transcription' => 'required|string|between:2,100',
             'sentence_kk' => 'required|string|between:2,100',
             'sentence_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
-            // 'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
-            'audio_file' => 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
-        ]);
+        ];
+
+        if($request['upload_new_sentence_audio_file'] == 'true'){
+                    
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first();
+            
+            $rules['new_sentence_audio_file'] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['new_sentence_audio_file_id'] = 'required|numeric';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
 
         $new_sentence = new Sentence();
         $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
         $new_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
-        // $image_file = $request->file('image_file');
-
-        // if($image_file){
-        //     $image_file_name = $image_file->hashName();
-        //     $resized_image = Image::make($image_file)->resize(500, null, function ($constraint) {
-        //         $constraint->aspectRatio();
-        //     })->stream('png', 80);
-        //     Storage::disk('local')->put('/public/'.$image_file_name, $resized_image);
-        //     $new_sentence->image_file = $image_file_name;
-        // }
 
         $audio_file = $request->file('audio_file');
 
-        if($audio_file){
-            $audio_file = $request->file('audio_file');
-            $audio_file_name = $audio_file->hashName();
-            $audio_file->storeAs('/public/', $audio_file_name);
-            $new_sentence->audio_file = $audio_file_name;
+        if($request['upload_new_sentence_audio_file'] == 'true'){
+    
+            $sentence_audio_file = $request->file('new_sentence_audio_file');
+
+            if($sentence_audio_file){
+                $file_name = $sentence_audio_file->hashName();
+
+                $sentence_audio_file->storeAs('/public/', $file_name);
+
+                $new_file = new MediaFile();
+                $new_file->file_name = $request['sentence'];
+                $new_file->target = $file_name;
+                $new_file->size = $sentence_audio_file->getSize() / 1048576;
+                $new_file->material_type_id = 2;
+                $new_file->save();
+
+                $new_sentence->audio_file_id = $new_file->file_id;
+            }
+        }
+        else{
+            $findFile = MediaFile::findOrFail($request['new_sentence_audio_file_id']);
+            $new_sentence->audio_file_id = $findFile->file_id;
         }
 
         $new_sentence->course_id = $request->course_id;
@@ -294,69 +307,61 @@ class SentenceController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        // $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-        // ->first()->max_file_size_mb;
-    
-        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-        ->first()->max_file_size_mb;
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'sentence' => 'required|string|between:2,100',
-            // 'transcription' => 'required|string|between:2,100',
             'sentence_kk' => 'required|string|between:2,100',
             'sentence_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
-            // 'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp|max_mb:'.$image_max_file_size,
-            'audio_file' => 'required_if:current_sentence_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
-        ]);
+        ];
+
+        if($request['upload_edit_sentence_audio_file'] == 'true'){
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first();
+            
+            $rules['edit_sentence_audio_file'] = 'file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['edit_sentence_audio_file_id'] = 'numeric';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+
         $edit_sentence = Sentence::find($request->sentence_id);
 
         if(isset($edit_sentence)){
             $edit_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
-            // $edit_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
-            // $image_file = $request->file('image_file');
-
-            // if($image_file){
-            //     if(isset($edit_sentence->image_file)){
-            //         $path = storage_path('/app/public/'.$edit_sentence->image_file);
-            //         File::delete($path);
-            //     }
-
-            //     $image_file_name = $image_file->hashName();
-            //     $resized_image = Image::make($image_file)->resize(500, null, function ($constraint) {
-            //         $constraint->aspectRatio();
-            //     })->stream('png', 80);
-            //     Storage::disk('local')->put('/public/'.$image_file_name, $resized_image);
-            //     $edit_sentence->image_file = $image_file_name;
-            // }
-            // else{
-            //     if(isset($edit_sentence->image_file) && $request->current_sentence_image == 'false'){
-            //         $path = storage_path('/app/public/'.$edit_sentence->image_file);
-            //         File::delete($path);
-            //         $edit_sentence->image_file = null;
-            //     }
-            // }
+            if($request['upload_edit_sentence_audio_file'] == 'true'){
+        
+                $sentence_audio_file = $request->file('edit_sentence_audio_file');
     
-            $audio_file = $request->file('audio_file');
-
-            if($audio_file){
-                if(isset($edit_sentence->audio_file)){
-                    $path = storage_path('/app/public/'.$edit_sentence->audio_file);
-                    File::delete($path);
+                if($sentence_audio_file){
+                    $file_name = $sentence_audio_file->hashName();
+    
+                    $sentence_audio_file->storeAs('/public/', $file_name);
+    
+                    $new_file = new MediaFile();
+                    $new_file->file_name = $request['sentence'];
+                    $new_file->target = $file_name;
+                    $new_file->size = $sentence_audio_file->getSize() / 1048576;
+                    $new_file->material_type_id = 2;
+                    $new_file->save();
+    
+                    $edit_sentence->audio_file_id = $new_file->file_id;
                 }
-
-                $audio_file_name = $audio_file->hashName();
-                $audio_file->storeAs('/public/', $audio_file_name);
-                $edit_sentence->audio_file = $audio_file_name;
+            }
+            else{
+                if($request['edit_sentence_audio_file_id']){
+                    $findFile = MediaFile::findOrFail($request['edit_sentence_audio_file_id']);
+                    $edit_sentence->audio_file_id = $findFile->file_id;
+                }
             }
 
             $edit_sentence->course_id = $request->course_id;

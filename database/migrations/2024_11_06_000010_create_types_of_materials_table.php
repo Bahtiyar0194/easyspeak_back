@@ -18,7 +18,6 @@ class CreateTypesOfMaterialsTable extends Migration
             $table->string('material_type_slug');
             $table->string('material_type_category');
             $table->string('icon');
-            $table->string('component');
             $table->integer('show_status_id')->default(1)->unsigned();
             $table->foreign('show_status_id')->references('show_status_id')->on('show_status');
             $table->timestamps();

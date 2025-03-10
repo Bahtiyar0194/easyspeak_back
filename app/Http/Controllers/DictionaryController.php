@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\UploadConfiguration;
 use App\Models\User;
 use App\Models\Course;
+use App\Models\MediaFile;
 
 use Illuminate\Http\Request;
 use Validator;
@@ -98,12 +99,14 @@ class DictionaryController extends Controller
         ->leftJoin('users as operator', 'dictionary.operator_id', '=', 'operator.user_id')
         ->leftJoin('types_of_status', 'dictionary.status_type_id', '=', 'types_of_status.status_type_id')
         ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
+        ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'dictionary.word_id',
             'dictionary.word',
             'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
             'dictionary.created_at',
             'courses_lang.course_name',
             'operator.first_name as operator_first_name',
@@ -164,7 +167,7 @@ class DictionaryController extends Controller
         //
 
         if ($request->image_file) {
-            $words->whereNotNull('dictionary.image_file');
+            $words->whereNotNull('dictionary.image_file_id');
         }
 
         // Возвращаем пагинированный результат
@@ -180,12 +183,14 @@ class DictionaryController extends Controller
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
         ->leftJoin('types_of_status', 'dictionary.status_type_id', '=', 'types_of_status.status_type_id')
         ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
+        ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'dictionary.word_id',
             'dictionary.word',
             'dictionary.transcription',
-            'dictionary.image_file',
-            'dictionary.audio_file',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
             'dictionary.created_at',
             'dictionary.operator_id',
             'dictionary.course_id',
@@ -220,52 +225,101 @@ class DictionaryController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-        ->first()->max_file_size_mb;
-    
-        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-        ->first()->max_file_size_mb;
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'word' => 'required|string|between:2,100|unique:dictionary',
             'transcription' => 'required|string|between:2,100',
             'word_kk' => 'required|string|between:2,100',
             'word_ru' => 'required|string|between:2,100',
             'course_id' => 'required|numeric',
-            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size,
-            'audio_file' => 'required|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
-        ]);
+        ];
+
+        if($request['upload_new_word_image_file'] == 'true'){
+            
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 3)
+            ->first();
+            
+            $rules['new_word_image_file'] = 'file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['new_word_image_file_id'] = 'numeric';
+        }
+
+        if($request['upload_new_word_audio_file'] == 'true'){
+            
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first();
+            
+            $rules['new_word_audio_file'] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['new_word_audio_file_id'] = 'required|numeric';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
 
 
         $new_word = new Dictionary();
         $new_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
         $new_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
-        $image_file = $request->file('image_file');
+        if($request['upload_new_word_image_file'] == 'true'){
+    
+            $word_image_file = $request->file('new_word_image_file');
 
-        if($image_file){
-            $image_file_name = $image_file->hashName();
-            $resized_image = Image::make($image_file)->resize(500, null, function ($constraint) {
-                $constraint->aspectRatio();
-            })->stream('png', 80);
-            Storage::disk('local')->put('/public/'.$image_file_name, $resized_image);
-            $new_word->image_file = $image_file_name;
+            if($word_image_file){
+                $file_name = $word_image_file->hashName();
+
+                $resized_image = Image::make($word_image_file)->resize(500, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                })->stream('png', 80);
+                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+
+                $new_file = new MediaFile();
+                $new_file->file_name = $request['word'];
+                $new_file->target = $file_name;
+                $new_file->size = $word_image_file->getSize() / 1048576;
+                $new_file->material_type_id = 3;
+                $new_file->save();
+
+                $new_word->image_file_id = $new_file->file_id;
+            }
+        }
+        else{
+            if($request['new_word_image_file_id']){
+                $findFile = MediaFile::findOrFail($request['new_word_image_file_id']);
+                $new_word->image_file_id = $findFile->file_id;
+            }
         }
 
-        $audio_file = $request->file('audio_file');
+        if($request['upload_new_word_audio_file'] == 'true'){
+    
+            $word_audio_file = $request->file('new_word_audio_file');
 
-        if($audio_file){
-            $audio_file = $request->file('audio_file');
-            $audio_file_name = $audio_file->hashName();
-            $audio_file->storeAs('/public/', $audio_file_name);
-            $new_word->audio_file = $audio_file_name;
+            if($word_audio_file){
+                $file_name = $word_audio_file->hashName();
+
+                $word_audio_file->storeAs('/public/', $file_name);
+
+                $new_file = new MediaFile();
+                $new_file->file_name = $request['word'];
+                $new_file->target = $file_name;
+                $new_file->size = $word_audio_file->getSize() / 1048576;
+                $new_file->material_type_id = 2;
+                $new_file->save();
+
+                $new_word->audio_file_id = $new_file->file_id;
+            }
+        }
+        else{
+            $findFile = MediaFile::findOrFail($request['new_word_audio_file_id']);
+            $new_word->audio_file_id = $findFile->file_id;
         }
 
         $new_word->course_id = $request->course_id;
@@ -300,28 +354,43 @@ class DictionaryController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $image_max_file_size = UploadConfiguration::where('material_type_id', '=', 3)
-        ->first()->max_file_size_mb;
-    
-        $audio_max_file_size = UploadConfiguration::where('material_type_id', '=', 2)
-        ->first()->max_file_size_mb;
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'word' => 'required|string|between:2,100',
             'transcription' => 'required|string|between:2,100',
             'word_kk' => 'required|string|between:2,100',
             'word_ru' => 'required|string|between:2,100',
-            'course_id' => 'required|numeric',
-            'image_file' => 'nullable|file|mimes:jpg,png,jpeg,gif,svg,webp,avif|max_mb:'.$image_max_file_size,
-            'audio_file' => 'required_if:current_word_audio,false|file|mimes:mp3,wav,ogg,aac,flac|max_mb:'.$audio_max_file_size
-        ]);
+            'course_id' => 'required|numeric'
+        ];
+
+        if($request['upload_edit_word_image_file'] == 'true'){
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 3)
+            ->first();
+            
+            $rules['edit_word_image_file'] = 'file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['edit_word_image_file_id'] = 'required|numeric';
+        }
+
+        if($request['upload_edit_word_audio_file'] == 'true'){
+            
+            $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
+            ->first();
+            
+            $rules['edit_word_audio_file'] = 'file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+        }
+        else{
+            $rules['edit_word_audio_file_id'] = 'numeric';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
 
         $edit_word = Dictionary::find($request->word_id);
 
@@ -329,40 +398,59 @@ class DictionaryController extends Controller
             $edit_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
             $edit_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
-            $image_file = $request->file('image_file');
-
-            if($image_file){
-                if(isset($edit_word->image_file)){
-                    $path = storage_path('/app/public/'.$edit_word->image_file);
-                    File::delete($path);
+            if($request['upload_edit_word_image_file'] == 'true'){
+    
+                $word_image_file = $request->file('edit_word_image_file');
+    
+                if($word_image_file){
+                    $file_name = $word_image_file->hashName();
+    
+                    $resized_image = Image::make($word_image_file)->resize(500, null, function ($constraint) {
+                        $constraint->aspectRatio();
+                    })->stream('png', 80);
+                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+    
+                    $new_file = new MediaFile();
+                    $new_file->file_name = $request['word'];
+                    $new_file->target = $file_name;
+                    $new_file->size = $word_image_file->getSize() / 1048576;
+                    $new_file->material_type_id = 3;
+                    $new_file->save();
+    
+                    $edit_word->image_file_id = $new_file->file_id;
                 }
-
-                $image_file_name = $image_file->hashName();
-                $resized_image = Image::make($image_file)->resize(500, null, function ($constraint) {
-                    $constraint->aspectRatio();
-                })->stream('png', 80);
-                Storage::disk('local')->put('/public/'.$image_file_name, $resized_image);
-                $edit_word->image_file = $image_file_name;
             }
             else{
-                if(isset($edit_word->image_file) && $request->current_word_image == 'false'){
-                    $path = storage_path('/app/public/'.$edit_word->image_file);
-                    File::delete($path);
-                    $edit_word->image_file = null;
+                if($request['edit_word_image_file_id']){
+                    $findFile = MediaFile::findOrFail($request['edit_word_image_file_id']);
+                    $edit_word->image_file_id = $findFile->file_id;
                 }
             }
     
-            $audio_file = $request->file('audio_file');
-
-            if($audio_file){
-                if(isset($edit_word->audio_file)){
-                    $path = storage_path('/app/public/'.$edit_word->audio_file);
-                    File::delete($path);
+            if($request['upload_edit_word_audio_file'] == 'true'){
+        
+                $word_audio_file = $request->file('edit_word_audio_file');
+    
+                if($word_audio_file){
+                    $file_name = $word_audio_file->hashName();
+    
+                    $word_audio_file->storeAs('/public/', $file_name);
+    
+                    $new_file = new MediaFile();
+                    $new_file->file_name = $request['word'];
+                    $new_file->target = $file_name;
+                    $new_file->size = $word_audio_file->getSize() / 1048576;
+                    $new_file->material_type_id = 2;
+                    $new_file->save();
+    
+                    $edit_word->audio_file_id = $new_file->file_id;
                 }
-
-                $audio_file_name = $audio_file->hashName();
-                $audio_file->storeAs('/public/', $audio_file_name);
-                $edit_word->audio_file = $audio_file_name;
+            }
+            else{
+                if($request['edit_word_audio_file_id']){
+                    $findFile = MediaFile::findOrFail($request['edit_word_audio_file_id']);
+                    $edit_word->audio_file_id = $findFile->file_id;
+                }
             }
 
             $edit_word->course_id = $request->course_id;
@@ -371,7 +459,6 @@ class DictionaryController extends Controller
 
             DictionaryTranslate::where('word_id', $edit_word->word_id)
             ->delete();
-
 
             $new_word_translate = new DictionaryTranslate();
             $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_kk));

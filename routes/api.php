@@ -169,6 +169,7 @@ Route::group([
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
             Route::post('/get', [TaskController::class, 'get_tasks']);
             Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
+            Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
 
             Route::post('/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
             Route::get('/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
@@ -196,6 +197,12 @@ Route::group([
 
             Route::post('/true_or_false/{lesson_id}', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
             Route::get('/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
+
+            Route::post('/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles');
+            Route::get('/match_sentences_with_materials/{task_id}', [TaskController::class, 'get_match_sentences_with_materials_task']);
+
+            Route::post('/match_words_with_same_sounds/{lesson_id}', [TaskController::class, 'create_match_words_with_same_sounds_task'])->middleware('check_roles');
+            Route::get('/match_words_with_same_sounds/{task_id}', [TaskController::class, 'get_match_words_with_same_sounds_task']);
 
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
