@@ -201,6 +201,7 @@ class AuthController extends Controller
                 'types_of_user_roles.role_type_slug',
                 'types_of_user_roles_lang.user_role_type_name'
             )
+            ->orderBy('users_roles.role_type_id', 'asc')
             ->get();
 
         foreach ($roles as $role) {
