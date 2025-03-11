@@ -27,12 +27,15 @@ class TaskService
         // Проверяем, существует ли тип задания
         $task_type = TaskType::findOrFail($task_type_id);
 
+        $tasks_count = Task::where("lesson_id", $request->lesson_id)->count();
+
         $new_task = new Task();
         $new_task->task_slug = $request->task_slug;
         $new_task->task_example = $request->task_example ? $request->task_example : null;
         $new_task->task_type_id = $task_type_id;
         $new_task->lesson_id = $request->lesson_id;
         $new_task->operator_id = auth()->user()->user_id;
+        $new_task->sort_num = $tasks_count + 1;
         $new_task->save();
 
         $new_task_lang = new TaskLang();
