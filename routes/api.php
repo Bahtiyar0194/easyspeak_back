@@ -204,6 +204,9 @@ Route::group([
             Route::post('/match_words_with_same_sounds/{lesson_id}', [TaskController::class, 'create_match_words_with_same_sounds_task'])->middleware('check_roles');
             Route::get('/match_words_with_same_sounds/{task_id}', [TaskController::class, 'get_match_words_with_same_sounds_task']);
 
+            Route::post('/find_the_stressed_syllable/{lesson_id}', [TaskController::class, 'create_find_the_stressed_syllable_task'])->middleware('check_roles');
+            Route::get('/find_the_stressed_syllable/{task_id}', [TaskController::class, 'get_find_the_stressed_syllable_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');

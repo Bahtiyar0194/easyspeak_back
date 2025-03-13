@@ -12,6 +12,7 @@ use App\Models\TaskSentence;
 use App\Models\MissingWord;
 use App\Models\WordSection;
 use App\Models\WordSectionItem;
+use App\Models\WordSyllable;
 use App\Models\Language;
 
 use App\Models\Course;
@@ -2100,6 +2101,182 @@ class TaskController extends Controller
 
         $task->options = $task_options;
         $task->word_sections = $word_sections;
+        $task->materials = $task_materials;
+
+        return response()->json($task, 200);
+    }
+
+    public function create_find_the_stressed_syllable_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:1',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    if(!isset($word->wordSyllables) || count($word->wordSyllables) < 2){
+                        return response()->json(['syllables_failed' => [trans('auth.divide_each_word_into_syllables')]], 422);
+                    }
+                }
+
+                foreach ($words as $word) {
+                    $stress_found = false;
+
+                    foreach ($word->wordSyllables as $syllable) {
+                        if(isset($syllable->target) && $syllable->target == 'true'){
+                            $stress_found = true;
+                        }
+                    }
+
+                    if($stress_found === false){
+                        return response()->json(['syllables_failed' => [trans('auth.specify_one_of_the_syllables_as_the_stress_in_each_word')]], 422);
+                    }
+                }
+                
+                return response()->json([
+                    'step' => 2
+                ], 200);
+            }
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'impression_limit' => 'required|min:1',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 12);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $new_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+
+                    foreach ($word->wordSyllables as $syllable) {
+                        $new_word_syllable = new WordSyllable();
+                        $new_word_syllable->task_word_id = $new_task_word->task_word_id;
+                        $new_word_syllable->syllable = $syllable->syllable;
+                        $new_word_syllable->target = (isset($syllable->target) && $syllable->target == 'true') ? true : false;
+                        $new_word_syllable->save();
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_find_the_stressed_syllable_task(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
+        }
+
+        $task_words = $this->taskService->getTaskWords($find_task->task_id, $language, $task_options);
+
+        foreach ($task_words as $word) {
+            $word_syllables = WordSyllable::where('task_word_id', '=', $word->task_word_id)
+            ->select(
+                'word_syllables.word_syllable_id',
+                'word_syllables.syllable',
+                'word_syllables.target'
+            )
+            ->orderBy('word_syllables.word_syllable_id', 'asc')
+            ->get();
+
+            $word->syllables = $word_syllables;
+        }
+
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+        
+        $task = new \stdClass();
+
+        $task->options = $task_options;
+        $task->words = $task_words;
         $task->materials = $task_materials;
 
         return response()->json($task, 200);

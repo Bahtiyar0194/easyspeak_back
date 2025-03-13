@@ -187,7 +187,7 @@ class TaskService
     }
 
     //Добавить материалы к заданию
-    public function addMaterialsToTask($task_sentence_id, $request)
+    public function addMaterialsToTask($task_id, $request)
     {
         if(isset($request->task_materials)){
             $task_materials = json_decode($request->task_materials);
