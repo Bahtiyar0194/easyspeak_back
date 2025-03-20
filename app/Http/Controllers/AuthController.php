@@ -13,16 +13,16 @@ use App\Models\UserRole;
 use App\Models\Language;
 use App\Models\School;
 
-use App\Services\TwilioService;
+use App\Services\TwilioWhatsAppService;
 
 class AuthController extends Controller
 {
-    protected $twilioService;
+    protected $twilioWhatsAppService;
 
-    public function __construct(Request $request, TwilioService $twilioService)
+    public function __construct(Request $request, TwilioWhatsAppService $twilioWhatsAppService)
     {
         app()->setLocale($request->header('Accept-Language'));
-        $this->twilioService = $twilioService;
+        $this->twilioWhatsAppService = $twilioWhatsAppService;
     }
 
     public function register(Request $request)
@@ -73,7 +73,7 @@ class AuthController extends Controller
             return response()->json(['registration_failed' => 'First registration: true or false'], 422);
         }
 
-        //$this->twilioService->sendWhatsAppMessage('+77472460622', 'Congratulations '.$request->first_name.'! You have successfully registered');
+        $this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
 
         $new_user = new User();
         $new_user->first_name = $request->first_name;

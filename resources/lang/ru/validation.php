@@ -298,6 +298,7 @@ return [
         'lesson_name'           => 'Название урока',
         'lesson_description'    => 'Описание урока',
         'lesson_type_id'        => 'Тип урока',
+        'annotation'            => 'Аннотация',
 
         'file_name'             => 'Название файла',
         'video_name'            => 'Название видео',

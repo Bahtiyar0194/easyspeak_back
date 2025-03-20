@@ -7,6 +7,7 @@ use App\Models\TaskLang;
 use App\Models\TaskType;
 use App\Models\TaskWord;
 use App\Models\TaskSentence;
+use App\Models\TaskQuestion;
 use App\Models\TaskMaterial;
 use App\Models\TaskOption;
 use App\Models\TaskSentenceMaterial;
@@ -70,14 +71,16 @@ class TaskService
         $new_task_option->seconds_per_word = isset($request->seconds_per_word) ? $request->seconds_per_word : null;
         $new_task_option->seconds_per_sentence = isset($request->seconds_per_sentence) ? $request->seconds_per_sentence : null;
         $new_task_option->seconds_per_section = isset($request->seconds_per_section) ? $request->seconds_per_section : null;
+        $new_task_option->seconds_per_question = isset($request->seconds_per_question) ? $request->seconds_per_question : null;
         $new_task_option->in_the_main_lang = isset($request->in_the_main_lang) ? $request->in_the_main_lang : null;
         $new_task_option->find_word_option = isset($request->find_word_option) ? $request->find_word_option : null;
+        $new_task_option->answer_the_questions_option = isset($request->answer_the_questions_option) ? $request->answer_the_questions_option : null;
         $new_task_option->options_num = isset($request->options_num) ? $request->options_num : null;
         $new_task_option->random_order = isset($request->random_order) ? true : false;
         $new_task_option->match_by_typing = isset($request->match_by_typing) ? 1 : 0;
         $new_task_option->match_by_clicking = isset($request->match_by_clicking) ? 1 : 0;
         $new_task_option->match_by_drag_and_drop = isset($request->match_by_drag_and_drop) ? 1 : 0;
-        $new_task_option->max_attempts = isset($request->max_attempts) ? $request->max_attempts : null;
+        $new_task_option->max_attempts = isset($request->max_attempts) ? $request->max_attempts : 0;
         $new_task_option->show_materials_option = isset($request->show_materials_option) ? $request->show_materials_option : null;
         $new_task_option->sentence_material_type_slug = isset($request->sentence_material_type_slug) ? $request->sentence_material_type_slug : null;
         $new_task_option->save();
@@ -137,6 +140,33 @@ class TaskService
         $task_sentences = $task_sentences->get();
 
         return $task_sentences;
+    }
+
+    // Получить вопросы для задания
+    public function getTaskQuestions($task_id, $language, $task_options){
+        $task_questions = TaskQuestion::leftJoin('sentences', 'task_questions.question_id', '=', 'sentences.sentence_id')
+        ->leftJoin('sentences_translate', 'sentences.sentence_id', '=', 'sentences_translate.sentence_id')
+        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+        ->select(
+            'task_questions.task_question_id',
+            'task_questions.predefined_answer',
+            'sentences.sentence as question',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
+            'sentences_translate.sentence_translate as question_translate'
+        )
+        ->where('task_questions.task_id', '=', $task_id)
+        ->where('sentences_translate.lang_id', '=', $language->lang_id)  
+        ->distinct();
+
+        if($task_options->random_order == 1){
+            $task_questions->inRandomOrder();
+        }
+
+        $task_questions = $task_questions->get();
+
+        return $task_questions;
     }
 
 

@@ -285,6 +285,7 @@ return [
         'lesson_name'           => 'Сабақтың атауы',
         'lesson_description'    => 'Сабақтың қысқаша сипаттамасы',
         'lesson_type_id'        => 'Сабақтың түрі',
+        'annotation'            => 'Аннотация',
 
         'file_name'             => 'Файлдың аты',
         'video_name'            => 'Бейнежазбаның аты',

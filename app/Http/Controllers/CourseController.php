@@ -265,16 +265,44 @@ class CourseController extends Controller
 
         $lesson_materials = LessonMaterial::leftJoin('files', 'lesson_materials.file_id', '=', 'files.file_id')
         ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
+        ->leftJoin('types_of_materials_lang as file_types_lang', function ($join) use ($language) {
+            $join->on('file_types.material_type_id', '=', 'file_types_lang.material_type_id')
+                 ->where('file_types_lang.lang_id', '=', $language->lang_id);
+        })
         ->leftJoin('blocks', 'lesson_materials.block_id', '=', 'blocks.block_id')
         ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
+        ->leftJoin('types_of_materials_lang as block_types_lang', function ($join) use ($language) {
+            $join->on('block_types.material_type_id', '=', 'block_types_lang.material_type_id')
+                 ->where('block_types_lang.lang_id', '=', $language->lang_id);
+        })
         ->select(
             'lesson_materials.lesson_material_id',
+            'lesson_materials.annotation',
             'files.target',
             'blocks.content',
             'file_types.material_type_slug as file_material_type_slug',
-            'block_types.material_type_slug as block_material_type_slug'
+            'file_types_lang.material_type_name as file_material_type_name',
+            'file_types.icon as file_icon',
+            'block_types.material_type_slug as block_material_type_slug',
+            'block_types_lang.material_type_name as block_material_type_name',
+            'block_types.icon as block_icon',
+            'lesson_materials.sort_num'
         )
         ->where('lesson_materials.lesson_id', '=', $lesson->lesson_id)
+        ->orderBy('lesson_materials.sort_num', 'asc')
+        ->groupBy(
+            'lesson_materials.lesson_material_id', 
+            'lesson_materials.annotation',
+            'files.target',
+            'blocks.content',
+            'file_material_type_slug',
+            'file_material_type_name',
+            'file_icon',
+            'block_material_type_slug',
+            'block_material_type_name',
+            'block_icon',
+            'lesson_materials.sort_num'
+        ) // Группировка по ID материала
         ->get();
 
         $lesson->materials = $lesson_materials;
@@ -435,7 +463,9 @@ class CourseController extends Controller
         }
 
         // Инициализируем массив правил
-        $rules = [];
+        $rules = [
+            'annotation' => 'required|string|between:2,100',
+        ];
 
         if($material_type->material_type_category == 'file'){
             if($request['upload_lesson_file'] == 'true'){
@@ -470,8 +500,12 @@ class CourseController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
+        $materials_count = LessonMaterial::where("lesson_id", $request->lesson_id)->count();
+
         $new_lesson_material = new LessonMaterial();
         $new_lesson_material->lesson_id = $request->lesson_id;
+        $new_lesson_material->annotation = $request->annotation;
+        $new_lesson_material->sort_num = $materials_count + 1;
 
         if($material_type->material_type_category == 'file'){
             if($request['upload_lesson_file'] == 'true'){
@@ -524,6 +558,32 @@ class CourseController extends Controller
         $new_lesson_material->save();
 
         return response()->json($new_lesson_material, 200);
+    }
+
+    public function order_materials(Request $request){
+        $lesson_materials = json_decode($request->lesson_materials);
+
+        foreach ($lesson_materials as $key => $lesson_material_item) {
+            $lesson_material = LessonMaterial::where('lesson_material_id', $lesson_material_item->lesson_material_id)
+            ->where('lesson_id', $request->lesson_id)
+            ->first();
+
+            $lesson_material->sort_num = $key + 1;
+            $lesson_material->save();
+        }
+
+        return response()->json('order materials is success', 200);
+    }
+
+    public function delete_material(Request $request){
+        $lesson_material = LessonMaterial::where('lesson_material_id', $request->lesson_material_id)
+        ->where('lesson_id', $request->lesson_id)
+        ->first();
+
+        if(isset($lesson_material)){
+            $lesson_material->delete();
+            return response()->json('delete material is success', 200);
+        }
     }
 
     public function get_courses_structure(Request $request)

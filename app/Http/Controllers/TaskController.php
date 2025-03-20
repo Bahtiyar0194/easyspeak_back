@@ -9,6 +9,7 @@ use App\Models\TaskType;
 use App\Models\TaskWord;
 use App\Models\MissingLetter;
 use App\Models\TaskSentence;
+use App\Models\TaskQuestion;
 use App\Models\MissingWord;
 use App\Models\WordSection;
 use App\Models\WordSectionItem;
@@ -2277,6 +2278,137 @@ class TaskController extends Controller
 
         $task->options = $task_options;
         $task->words = $task_words;
+        $task->materials = $task_materials;
+
+        return response()->json($task, 200);
+    }
+
+    public function create_answer_the_questions_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_question' => 'required|numeric|min:10',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:1',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'sentences' => 'required',
+                'answer_the_questions_option' => 'required|string',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 13);
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $key => $sentence) {
+                    $new_task_question = new TaskQuestion();
+                    $new_task_question->task_id = $new_task->task_id;
+                    $new_task_question->question_id = $sentence->sentence_id;
+                    if($request['question_predefined_answer_'.$key] != ''){
+                        $new_task_question->predefined_answer = e($request['question_predefined_answer_'.$key]);
+                    }
+                    $new_task_question->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+            
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_answer_the_questions_task(Request $request){
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $find_task = Task::findOrFail($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
+        }
+
+        $task_questions = $this->taskService->getTaskQuestions($find_task->task_id, $language, $task_options);
+
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+    
+        $task = new \stdClass();
+
+        $task->options = $task_options;
+        $task->questions = $task_questions;
         $task->materials = $task_materials;
 
         return response()->json($task, 200);
