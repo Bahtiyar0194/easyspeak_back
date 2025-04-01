@@ -54,6 +54,44 @@ class TaskService
         return $new_task;
     }
 
+    //Редактировать задание
+    public function editTask($request){
+        $edit_task = Task::findOrFail($request->task_id);
+    
+        $edit_task->task_slug = $request->task_slug;
+        $edit_task->task_example = $request->task_example ? $request->task_example : null;
+        $edit_task->operator_id = auth()->user()->user_id;
+        $edit_task->save();
+
+        TaskLang::where('task_id', $edit_task->task_id)
+        ->delete();
+
+        $new_task_lang = new TaskLang();
+        $new_task_lang->task_name = $request->task_name_kk;
+        $new_task_lang->task_id = $edit_task->task_id;
+        $new_task_lang->lang_id = 1;
+        $new_task_lang->save();
+
+        $new_task_lang = new TaskLang();
+        $new_task_lang->task_name = $request->task_name_ru;
+        $new_task_lang->task_id = $edit_task->task_id;
+        $new_task_lang->lang_id = 2;
+        $new_task_lang->save();
+
+        return $edit_task;
+    }
+
+    public function findTask($task_id){
+        $find_task = Task::findOrFail($task_id);
+
+        $task_langs = TaskLang::where('task_id', '=', $find_task->task_id)
+        ->get();
+
+        $find_task->langs = $task_langs;
+
+        return $find_task;
+    }
+
     //Добавить опции для задания
     public function addTaskOptions($task_id, $request){
         $new_task_option = new TaskOption();
@@ -96,6 +134,7 @@ class TaskService
         ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'task_words.task_word_id',
+            'task_words.word_id',
             'dictionary.word',
             'dictionary.transcription',
             'image_file.target as image_file',
@@ -123,6 +162,7 @@ class TaskService
         ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
         ->select(
             'task_sentences.task_sentence_id',
+            'task_sentences.sentence_id',
             'task_sentences.answer',
             'sentences.sentence',
             'image_file.target as image_file',

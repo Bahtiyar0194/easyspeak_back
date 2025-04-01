@@ -329,6 +329,17 @@ class TaskController extends Controller
         return response()->json('success', 200);
     }
 
+    public function delete_task(Request $request){
+        $task = Task::where('lesson_id', $request->lesson_id)
+        ->where('task_id', $request->task_id)
+        ->first();
+
+        if(isset($task)){
+            $task->delete();
+            return response()->json('delete task is success', 200);
+        }
+    }
+
     public function create_missing_letters_task(Request $request)
     {
         $rules = [];
@@ -457,7 +468,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -486,6 +497,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->words = $task_words;
         $task->materials = $task_materials;
@@ -587,7 +599,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -602,6 +614,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->words = $task_words;
         $task->materials = $task_materials;
@@ -701,7 +714,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -716,6 +729,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->sentences = $task_sentences;
         $task->materials = $task_materials;
@@ -821,7 +835,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -877,6 +891,7 @@ class TaskController extends Controller
     
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->words = $task_words;
         $task->materials = $task_materials;
@@ -1017,7 +1032,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1043,6 +1058,7 @@ class TaskController extends Controller
         
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->words = $task_words;
         $task->materials = $task_materials;
@@ -1206,11 +1222,174 @@ class TaskController extends Controller
         }
     }
 
+    public function edit_fill_in_the_blanks_in_the_sentence_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:2',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'sentences' => 'required',
+                'find_word_option' => 'required|string',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentence) {
+                    if($request->find_word_option == 'with_options'){
+                        if(!isset($sentence->removedWordIndex)){
+                            return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
+                        }
+
+                        if(!isset($sentence->removedWordOptions) || count($sentence->removedWordOptions) < 2){
+                            return response()->json(['words_failed' => [trans('auth.you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence')]], 422);
+                        }
+                    }
+                    else{
+                        if(!isset($sentence->removedWordsIndex) || count($sentence->removedWordsIndex) == 0){
+                            return response()->json(['words_failed' => [trans('auth.remove_one_word_in_each_sentence')]], 422);
+                        }
+
+                        if($request->find_word_option == 'with_first_letter'){
+                            foreach ($sentence->removedWordsIndex as $wordIndex) {
+                                if(strlen(explode(" ", $sentence->sentence)[$wordIndex]) <= 1){
+                                    return response()->json(['words_failed' => [trans('auth.you_cannot_remove_a_word_with_one_letter')]], 422);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+
+                TaskSentence::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($sentences as $sentence) {
+                    $new_task_sentence = new TaskSentence();
+                    $new_task_sentence->task_id = $edit_task->task_id;
+                    $new_task_sentence->sentence_id = $sentence->sentence_id;
+                    $new_task_sentence->save();
+
+                    if($request->find_word_option == 'with_options'){
+                        if(count($sentence->removedWordOptions) > 0){
+                            foreach ($sentence->removedWordOptions as $key => $option) {
+                                $new_missing_word = new MissingWord();
+                                if($key === 0 && isset($sentence->removedWordIndex)){
+                                    $new_missing_word->word_position = $sentence->removedWordIndex;
+                                }
+                                $new_missing_word->word_option = $option;
+                                $new_missing_word->task_sentence_id = $new_task_sentence->task_sentence_id;
+                                $new_missing_word->save();
+                            }
+                        }
+                    }
+                    else{
+                        if(count($sentence->removedWordsIndex) > 0){
+                            foreach ($sentence->removedWordsIndex as $key => $wordIndex) {
+                                $new_missing_word = new MissingWord();
+                                $new_missing_word->word_position = $wordIndex;
+                                $new_missing_word->task_sentence_id = $new_task_sentence->task_sentence_id;
+                                $new_missing_word->save();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            //$this->taskService->addMaterialsToTask($new_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
     public function get_fill_in_the_blanks_in_the_sentence_task(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1237,6 +1416,7 @@ class TaskController extends Controller
     
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->sentences = $task_sentences;
         $task->materials = $task_materials;
@@ -1355,7 +1535,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1406,6 +1586,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->word_sections = $word_sections;
         $task->materials = $task_materials;
@@ -1532,7 +1713,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1583,6 +1764,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->word_sections = $word_sections;
         $task->materials = $task_materials;
@@ -1705,7 +1887,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1720,6 +1902,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->sentences = $task_sentences;
         $task->materials = $task_materials;
@@ -1846,7 +2029,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -1865,6 +2048,7 @@ class TaskController extends Controller
     
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->sentences = $task_sentences;
         $task->materials = $task_materials;
@@ -2032,7 +2216,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -2100,6 +2284,7 @@ class TaskController extends Controller
 
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->word_sections = $word_sections;
         $task->materials = $task_materials;
@@ -2248,7 +2433,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -2276,6 +2461,7 @@ class TaskController extends Controller
         
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->words = $task_words;
         $task->materials = $task_materials;
@@ -2392,7 +2578,7 @@ class TaskController extends Controller
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $find_task = Task::findOrFail($request->task_id);
+        $find_task = $this->taskService->findTask($request->task_id);
 
         $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
         ->first();
@@ -2407,6 +2593,7 @@ class TaskController extends Controller
     
         $task = new \stdClass();
 
+        $task->task = $find_task;
         $task->options = $task_options;
         $task->questions = $task_questions;
         $task->materials = $task_materials;

@@ -226,10 +226,10 @@ class DictionaryController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
-            'word' => 'required|string|between:2,100|unique:dictionary',
+            'word' => 'required|string|between:1,100|unique:dictionary',
             'transcription' => 'required|string|between:2,100',
-            'word_kk' => 'required|string|between:2,100',
-            'word_ru' => 'required|string|between:2,100',
+            'word_kk' => 'required|string|between:1,100',
+            'word_ru' => 'required|string|between:1,100',
             'course_id' => 'required|numeric',
         ];
 
@@ -355,10 +355,10 @@ class DictionaryController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
-            'word' => 'required|string|between:2,100',
+            'word' => 'required|string|between:1,100',
             'transcription' => 'required|string|between:2,100',
-            'word_kk' => 'required|string|between:2,100',
-            'word_ru' => 'required|string|between:2,100',
+            'word_kk' => 'required|string|between:1,100',
+            'word_ru' => 'required|string|between:1,100',
             'course_id' => 'required|numeric'
         ];
 

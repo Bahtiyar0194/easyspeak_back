@@ -44,7 +44,7 @@ class CheckRoles{
             return $next($request);
         }
         else{
-            return response()->json('Operation type id required', 403);
+            return response()->json('Operation type id is required', 403);
         }
     }
 }
