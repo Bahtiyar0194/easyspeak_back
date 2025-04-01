@@ -218,9 +218,9 @@ class SentenceController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
-            'sentence' => 'required|string|between:2,100|unique:sentences',
-            'sentence_kk' => 'required|string|between:2,100',
-            'sentence_ru' => 'required|string|between:2,100',
+            'sentence' => 'required|string|between:1,100|unique:sentences',
+            'sentence_kk' => 'required|string|between:1,100',
+            'sentence_ru' => 'required|string|between:1,100',
             'course_id' => 'required|numeric',
         ];
 
@@ -308,9 +308,9 @@ class SentenceController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
-            'sentence' => 'required|string|between:2,100',
-            'sentence_kk' => 'required|string|between:2,100',
-            'sentence_ru' => 'required|string|between:2,100',
+            'sentence' => 'required|string|between:1,100',
+            'sentence_kk' => 'required|string|between:1,100',
+            'sentence_ru' => 'required|string|between:1,100',
             'course_id' => 'required|numeric',
         ];
 
