@@ -219,8 +219,9 @@ Route::group([
             Route::post('/edit/find_the_stressed_syllable/{task_id}', [TaskController::class, 'edit_find_the_stressed_syllable_task'])->middleware('check_roles');
             Route::get('/get/find_the_stressed_syllable/{task_id}', [TaskController::class, 'get_find_the_stressed_syllable_task']);
 
-            Route::post('/answer_the_questions/{lesson_id}', [TaskController::class, 'create_answer_the_questions_task'])->middleware('check_roles');
-            Route::get('/answer_the_questions/{task_id}', [TaskController::class, 'get_answer_the_questions_task']);
+            Route::post('/create/answer_the_questions/{lesson_id}', [TaskController::class, 'create_answer_the_questions_task'])->middleware('check_roles');
+            Route::post('/edit/answer_the_questions/{task_id}', [TaskController::class, 'edit_answer_the_questions_task'])->middleware('check_roles');
+            Route::get('/get/answer_the_questions/{task_id}', [TaskController::class, 'get_answer_the_questions_task']);
 
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
