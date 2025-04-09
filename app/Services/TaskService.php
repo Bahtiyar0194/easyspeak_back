@@ -14,6 +14,7 @@ use App\Models\TaskSentenceMaterial;
 use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
+use App\Models\MaterialType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManagerStatic as Image;
@@ -112,6 +113,7 @@ class TaskService
         $new_task_option->seconds_per_question = isset($request->seconds_per_question) ? $request->seconds_per_question : null;
         $new_task_option->in_the_main_lang = isset($request->in_the_main_lang) ? $request->in_the_main_lang : null;
         $new_task_option->find_word_option = isset($request->find_word_option) ? $request->find_word_option : null;
+        $new_task_option->match_words_by_pictures_option = isset($request->match_words_by_pictures_option) ? $request->match_words_by_pictures_option : null;
         $new_task_option->answer_the_questions_option = isset($request->answer_the_questions_option) ? $request->answer_the_questions_option : null;
         $new_task_option->options_num = isset($request->options_num) ? $request->options_num : null;
         $new_task_option->random_order = isset($request->random_order) ? true : false;
@@ -219,30 +221,33 @@ class TaskService
 
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-                            $rules['file_name_'.$key] = 'required';
-                            
-                            $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
-                            ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
-                            ->select(
-                                'upload_configuration.max_file_size_mb',
-                                'upload_configuration.mimes'
-                            )
-                            ->first();
-                            
-                            $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+                    if(!isset($material->task_material_id)){
+                        if($material->material_type_category == 'file'){
+                            if($request['upload_task_file_'.$key] == 'true'){
+                                $rules['file_name_'.$key] = 'required';
+                                
+                                $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+                                ->where('types_of_materials.material_type_slug', '=', $material->material_type_slug)
+                                ->select(
+                                    'upload_configuration.max_file_size_mb',
+                                    'upload_configuration.mimes'
+                                )
+                                ->first();
+                                
+                                $rules['file_'.$key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+                            }
+                            else{
+                                $rules['file_from_library_'.$key] = 'required|numeric';
+                            }
                         }
-                        else{
-                            $rules['file_from_library_'.$key] = 'required|numeric';
-                        }
-                    }
-                    elseif($material->material_type_category == 'block'){
-                        if($material->material_type_slug == 'text'){
-                            $rules['text_'.$key] = 'required|string|min:8';
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $rules['table_'.$key] = 'required|string|min:3';
+                        elseif($material->material_type_category == 'block'){
+                            if($material->material_type_slug == 'text'){
+                                $rules['text_'.$key] = 'required|string|min:8';
+                            }
+                            elseif($material->material_type_slug == 'table'){
+                                $rules['table_'.$key] = 'required|string|min:3';
+                                $rules['table_'.$key.'_options'] = 'required';
+                            }
                         }
                     }
                 }
@@ -261,63 +266,89 @@ class TaskService
     {
         if(isset($request->task_materials)){
             $task_materials = json_decode($request->task_materials);
+            $leave_task_ids = [];
 
             if(count($task_materials) > 0){
                 foreach ($task_materials as $key => $material) {
-    
-                    $new_task_material = new TaskMaterial();
-                    $new_task_material->task_id = $task_id;
-    
-                    if($material->material_type_category == 'file'){
-                        if($request['upload_task_file_'.$key] == 'true'){
-    
-                            $file = $request->file('file_'.$key);
-    
-                            if($file){
-                                $file_name = $file->hashName();
-    
-                                if($material->material_type_slug == 'image'){
-                                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                        $constraint->aspectRatio();
-                                    })->stream('png', 80);
-                                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                                }
-                                else{
-                                    $file->storeAs('/public/', $file_name);
-                                }
-    
-                                $new_file = new MediaFile();
-                                $new_file->file_name = $request['file_name_'.$key];
-                                $new_file->target = $file_name;
-                                $new_file->size = $file->getSize() / 1048576;
-                                $new_file->material_type_id = $material->material_type_id;
-                                $new_file->save();
+                    if(isset($material->task_material_id)){
+                        array_push($leave_task_ids, $material->task_material_id);
+                    }
+                }
 
-                                $new_task_material->file_id = $new_file->file_id;
+                if(count($leave_task_ids) > 0){
+                    TaskMaterial::where('task_id', $task_id)
+                    ->whereNotIn('task_material_id', $leave_task_ids)
+                    ->delete();
+                }
+                else{
+                    TaskMaterial::where('task_id', $task_id)
+                    ->delete();
+                }
+
+                foreach ($task_materials as $key => $material) {
+                    if(!isset($material->task_material_id)){
+                        $new_task_material = new TaskMaterial();
+                        $new_task_material->task_id = $task_id;
+        
+                        if($material->material_type_category == 'file'){
+                            if($request['upload_task_file_'.$key] == 'true'){
+        
+                                $file = $request->file('file_'.$key);
+        
+                                if($file){
+                                    $file_name = $file->hashName();
+        
+                                    if($material->material_type_slug == 'image'){
+                                        $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                                            $constraint->aspectRatio();
+                                        })->stream('png', 80);
+                                        Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+                                    }
+                                    else{
+                                        $file->storeAs('/public/', $file_name);
+                                    }
+        
+                                    $new_file = new MediaFile();
+                                    $new_file->file_name = $request['file_name_'.$key];
+                                    $new_file->target = $file_name;
+                                    $new_file->size = $file->getSize() / 1048576;
+                                    $new_file->material_type_id = $material->material_type_id;
+                                    $new_file->save();
+    
+                                    $new_task_material->file_id = $new_file->file_id;
+                                }
+                            }
+                            else{
+                                $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
+                                $new_task_material->file_id = $findFile->file_id;
                             }
                         }
-                        else{
-                            $findFile = MediaFile::findOrFail($request['file_from_library_'.$key]);
-                            $new_task_material->file_id = $findFile->file_id;
+                        elseif($material->material_type_category == 'block'){
+                            $new_block = new Block();
+        
+                            if($material->material_type_slug == 'text'){
+                                $new_block->content = $request['text_'.$key];
+                            }
+                            elseif($material->material_type_slug == 'table'){
+                                $new_block->content = $request['table_'.$key];
+                                $new_block->options = $request['table_'.$key.'_options'];
+                            }
+                
+                            $new_block->material_type_id = $material->material_type_id;
+                            $new_block->save();
+                
+                            $new_task_material->block_id = $new_block->block_id;
                         }
+
+                        $new_task_material->sort_num = $key + 1;
+        
+                        $new_task_material->save();
                     }
-                    elseif($material->material_type_category == 'block'){
-                        $new_block = new Block();
-    
-                        if($material->material_type_slug == 'text'){
-                            $new_block->content = $request['text_'.$key];
-                        }
-                        elseif($material->material_type_slug == 'table'){
-                            $new_block->content = $request['table_'.$key];
-                        }
-            
-                        $new_block->material_type_id = $material->material_type_id;
-                        $new_block->save();
-            
-                        $new_task_material->block_id = $new_block->block_id;
+                    else{
+                        $sort_task_material = TaskMaterial::findOrFail($material->task_material_id);
+                        $sort_task_material->sort_num = $key + 1;
+                        $sort_task_material->save();
                     }
-    
-                    $new_task_material->save();
                 }
             }
         }
@@ -331,12 +362,15 @@ class TaskService
         ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
         ->select(
             'task_materials.task_material_id',
+            'task_materials.sort_num',
             'files.target',
             'blocks.content',
+            'blocks.options',
             'file_types.material_type_slug as file_material_type_slug',
             'block_types.material_type_slug as block_material_type_slug'
         )
         ->where('task_materials.task_id', '=', $task_id)
+        ->orderBy('task_materials.sort_num', 'asc')
         ->get();
 
         return $task_materials;
@@ -349,21 +383,23 @@ class TaskService
 
         if (count($sentences) > 0) {
             foreach ($sentences as $sentence_key => $sentence) { 
-                if($request['upload_sentence_file_'.$sentence_key] == 'true'){
-                    $rules['file_name_'.$sentence_key] = 'required';
-                    
-                    $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
-                    ->where('types_of_materials.material_type_slug', '=', $request->sentence_material_type_slug)
-                    ->select(
-                        'upload_configuration.max_file_size_mb',
-                        'upload_configuration.mimes'
-                    )
-                    ->first();
-                    
-                    $rules['file_'.$sentence_key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
-                }
-                else{
-                    $rules['file_from_library_'.$sentence_key] = 'required|numeric';
+                if(!isset($sentence->material->task_sentence_material_id)){
+                    if($request['upload_sentence_file_'.$sentence_key] == 'true'){
+                        $rules['file_name_'.$sentence_key] = 'required';
+                        
+                        $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+                        ->where('types_of_materials.material_type_slug', '=', $request->sentence_material_type_slug)
+                        ->select(
+                            'upload_configuration.max_file_size_mb',
+                            'upload_configuration.mimes'
+                        )
+                        ->first();
+                        
+                        $rules['file_'.$sentence_key] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+                    }
+                    else{
+                        $rules['file_from_library_'.$sentence_key] = 'required|numeric';
+                    }
                 }
             }
 
@@ -433,6 +469,7 @@ class TaskService
             'task_sentence_materials.task_sentence_material_id',
             'files.target',
             'blocks.content',
+            'blocks.options',
             'file_types.material_type_slug as file_material_type_slug',
             'block_types.material_type_slug as block_material_type_slug'
         )

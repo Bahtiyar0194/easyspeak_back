@@ -463,6 +463,136 @@ class TaskController extends Controller
         }
     }
 
+    public function edit_missing_letters_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:1',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        } elseif ($request->step == 2) {
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    if(!isset($word->removedLetters) || count($word->removedLetters) == 0){
+                        return response()->json(['letters_failed' => [trans('auth.remove_at_least_one_letter_in_each_word')]], 422);
+                    }
+
+                    if(strlen($word->word) <= count($word->removedLetters)){
+                        return response()->json(['letters_failed' => [trans('auth.you_cannot_delete_all_the_letters_in_a_word')]], 422);
+                    }
+                }
+
+                return response()->json([
+                    'step' => 2
+                ], 200);
+            }
+        } elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_image' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+                
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $edit_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+
+                    foreach ($word->removedLetters as $letter) {
+                        $new_missing_letter = new MissingLetter();
+                        $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                        $new_missing_letter->position = ($letter + 1);
+                        $new_missing_letter->save();
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
     public function get_missing_letters_task(Request $request)
     {
         // Получаем язык из заголовка
@@ -537,6 +667,7 @@ class TaskController extends Controller
                 'show_translate' => 'required|boolean',
                 'impression_limit' => 'required',
                 'seconds_per_word' => 'required|numeric|min:10',
+                'match_words_by_pictures_option' => 'required|string',
                 'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
             ];
@@ -578,6 +709,101 @@ class TaskController extends Controller
 
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_match_words_by_pictures_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:1',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'impression_limit' => 'required',
+                'seconds_per_word' => 'required|numeric|min:10',
+                'match_words_by_pictures_option' => 'required|string',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif($request->step == 3){
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $edit_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -709,6 +935,99 @@ class TaskController extends Controller
         }
     }
 
+    public function edit_form_a_sentence_out_of_the_words_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:1',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'in_the_main_lang' => 'required|boolean',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                TaskSentence::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($sentences as $sentence) {
+                    $new_task_sentence = new TaskSentence();
+                    $new_task_sentence->task_id = $edit_task->task_id;
+                    $new_task_sentence->sentence_id = $sentence->sentence_id;
+                    $new_task_sentence->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
     public function get_form_a_sentence_out_of_the_words_task(Request $request)
     {
         // Получаем язык из заголовка
@@ -814,6 +1133,106 @@ class TaskController extends Controller
             
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_learning_words_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:2',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+                'show_image' => 'required|boolean',
+                'show_word' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'options_num' => 'required|numeric',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'in_the_main_lang' => 'required|boolean',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $edit_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1011,6 +1430,140 @@ class TaskController extends Controller
 
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_form_a_word_out_of_the_letters_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:1',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    if(!isset($word->removedLetters) || count($word->removedLetters) == 0){
+                        return response()->json(['letters_failed' => [trans('auth.remove_at_least_one_letter_in_each_word')]], 422);
+                    }
+
+                    if(strlen($word->word) <= count($word->removedLetters)){
+                        return response()->json(['letters_failed' => [trans('auth.you_cannot_delete_all_the_letters_in_a_word')]], 422);
+                    }
+                }
+
+                return response()->json([
+                    'step' => 2
+                ], 200);
+            }
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+                'show_image' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $edit_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+
+                    foreach ($word->removedLetters as $letter) {
+                        $new_missing_letter = new MissingLetter();
+                        $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                        $new_missing_letter->position = ($letter + 1);
+                        $new_missing_letter->save();
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1361,7 +1914,7 @@ class TaskController extends Controller
             }
 
             // Добавляем материалы к заданию
-            //$this->taskService->addMaterialsToTask($new_task->task_id, $request);
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
             
             // Удаляем старые опции задания
             TaskOption::where('task_id', $edit_task->task_id)
@@ -1424,7 +1977,7 @@ class TaskController extends Controller
         return response()->json($task, 200);
     }
 
-    public function create_match_paired_words_task(Request $request)
+    public function create_match_same_words_task(Request $request)
     {
         $rules = [];
 
@@ -1441,15 +1994,51 @@ class TaskController extends Controller
                 return response()->json($validator->errors(), 422);
             }
 
+            
+            $sections = json_decode($request->sections);
+
+            if (count($sections) > 0) {
+                foreach ($sections as $section) {
+                    $target_found = false;
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            if(isset($word->target) && $word->target == 'true'){
+                                $target_found = true;
+                            }
+                        }
+
+                        if($target_found === false){
+                            return response()->json(['target_failed' => 'Target failed'], 422);
+                        }
+                    }
+                }
+            }
+
             return response()->json([
                 'step' => 1
             ], 200);
         }
-        elseif ($request->step == 2) {
+        elseif($request->step == 2){
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
             $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
@@ -1472,12 +2061,12 @@ class TaskController extends Controller
             if ($validator->fails()) {
                 return response()->json($validator->errors(), 422);
             }
-
+            
             return response()->json([
-                'step' => 2
+                'step' => 3
             ], 200);
         }
-        elseif ($request->step == 3) {
+        elseif ($request->step == 4) {
             // Проверяем материалы на задание
             $validate_errors = $this->taskService->validateTaskMaterials($request);
 
@@ -1486,7 +2075,7 @@ class TaskController extends Controller
             }
 
             // Добавляем задание
-            $new_task = $this->taskService->newTask($request, 7);
+            $new_task = $this->taskService->newTask($request, 11);
 
             $sections = json_decode($request->sections);
 
@@ -1496,13 +2085,27 @@ class TaskController extends Controller
                     $new_word_section->task_id = $new_task->task_id;
                     $new_word_section->save();
 
-                    if(count($section) > 0){
-                        foreach ($section as $section_item) {
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
                             $new_word_section_item = new WordSectionItem();
                             $new_word_section_item->word_section_id = $new_word_section->word_section_id;
-                            $new_word_section_item->word_id = $section_item->word_id;
-                            $new_word_section_item->target = (isset($section_item->target) && $section_item->target == 'true') ? true : false;
+                            $new_word_section_item->word_id = $word->word_id;
+                            $new_word_section_item->target = (isset($word->target) && $word->target == 'true') ? true : false;
                             $new_word_section_item->save();
+
+                            if(isset($word->removedLetters) && count($word->removedLetters) > 0){
+                                $new_task_word = new TaskWord();
+                                $new_task_word->task_id = $new_task->task_id;
+                                $new_task_word->word_id = $word->word_id;
+                                $new_task_word->save();
+            
+                                foreach ($word->removedLetters as $letter) {
+                                    $new_missing_letter = new MissingLetter();
+                                    $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                                    $new_missing_letter->position = ($letter + 1);
+                                    $new_missing_letter->save();
+                                }
+                            }
                         }
                     }
                 }
@@ -1527,10 +2130,174 @@ class TaskController extends Controller
 
             return response()->json('success', 200);
         }
-
     }
 
-    public function get_match_paired_words_task(Request $request)
+    public function edit_match_same_words_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'sections_count' => 'required|numeric|min:2',
+                'sections' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            
+            $sections = json_decode($request->sections);
+
+            if (count($sections) > 0) {
+                foreach ($sections as $section) {
+                    $target_found = false;
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            if(isset($word->target) && $word->target == 'true'){
+                                $target_found = true;
+                            }
+                        }
+
+                        if($target_found === false){
+                            return response()->json(['target_failed' => 'Target failed'], 422);
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif($request->step == 2){
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_section' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            // Добавляем кастомную проверку через after()
+            $validator->after(function ($validator) use ($request) {
+                if (
+                    !isset($request->match_by_typing) &&
+                    !isset($request->match_by_clicking) &&
+                    !isset($request->match_by_drag_and_drop)
+                ) {
+                    $validator->errors()->add('choose_one_of_the_methods', 'Choose one of the methods is required.');
+                }
+            });
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $sections = json_decode($request->sections);
+
+            if (count($sections) > 0) {
+                WordSection::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($sections as $section) {
+                    $new_word_section = new WordSection();
+                    $new_word_section->task_id = $edit_task->task_id;
+                    $new_word_section->save();
+
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            $new_word_section_item = new WordSectionItem();
+                            $new_word_section_item->word_section_id = $new_word_section->word_section_id;
+                            $new_word_section_item->word_id = $word->word_id;
+                            $new_word_section_item->target = (isset($word->target) && $word->target == 'true') ? true : false;
+                            $new_word_section_item->save();
+
+                            if(isset($word->removedLetters) && count($word->removedLetters) > 0){
+                                $new_task_word = new TaskWord();
+                                $new_task_word->task_id = $edit_task->task_id;
+                                $new_task_word->word_id = $word->word_id;
+                                $new_task_word->save();
+            
+                                foreach ($word->removedLetters as $letter) {
+                                    $new_missing_letter = new MissingLetter();
+                                    $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                                    $new_missing_letter->position = ($letter + 1);
+                                    $new_missing_letter->save();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_match_same_words_task(Request $request)
     {
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
@@ -1578,6 +2345,23 @@ class TaskController extends Controller
             ->distinct()
             ->get();
 
+            foreach ($section_items as $key => $section_item) {
+                $task_word = TaskWord::where('task_id', '=', $find_task->task_id)
+                ->where('word_id', '=', $section_item->word_id)
+                ->first();
+
+                if(isset($task_word)){
+                    $missing_letters = MissingLetter::where('task_word_id', '=', $task_word->task_word_id)
+                    ->select('task_word_id', 'position')
+                    ->orderBy('position', 'asc')
+                    ->get()
+                    ->pluck('position');
+
+                    if(count($missing_letters) > 0){
+                        $section_item->missingLetters = $missing_letters;
+                    }
+                }
+            }
 
             $section->words = $section_items;
         }
@@ -1617,9 +2401,9 @@ class TaskController extends Controller
             if (count($sections) > 0) {
                 foreach ($sections as $section) {
                     $target_found = false;
-                    if(count($section) > 0){
-                        foreach ($section as $section_item) {
-                            if(isset($section_item->target) && $section_item->target == 'true'){
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            if(isset($word->target) && $word->target == 'true'){
                                 $target_found = true;
                             }
                         }
@@ -1635,11 +2419,27 @@ class TaskController extends Controller
                 'step' => 1
             ], 200);
         }
-        elseif ($request->step == 2) {
+        elseif($request->step == 2){
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
             $rules = [
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
@@ -1653,10 +2453,10 @@ class TaskController extends Controller
             }
             
             return response()->json([
-                'step' => 2
+                'step' => 3
             ], 200);
         }
-        elseif ($request->step == 3) {
+        elseif ($request->step == 4) {
             // Проверяем материалы на задание
             $validate_errors = $this->taskService->validateTaskMaterials($request);
 
@@ -1675,13 +2475,27 @@ class TaskController extends Controller
                     $new_word_section->task_id = $new_task->task_id;
                     $new_word_section->save();
 
-                    if(count($section) > 0){
-                        foreach ($section as $section_item) {
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
                             $new_word_section_item = new WordSectionItem();
                             $new_word_section_item->word_section_id = $new_word_section->word_section_id;
-                            $new_word_section_item->word_id = $section_item->word_id;
-                            $new_word_section_item->target = (isset($section_item->target) && $section_item->target == 'true') ? true : false;
+                            $new_word_section_item->word_id = $word->word_id;
+                            $new_word_section_item->target = (isset($word->target) && $word->target == 'true') ? true : false;
                             $new_word_section_item->save();
+
+                            if(isset($word->removedLetters) && count($word->removedLetters) > 0){
+                                $new_task_word = new TaskWord();
+                                $new_task_word->task_id = $new_task->task_id;
+                                $new_task_word->word_id = $word->word_id;
+                                $new_task_word->save();
+            
+                                foreach ($word->removedLetters as $letter) {
+                                    $new_missing_letter = new MissingLetter();
+                                    $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                                    $new_missing_letter->position = ($letter + 1);
+                                    $new_missing_letter->save();
+                                }
+                            }
                         }
                     }
                 }
@@ -1692,6 +2506,159 @@ class TaskController extends Controller
 
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_find_an_extra_word_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'sections_count' => 'required|numeric|min:2',
+                'sections' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            
+            $sections = json_decode($request->sections);
+
+            if (count($sections) > 0) {
+                foreach ($sections as $section) {
+                    $target_found = false;
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            if(isset($word->target) && $word->target == 'true'){
+                                $target_found = true;
+                            }
+                        }
+
+                        if($target_found === false){
+                            return response()->json(['target_failed' => 'Target failed'], 422);
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif($request->step == 2){
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_section' => 'required|numeric|min:3',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $sections = json_decode($request->sections);
+
+            if (count($sections) > 0) {
+                WordSection::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($sections as $section) {
+                    $new_word_section = new WordSection();
+                    $new_word_section->task_id = $edit_task->task_id;
+                    $new_word_section->save();
+
+                    if(count($section->words) > 0){
+                        foreach ($section->words as $word) {
+                            $new_word_section_item = new WordSectionItem();
+                            $new_word_section_item->word_section_id = $new_word_section->word_section_id;
+                            $new_word_section_item->word_id = $word->word_id;
+                            $new_word_section_item->target = (isset($word->target) && $word->target == 'true') ? true : false;
+                            $new_word_section_item->save();
+
+                            if(isset($word->removedLetters) && count($word->removedLetters) > 0){
+                                $new_task_word = new TaskWord();
+                                $new_task_word->task_id = $edit_task->task_id;
+                                $new_task_word->word_id = $word->word_id;
+                                $new_task_word->save();
+            
+                                foreach ($word->removedLetters as $letter) {
+                                    $new_missing_letter = new MissingLetter();
+                                    $new_missing_letter->task_word_id = $new_task_word->task_word_id;
+                                    $new_missing_letter->position = ($letter + 1);
+                                    $new_missing_letter->save();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -1756,6 +2723,24 @@ class TaskController extends Controller
             ->distinct()
             ->inRandomOrder()
             ->get();
+
+            foreach ($section_items as $key => $section_item) {
+                $task_word = TaskWord::where('task_id', '=', $find_task->task_id)
+                ->where('word_id', '=', $section_item->word_id)
+                ->first();
+
+                if(isset($task_word)){
+                    $missing_letters = MissingLetter::where('task_word_id', '=', $task_word->task_word_id)
+                    ->select('task_word_id', 'position')
+                    ->orderBy('position', 'asc')
+                    ->get()
+                    ->pluck('position');
+
+                    if(count($missing_letters) > 0){
+                        $section_item->missingLetters = $missing_letters;
+                    }
+                }
+            }
 
             $section->words = $section_items;
         }
@@ -1824,6 +2809,10 @@ class TaskController extends Controller
                 'task_slug' => 'required',
                 'task_name_kk' => 'required',
                 'task_name_ru' => 'required',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+                'show_translate' => 'required|boolean',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
@@ -1867,6 +2856,127 @@ class TaskController extends Controller
 
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_true_or_false_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:2',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentence) {
+                    if(!isset($sentence->answer)){
+                        return response()->json(['answers_failed' => [trans('Answers failed')]], 422);
+                    }
+                }
+
+                return response()->json([
+                    'step' => 2
+                ], 200);
+            }
+        }
+        if ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'play_audio_at_the_begin' => 'required|boolean',
+                'play_audio_with_the_correct_answer' => 'required|boolean',
+                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        if ($request->step == 4) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                TaskSentence::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($sentences as $sentence) {
+                    $new_task_sentence = new TaskSentence();
+                    $new_task_sentence->task_id = $edit_task->task_id;
+                    $new_task_sentence->sentence_id = $sentence->sentence_id;
+                    $new_task_sentence->answer = $sentence->answer;
+                    $new_task_sentence->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -2025,6 +3135,144 @@ class TaskController extends Controller
         }
     }
 
+    public function edit_match_sentences_with_materials_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
+                'sentence_material_type_slug' => 'required|string|min:1',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:2',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $sentences = json_decode($request->sentences);
+
+            // Проверяем материалы для фразы
+            $validate_errors = $this->taskService->validateSentenceMaterials($sentences, $request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $sentences = json_decode($request->sentences);
+            $leave_task_sentence_ids = [];
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentenceIndex => $sentence) {
+                    if(isset($sentence->material->task_sentence_material_id)){
+                        array_push($leave_task_sentence_ids, $sentence->task_sentence_id);
+                    }
+                }
+
+                if(count($leave_task_sentence_ids) > 0){
+                    TaskSentence::where('task_id', $edit_task->task_id)
+                    ->whereNotIn('task_sentence_id', $leave_task_sentence_ids)
+                    ->delete();
+                }
+                else{
+                    TaskSentence::where('task_id', $edit_task->task_id)
+                    ->delete();
+                }
+
+                foreach ($sentences as $sentenceIndex => $sentence) {
+                    // Добавляем материалы к фразе
+                    if(!isset($sentence->material->task_sentence_material_id)){
+                        $new_task_sentence = new TaskSentence();
+                        $new_task_sentence->task_id = $edit_task->task_id;
+                        $new_task_sentence->sentence_id = $sentence->sentence_id;
+                        $new_task_sentence->save();
+
+                        $this->taskService->addMaterialsToTaskSentence($sentenceIndex, $new_task_sentence->task_sentence_id, $request);
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
+
+            // // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // // $user_operation = new UserOperation();
+            // // $user_operation->operator_id = auth()->user()->user_id;
+            // // $user_operation->operation_type_id = 3;
+            // // $user_operation->description = $description;
+            // // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
     public function get_match_sentences_with_materials_task(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
@@ -2051,242 +3299,6 @@ class TaskController extends Controller
         $task->task = $find_task;
         $task->options = $task_options;
         $task->sentences = $task_sentences;
-        $task->materials = $task_materials;
-
-        return response()->json($task, 200);
-    }
-
-    public function create_match_words_with_same_sounds_task(Request $request)
-    {
-        $rules = [];
-
-        if ($request->step == 1) {
-            $rules = [
-                'sections_count' => 'required|numeric|min:2',
-                'sections' => 'required',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            
-            $sections = json_decode($request->sections);
-
-            if (count($sections) > 0) {
-                foreach ($sections as $section) {
-                    $target_found = false;
-                    if(count($section) > 0){
-                        foreach ($section as $section_item) {
-                            if(isset($section_item->target) && $section_item->target == 'true'){
-                                $target_found = true;
-                            }
-                        }
-
-                        if($target_found === false){
-                            return response()->json(['target_failed' => 'Target failed'], 422);
-                        }
-                    }
-                }
-            }
-
-            return response()->json([
-                'step' => 1
-            ], 200);
-        }
-        elseif($request->step == 2){
-            $rules = [
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-
-            return response()->json([
-                'step' => 2
-            ], 200);
-        }
-        elseif ($request->step == 3) {
-            $rules = [
-                'task_slug' => 'required',
-                'task_name_kk' => 'required',
-                'task_name_ru' => 'required',
-                'show_audio_button' => 'required|boolean',
-                'impression_limit' => 'required|min:1',
-                'seconds_per_section' => 'required|numeric|min:3',
-                'max_attempts' => 'required|numeric',
-                'step' => 'required|numeric',
-            ];
-
-            $validator = Validator::make($request->all(), $rules);
-
-            // Добавляем кастомную проверку через after()
-            $validator->after(function ($validator) use ($request) {
-                if (
-                    !isset($request->match_by_typing) &&
-                    !isset($request->match_by_clicking) &&
-                    !isset($request->match_by_drag_and_drop)
-                ) {
-                    $validator->errors()->add('choose_one_of_the_methods', 'Choose one of the methods is required.');
-                }
-            });
-
-            if ($validator->fails()) {
-                return response()->json($validator->errors(), 422);
-            }
-            
-            return response()->json([
-                'step' => 3
-            ], 200);
-        }
-        elseif ($request->step == 4) {
-            // Проверяем материалы на задание
-            $validate_errors = $this->taskService->validateTaskMaterials($request);
-
-            if ($validate_errors) {
-                return response()->json($validate_errors, 422);
-            }
-
-            // Добавляем задание
-            $new_task = $this->taskService->newTask($request, 11);
-
-            $sections = json_decode($request->sections);
-
-            if (count($sections) > 0) {
-                foreach ($sections as $section) {
-                    $new_word_section = new WordSection();
-                    $new_word_section->task_id = $new_task->task_id;
-                    $new_word_section->save();
-
-                    if(count($section) > 0){
-                        foreach ($section as $section_item) {
-                            $new_word_section_item = new WordSectionItem();
-                            $new_word_section_item->word_section_id = $new_word_section->word_section_id;
-                            $new_word_section_item->word_id = $section_item->word_id;
-                            $new_word_section_item->target = (isset($section_item->target) && $section_item->target == 'true') ? true : false;
-                            $new_word_section_item->save();
-
-                            if(isset($section_item->removedLetters) && count($section_item->removedLetters) > 0){
-                                $new_task_word = new TaskWord();
-                                $new_task_word->task_id = $new_task->task_id;
-                                $new_task_word->word_id = $section_item->word_id;
-                                $new_task_word->save();
-            
-                                foreach ($section_item->removedLetters as $letter) {
-                                    $new_missing_letter = new MissingLetter();
-                                    $new_missing_letter->task_word_id = $new_task_word->task_word_id;
-                                    $new_missing_letter->position = ($letter + 1);
-                                    $new_missing_letter->save();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Добавляем материалы к заданию
-            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
-
-            // Добавляем опции к заданию
-            $this->taskService->addTaskOptions($new_task->task_id, $request);
-
-            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
-            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
-            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
-            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
-
-            // $user_operation = new UserOperation();
-            // $user_operation->operator_id = auth()->user()->user_id;
-            // $user_operation->operation_type_id = 3;
-            // $user_operation->description = $description;
-            // $user_operation->save();
-
-            return response()->json('success', 200);
-        }
-    }
-
-    public function get_match_words_with_same_sounds_task(Request $request)
-    {
-        // Получаем язык из заголовка
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-
-        $find_task = $this->taskService->findTask($request->task_id);
-
-        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
-        ->first();
-
-        if(!isset($task_options)){
-            return response()->json('task option is not found', 404);
-        }
-
-        $word_sections = WordSection::select(
-            'word_sections.word_section_id',
-            'word_sections.task_id'
-        )
-        ->where('word_sections.task_id', '=', $find_task->task_id);
-
-        if($task_options->random_order == 1){
-            $word_sections->inRandomOrder();
-        }
-
-        $word_sections = $word_sections->get();
-
-        if(count($word_sections) === 0){
-            return response()->json('word sections is not found', 404);
-        }
-
-        foreach ($word_sections as $key => $section) {
-            $section_items = WordSectionItem::leftJoin('dictionary', 'word_section_items.word_id', '=', 'dictionary.word_id')
-            ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
-            ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
-            ->select(
-                'word_section_items.word_section_item_id',
-                'word_section_items.word_section_id',
-                'word_section_items.word_id',
-                'word_section_items.target',
-                'dictionary.word',
-                'dictionary_translate.word_translate',
-                'audio_file.target as audio_file',
-            )
-            ->where('word_section_items.word_section_id', '=', $section->word_section_id)
-            ->where('dictionary_translate.lang_id', '=', $language->lang_id)  
-            ->distinct()
-            ->get();
-
-            foreach ($section_items as $key => $section_item) {
-                $task_word = TaskWord::where('task_id', '=', $find_task->task_id)
-                ->where('word_id', '=', $section_item->word_id)
-                ->first();
-
-                if(isset($task_word)){
-                    $missing_letters = MissingLetter::where('task_word_id', '=', $task_word->task_word_id)
-                    ->select('task_word_id', 'position')
-                    ->orderBy('position', 'asc')
-                    ->get()
-                    ->pluck('position');
-
-                    if(count($missing_letters) > 0){
-                        $section_item->missingLetters = $missing_letters;
-                    }
-                }
-            }
-
-            $section->words = $section_items;
-        }
-
-        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
-
-        $task = new \stdClass();
-
-        $task->task = $find_task;
-        $task->options = $task_options;
-        $task->word_sections = $word_sections;
         $task->materials = $task_materials;
 
         return response()->json($task, 200);
@@ -2328,7 +3340,7 @@ class TaskController extends Controller
 
             if (count($words) > 0) {
                 foreach ($words as $word) {
-                    if(!isset($word->wordSyllables) || count($word->wordSyllables) < 2){
+                    if(!isset($word->syllables) || count($word->syllables) < 2){
                         return response()->json(['syllables_failed' => [trans('auth.divide_each_word_into_syllables')]], 422);
                     }
                 }
@@ -2336,7 +3348,7 @@ class TaskController extends Controller
                 foreach ($words as $word) {
                     $stress_found = false;
 
-                    foreach ($word->wordSyllables as $syllable) {
+                    foreach ($word->syllables as $syllable) {
                         if(isset($syllable->target) && $syllable->target == 'true'){
                             $stress_found = true;
                         }
@@ -2397,7 +3409,7 @@ class TaskController extends Controller
                     $new_task_word->word_id = $word->word_id;
                     $new_task_word->save();
 
-                    foreach ($word->wordSyllables as $syllable) {
+                    foreach ($word->syllables as $syllable) {
                         $new_word_syllable = new WordSyllable();
                         $new_word_syllable->task_word_id = $new_task_word->task_word_id;
                         $new_word_syllable->syllable = $syllable->syllable;
@@ -2412,6 +3424,149 @@ class TaskController extends Controller
 
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_find_the_stressed_syllable_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:1',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    if(!isset($word->syllables) || count($word->syllables) < 2){
+                        return response()->json(['syllables_failed' => [trans('auth.divide_each_word_into_syllables')]], 422);
+                    }
+                }
+
+                foreach ($words as $word) {
+                    $stress_found = false;
+
+                    foreach ($word->syllables as $syllable) {
+                        if(isset($syllable->target) && $syllable->target == 'true'){
+                            $stress_found = true;
+                        }
+                    }
+
+                    if($stress_found === false){
+                        return response()->json(['syllables_failed' => [trans('auth.specify_one_of_the_syllables_as_the_stress_in_each_word')]], 422);
+                    }
+                }
+                
+                return response()->json([
+                    'step' => 2
+                ], 200);
+            }
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_transcription' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'seconds_per_word' => 'required|numeric|min:3',
+                'impression_limit' => 'required|min:1',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif ($request->step == 4) {
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $edit_task = $this->taskService->editTask($request);
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                TaskWord::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($words as $word) {
+                    $new_task_word = new TaskWord();
+                    $new_task_word->task_id = $edit_task->task_id;
+                    $new_task_word->word_id = $word->word_id;
+                    $new_task_word->save();
+
+                    foreach ($word->syllables as $syllable) {
+                        $new_word_syllable = new WordSyllable();
+                        $new_word_syllable->task_word_id = $new_task_word->task_word_id;
+                        $new_word_syllable->syllable = $syllable->syllable;
+                        $new_word_syllable->target = (isset($syllable->target) && $syllable->target == 'true') ? true : false;
+                        $new_word_syllable->save();
+                    }
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>

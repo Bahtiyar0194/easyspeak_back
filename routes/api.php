@@ -175,44 +175,50 @@ Route::group([
             Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
             Route::delete('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
 
-            Route::post('/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
-            Route::get('/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
+            Route::post('/create/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
+            Route::post('/edit/missing_letters/{task_id}', [TaskController::class, 'edit_missing_letters_task'])->middleware('check_roles');
+            Route::get('/get/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
 
-            Route::post('/match_words_by_pictures/{lesson_id}', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
-            Route::get('/match_words_by_pictures/{task_id}', [TaskController::class, 'get_match_words_by_pictures_task']);
+            Route::post('/create/match_words_by_pictures/{lesson_id}', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
+            Route::post('/edit/match_words_by_pictures/{task_id}', [TaskController::class, 'edit_match_words_by_pictures_task'])->middleware('check_roles');
+            Route::get('/get/match_words_by_pictures/{task_id}', [TaskController::class, 'get_match_words_by_pictures_task']);
 
-            Route::post('/form_a_sentence_out_of_the_words/{lesson_id}', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
-            Route::get('/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'get_form_a_sentence_out_of_the_words_task']);
+            Route::post('/create/form_a_sentence_out_of_the_words/{lesson_id}', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
+            Route::post('/edit/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'edit_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
+            Route::get('/get/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'get_form_a_sentence_out_of_the_words_task']);
 
-            Route::post('/learning_words/{lesson_id}', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
-            Route::get('/learning_words/{task_id}', [TaskController::class, 'get_learning_words_task']);
+            Route::post('/create/learning_words/{lesson_id}', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
+            Route::post('/edit/learning_words/{task_id}', [TaskController::class, 'edit_learning_words_task'])->middleware('check_roles');
+            Route::get('/get/learning_words/{task_id}', [TaskController::class, 'get_learning_words_task']);
 
-            Route::post('/form_a_word_out_of_the_letters/{lesson_id}', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
-            Route::get('/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'get_form_a_word_out_of_the_letters_task']);
+            Route::post('/create/form_a_word_out_of_the_letters/{lesson_id}', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
+            Route::post('/edit/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'edit_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
+            Route::get('/get/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'get_form_a_word_out_of_the_letters_task']);
 
             Route::post('/create/fill_in_the_blanks_in_the_sentence/{lesson_id}', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
             Route::post('/edit/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'edit_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
             Route::get('/get/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'get_fill_in_the_blanks_in_the_sentence_task']);
 
-            Route::post('/match_paired_words/{lesson_id}', [TaskController::class, 'create_match_paired_words_task'])->middleware('check_roles');
-            Route::get('/match_paired_words/{task_id}', [TaskController::class, 'get_match_paired_words_task']);
+            Route::post('create/match_same_words/{lesson_id}', [TaskController::class, 'create_match_same_words_task'])->middleware('check_roles');
+            Route::post('edit/match_same_words/{task_id}', [TaskController::class, 'edit_match_same_words_task'])->middleware('check_roles');
+            Route::get('get/match_same_words/{task_id}', [TaskController::class, 'get_match_same_words_task']);
 
-            Route::post('/find_an_extra_word/{lesson_id}', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
-            Route::get('/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
+            Route::post('/create/find_an_extra_word/{lesson_id}', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
+            Route::post('/edit/find_an_extra_word/{task_id}', [TaskController::class, 'edit_find_an_extra_word_task'])->middleware('check_roles');
+            Route::get('/get/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
 
-            Route::post('/true_or_false/{lesson_id}', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
-            Route::get('/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
+            Route::post('/create/true_or_false/{lesson_id}', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
+            Route::post('/edit/true_or_false/{task_id}', [TaskController::class, 'edit_true_or_false_task'])->middleware('check_roles');
+            Route::get('/get/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
 
-            Route::post('/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles');
-            Route::get('/match_sentences_with_materials/{task_id}', [TaskController::class, 'get_match_sentences_with_materials_task']);
+            Route::post('/create/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles');
+            Route::post('/edit/match_sentences_with_materials/{task_id}', [TaskController::class, 'edit_match_sentences_with_materials_task'])->middleware('check_roles');
+            Route::get('/get/match_sentences_with_materials/{task_id}', [TaskController::class, 'get_match_sentences_with_materials_task']);
 
-            Route::post('/match_words_with_same_sounds/{lesson_id}', [TaskController::class, 'create_match_words_with_same_sounds_task'])->middleware('check_roles');
-            Route::get('/match_words_with_same_sounds/{task_id}', [TaskController::class, 'get_match_words_with_same_sounds_task']);
+            Route::post('/create/find_the_stressed_syllable/{lesson_id}', [TaskController::class, 'create_find_the_stressed_syllable_task'])->middleware('check_roles');
+            Route::post('/edit/find_the_stressed_syllable/{task_id}', [TaskController::class, 'edit_find_the_stressed_syllable_task'])->middleware('check_roles');
+            Route::get('/get/find_the_stressed_syllable/{task_id}', [TaskController::class, 'get_find_the_stressed_syllable_task']);
 
-            Route::post('/find_the_stressed_syllable/{lesson_id}', [TaskController::class, 'create_find_the_stressed_syllable_task'])->middleware('check_roles');
-            Route::get('/find_the_stressed_syllable/{task_id}', [TaskController::class, 'get_find_the_stressed_syllable_task']);
-
-            
             Route::post('/answer_the_questions/{lesson_id}', [TaskController::class, 'create_answer_the_questions_task'])->middleware('check_roles');
             Route::get('/answer_the_questions/{task_id}', [TaskController::class, 'get_answer_the_questions_task']);
 
