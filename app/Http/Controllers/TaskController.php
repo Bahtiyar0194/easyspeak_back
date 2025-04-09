@@ -1959,8 +1959,13 @@ class TaskController extends Controller
                 'missing_words.missing_word_id',
                 'missing_words.word_position',
                 'missing_words.word_option'
-            )
-            ->get();
+            );
+
+            if($task_options->find_word_option == 'with_hints'){
+                $missing_words->orderBy('word_position', 'asc');
+            }
+            
+            $missing_words = $missing_words->get();
 
             $sentence->missingWords = $missing_words;
         }
