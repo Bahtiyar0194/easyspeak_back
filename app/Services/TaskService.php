@@ -121,6 +121,7 @@ class TaskService
         $new_task_option->match_by_clicking = isset($request->match_by_clicking) ? 1 : 0;
         $new_task_option->match_by_drag_and_drop = isset($request->match_by_drag_and_drop) ? 1 : 0;
         $new_task_option->max_attempts = isset($request->max_attempts) ? $request->max_attempts : 0;
+        $new_task_option->max_answer_attempts = isset($request->max_answer_attempts) ? $request->max_answer_attempts : 0;
         $new_task_option->show_materials_option = isset($request->show_materials_option) ? $request->show_materials_option : null;
         $new_task_option->sentence_material_type_slug = isset($request->sentence_material_type_slug) ? $request->sentence_material_type_slug : null;
         $new_task_option->save();
@@ -191,12 +192,13 @@ class TaskService
         ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
         ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
         ->select(
+            'sentences.sentence_id',
             'task_questions.task_question_id',
             'task_questions.predefined_answer',
-            'sentences.sentence as question',
+            'sentences.sentence',
             'image_file.target as image_file',
             'audio_file.target as audio_file',
-            'sentences_translate.sentence_translate as question_translate'
+            'sentences_translate.sentence_translate'
         )
         ->where('task_questions.task_id', '=', $task_id)
         ->where('sentences_translate.lang_id', '=', $language->lang_id)  

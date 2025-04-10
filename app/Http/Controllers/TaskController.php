@@ -3640,6 +3640,7 @@ class TaskController extends Controller
                 'task_name_ru' => 'required',
                 'impression_limit' => 'required|min:1',
                 'seconds_per_question' => 'required|numeric|min:10',
+                'max_answer_attempts' => 'required|numeric',
                 'step' => 'required|numeric'
             ];
 
@@ -3655,8 +3656,8 @@ class TaskController extends Controller
         }
         elseif ($request->step == 2) {
             $rules = [
-                'sentences_count' => 'required|numeric|min:1',
-                'sentences' => 'required',
+                'questions_count' => 'required|numeric|min:1',
+                'questions' => 'required',
                 'step' => 'required|numeric',
             ];
 
@@ -3672,7 +3673,7 @@ class TaskController extends Controller
         }
         elseif ($request->step == 3) {
             $rules = [
-                'sentences' => 'required',
+                'questions' => 'required',
                 'answer_the_questions_option' => 'required|string',
                 'step' => 'required|numeric',
             ];
@@ -3699,15 +3700,15 @@ class TaskController extends Controller
             // Добавляем задание
             $new_task = $this->taskService->newTask($request, 13);
 
-            $sentences = json_decode($request->sentences);
+            $questions = json_decode($request->questions);
 
-            if (count($sentences) > 0) {
-                foreach ($sentences as $key => $sentence) {
+            if (count($questions) > 0) {
+                foreach ($questions as $key => $question) {
                     $new_task_question = new TaskQuestion();
                     $new_task_question->task_id = $new_task->task_id;
-                    $new_task_question->question_id = $sentence->sentence_id;
-                    if($request['question_predefined_answer_'.$key] != ''){
-                        $new_task_question->predefined_answer = e($request['question_predefined_answer_'.$key]);
+                    $new_task_question->question_id = $question->sentence_id;
+                    if(isset($question->predefined_answer) && $question->predefined_answer != ''){
+                        $new_task_question->predefined_answer = e($question->predefined_answer);
                     }
                     $new_task_question->save();
                 }
@@ -3718,6 +3719,118 @@ class TaskController extends Controller
             
             // Добавляем опции к заданию
             $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function edit_answer_the_questions_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_question' => 'required|numeric|min:10',
+                'max_answer_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'questions_count' => 'required|numeric|min:1',
+                'questions' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            $rules = [
+                'questions' => 'required',
+                'answer_the_questions_option' => 'required|string',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 3
+            ], 200);
+        }
+        elseif($request->step == 4){
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            $edit_task = $this->taskService->editTask($request);
+
+            $questions = json_decode($request->questions);
+
+            if (count($questions) > 0) {
+                TaskQuestion::where('task_id', $edit_task->task_id)
+                ->delete();
+
+                foreach ($questions as $key => $question) {
+                    $new_task_question = new TaskQuestion();
+                    $new_task_question->task_id = $edit_task->task_id;
+                    $new_task_question->question_id = $question->sentence_id;
+                    if(isset($question->predefined_answer) && $question->predefined_answer != ''){
+                        $new_task_question->predefined_answer = e($question->predefined_answer);
+                    }
+                    $new_task_question->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($edit_task->task_id, $request);
+            
+            // Удаляем старые опции задания
+            TaskOption::where('task_id', $edit_task->task_id)
+            ->delete();
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($edit_task->task_id, $request);
 
             // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>

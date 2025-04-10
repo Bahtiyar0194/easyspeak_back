@@ -50,19 +50,19 @@ class AuthController extends Controller
 
         if ($request->first_registration == 'true') {
             $school = new School();
-            $school->school_domain = str_replace(' ', '', $request->school_domain);
-            $school->school_name = $request->school_name;
+            $school->school_domain = str_replace(' ', '', e($request->school_domain));
+            $school->school_name = e($request->school_name);
             $school->school_type_id = 1;
             $school->subscription_expiration_at = date('Y-m-d H:i:s', strtotime('+14 days'));
             $school->save();
         } elseif ($request->first_registration == 'false') {
-            $school = School::where('school_domain', $request->school_domain)->first();
+            $school = School::where('school_domain', e($request->school_domain))->first();
 
             if (!isset($school)) {
                 return response()->json(['registration_failed' => [trans('auth.school_not_found')]], 422);
             }
 
-            $getSchoolUser = User::where('email', $request->email)
+            $getSchoolUser = User::where('email', e($request->email))
                 ->where('school_id', $school->school_id)
                 ->first();
 
@@ -76,10 +76,10 @@ class AuthController extends Controller
         $this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
 
         $new_user = new User();
-        $new_user->first_name = $request->first_name;
-        $new_user->last_name = $request->last_name;
-        $new_user->email = $request->email;
-        $new_user->phone = $request->phone;
+        $new_user->first_name = e($request->first_name);
+        $new_user->last_name = e($request->last_name);
+        $new_user->email = e($request->email);
+        $new_user->phone = e($request->phone);
         $new_user->school_id = $school->school_id;
         $new_user->lang_id = $language->lang_id;
         $new_user->password = bcrypt($request->password);
