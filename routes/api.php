@@ -174,6 +174,7 @@ Route::group([
             Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
             Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
             Route::delete('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
+            Route::post('/save_result/{task_id}', [TaskController::class, 'save_task_result'])->middleware('check_roles');
 
             Route::post('/create/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
             Route::post('/edit/missing_letters/{task_id}', [TaskController::class, 'edit_missing_letters_task'])->middleware('check_roles');

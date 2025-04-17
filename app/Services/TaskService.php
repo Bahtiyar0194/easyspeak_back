@@ -9,6 +9,7 @@ use App\Models\TaskWord;
 use App\Models\TaskSentence;
 use App\Models\TaskQuestion;
 use App\Models\TaskMaterial;
+use App\Models\TaskAnswer;
 use App\Models\TaskOption;
 use App\Models\TaskSentenceMaterial;
 use App\Models\MediaFile;
@@ -82,6 +83,42 @@ class TaskService
         return $edit_task;
     }
 
+    public function getTaskResult($task_id, $learner_id){
+        $task_result = new \stdClass();
+
+        $task_answers = TaskAnswer::where('task_id', '=', $task_id)
+        ->where('learner_id', '=', $learner_id)
+        ->get();
+
+        if(count($task_answers) > 0){
+            $correct_anwers = [];
+            $incorrect_answers = [];
+            $correct_answers_count = 0;
+            $incorrect_answers_count = 0;
+
+            foreach ($task_answers as $key => $answer) {
+                if($answer->is_correct == 1){
+                    array_push($correct_anwers, $answer);
+                    $correct_answers_count++;
+                }
+                else{
+                    array_push($incorrect_answers, $answer);
+                    $incorrect_answers_count++;
+                }
+            }
+
+            $task_result->correct_answers_count = $correct_answers_count;
+            $task_result->incorrect_answers_count = $incorrect_answers_count;
+            $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers];
+            $task_result->percentage = round(($correct_answers_count / count($task_answers)) * 100, 2);
+            return $task_result;
+        }
+        else{
+            $task_result->percentage = 0;
+            return $task_result;
+        }
+    }
+
     public function findTask($task_id){
         $find_task = Task::findOrFail($task_id);
 
@@ -89,6 +126,7 @@ class TaskService
         ->get();
 
         $find_task->langs = $task_langs;
+        $find_task->task_result = $this->getTaskResult($find_task->task_id, auth()->user()->user_id); 
 
         return $find_task;
     }

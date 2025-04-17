@@ -47,10 +47,6 @@ class RouteServiceProvider extends ServiceProvider
                 ->namespace($this->namespace)
                 ->group(base_path('routes/web.php'));
         });
-
-        RateLimiter::for('api', function () {
-            return Limit::perMinute(100); // Увеличьте лимит до 100 запросов в минуту
-        });
     }
 
     /**
@@ -61,7 +57,7 @@ class RouteServiceProvider extends ServiceProvider
     protected function configureRateLimiting()
     {
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by(optional($request->user())->id ?: $request->ip());
+            return Limit::perMinute(180)->by(optional($request->user())->user_id ?: $request->ip());
         });
     }
 }

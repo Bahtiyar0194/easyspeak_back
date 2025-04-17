@@ -22,6 +22,8 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\UploadConfiguration;
 
+use App\Models\TaskAnswer;
+
 use App\Services\TaskService;
 
 use Validator;
@@ -312,6 +314,12 @@ class TaskController extends Controller
         ->orderBy('tasks.sort_num', 'asc')
         ->get();
 
+        if(count($tasks) > 0){
+            foreach ($tasks as $key => $task) {
+                $task->task_result = $this->taskService->getTaskResult($task->task_id, auth()->user()->user_id);
+            }
+        }
+
         return response()->json($tasks, 200);
     }
 
@@ -337,6 +345,42 @@ class TaskController extends Controller
         if(isset($task)){
             $task->delete();
             return response()->json('delete task is success', 200);
+        }
+    }
+
+    public function save_task_result(Request $request){
+        $task = Task::findOrFail($request->task_id);
+
+        $task_result = json_decode($request->task_result);
+
+        if(count($task_result) > 0){
+
+            // Удаляем старые результаты выполнения задания
+            TaskAnswer::where('task_id', '=', $task->task_id)
+            ->where('learner_id', '=', auth()->user()->user_id)
+            ->delete();
+
+            // Сохраняем результаты выполнения задания
+            foreach ($task_result as $key => $result) {
+                $new_task_answer = new TaskAnswer();
+                $new_task_answer->task_id = $task->task_id;
+                $new_task_answer->learner_id = auth()->user()->user_id;
+                $new_task_answer->is_correct = $result->is_correct;
+    
+                if(isset($result->right_answer)){
+                    $new_task_answer->right_answer = $result->right_answer;
+                }
+                if(isset($result->user_answer)){
+                    $new_task_answer->user_answer = $result->user_answer;
+                }
+    
+                $new_task_answer->save();
+            }
+
+            return response()->json($this->taskService->getTaskResult($task->task_id, auth()->user()->user_id), 200);
+        }
+        else{
+            return response()->json('Task result is empty', 422);
         }
     }
 
