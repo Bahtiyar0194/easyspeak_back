@@ -1,7 +1,8 @@
 <?php
 
 namespace App\Services;
-
+use App\Models\Dictionary;
+use App\Models\Sentence;
 use App\Models\Task;
 use App\Models\TaskLang;
 use App\Models\TaskType;
@@ -104,6 +105,34 @@ class TaskService
                 else{
                     array_push($incorrect_answers, $answer);
                     $incorrect_answers_count++;
+                }
+
+                if(isset($answer->word_id)){
+                    $word = Dictionary::where('word_id', '=', $answer->word_id)
+                    ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+                    ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
+                    ->select(
+                        'dictionary.word',
+                        'image_file.target as image_file',
+                        'audio_file.target as audio_file'
+                    )
+                    ->first();
+
+                    $answer->word = $word;
+                }
+
+                if(isset($answer->sentence_id)){
+                    $sentence = Sentence::where('sentence_id', '=', $answer->sentence_id)
+                    ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+                    ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+                    ->select(
+                        'sentences.sentence',
+                        'image_file.target as image_file',
+                        'audio_file.target as audio_file'
+                    )
+                    ->first();
+;
+                    $answer->sentence = $sentence;
                 }
             }
 

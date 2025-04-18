@@ -266,7 +266,7 @@ class DictionaryController extends Controller
 
 
         $new_word = new Dictionary();
-        $new_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
+        $new_word->word = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word)));
         $new_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
         if($request['upload_new_word_image_file'] == 'true'){
@@ -327,13 +327,13 @@ class DictionaryController extends Controller
         $new_word->save();
 
         $new_word_translate = new DictionaryTranslate();
-        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_kk));
+        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word_kk)));
         $new_word_translate->word_id = $new_word->word_id;
         $new_word_translate->lang_id = 1;
         $new_word_translate->save();
 
         $new_word_translate = new DictionaryTranslate();
-        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_ru));
+        $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word_ru)));
         $new_word_translate->word_id = $new_word->word_id;
         $new_word_translate->lang_id = 2;
         $new_word_translate->save();
@@ -395,7 +395,7 @@ class DictionaryController extends Controller
         $edit_word = Dictionary::find($request->word_id);
 
         if(isset($edit_word)){
-            $edit_word->word = trim(preg_replace('/\s+/', ' ', $request->word));
+            $edit_word->word = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word)));
             $edit_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
             if($request['upload_edit_word_image_file'] == 'true'){
@@ -461,13 +461,13 @@ class DictionaryController extends Controller
             ->delete();
 
             $new_word_translate = new DictionaryTranslate();
-            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_kk));
+            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word_kk)));
             $new_word_translate->word_id = $edit_word->word_id;
             $new_word_translate->lang_id = 1;
             $new_word_translate->save();
     
             $new_word_translate = new DictionaryTranslate();
-            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', $request->word_ru));
+            $new_word_translate->word_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word_ru)));
             $new_word_translate->word_id = $edit_word->word_id;
             $new_word_translate->lang_id = 2;
             $new_word_translate->save();

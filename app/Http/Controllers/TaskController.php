@@ -373,6 +373,16 @@ class TaskController extends Controller
                 if(isset($result->user_answer)){
                     $new_task_answer->user_answer = $result->user_answer;
                 }
+
+                if(isset($result->word_id)){
+                    $new_task_answer->word_id = $result->word_id;
+                }
+                if(isset($result->sentence_id)){
+                    $new_task_answer->sentence_id = $result->sentence_id;
+                }
+                if(isset($result->question_id)){
+                    $new_task_answer->question_id = $result->question_id;
+                }
     
                 $new_task_answer->save();
             }

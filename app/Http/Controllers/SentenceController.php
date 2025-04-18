@@ -245,7 +245,7 @@ class SentenceController extends Controller
         $auth_user = auth()->user();
 
         $new_sentence = new Sentence();
-        $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
+        $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence)));
         $new_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
 
@@ -280,13 +280,13 @@ class SentenceController extends Controller
         $new_sentence->save();
 
         $new_sentence_translate = new SentenceTranslate();
-        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_kk));
+        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence_kk)));
         $new_sentence_translate->sentence_id = $new_sentence->sentence_id;
         $new_sentence_translate->lang_id = 1;
         $new_sentence_translate->save();
 
         $new_sentence_translate = new SentenceTranslate();
-        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_ru));
+        $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence_ru)));
         $new_sentence_translate->sentence_id = $new_sentence->sentence_id;
         $new_sentence_translate->lang_id = 2;
         $new_sentence_translate->save();
@@ -336,7 +336,7 @@ class SentenceController extends Controller
         $edit_sentence = Sentence::find($request->sentence_id);
 
         if(isset($edit_sentence)){
-            $edit_sentence->sentence = trim(preg_replace('/\s+/', ' ', $request->sentence));
+            $edit_sentence->sentence = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence)));
 
             if($request['upload_edit_sentence_audio_file'] == 'true'){
         
@@ -372,13 +372,13 @@ class SentenceController extends Controller
             ->delete();
 
             $new_sentence_translate = new SentenceTranslate();
-            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_kk));
+            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence_kk)));
             $new_sentence_translate->sentence_id = $edit_sentence->sentence_id;
             $new_sentence_translate->lang_id = 1;
             $new_sentence_translate->save();
     
             $new_sentence_translate = new SentenceTranslate();
-            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', $request->sentence_ru));
+            $new_sentence_translate->sentence_translate = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence_ru)));
             $new_sentence_translate->sentence_id = $edit_sentence->sentence_id;
             $new_sentence_translate->lang_id = 2;
             $new_sentence_translate->save();
