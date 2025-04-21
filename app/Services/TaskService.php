@@ -184,6 +184,7 @@ class TaskService
         $new_task_option->answer_the_questions_option = isset($request->answer_the_questions_option) ? $request->answer_the_questions_option : null;
         $new_task_option->options_num = isset($request->options_num) ? $request->options_num : null;
         $new_task_option->random_order = isset($request->random_order) ? true : false;
+        $new_task_option->random_order_pictures = isset($request->random_order_pictures) ? true : null;
         $new_task_option->match_by_typing = isset($request->match_by_typing) ? 1 : 0;
         $new_task_option->match_by_clicking = isset($request->match_by_clicking) ? 1 : 0;
         $new_task_option->match_by_drag_and_drop = isset($request->match_by_drag_and_drop) ? 1 : 0;

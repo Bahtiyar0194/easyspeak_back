@@ -888,7 +888,22 @@ class TaskController extends Controller
             return response()->json('task option is not found', 404);
         }
 
-        $task_words = $this->taskService->getTaskWords($find_task->task_id, $language, $task_options);
+        $task_words = TaskWord::leftJoin('dictionary', 'task_words.word_id', '=', 'dictionary.word_id')
+        ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
+        ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+        ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
+        ->select(
+            'task_words.task_word_id',
+            'task_words.word_id',
+            'dictionary.word',
+            'dictionary.transcription',
+            'image_file.target as image_file',
+            'audio_file.target as audio_file',
+            'dictionary_translate.word_translate'
+        )
+        ->where('task_words.task_id', '=', $find_task->task_id)
+        ->where('dictionary_translate.lang_id', '=', $language->lang_id)
+        ->get();
 
         $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
 
