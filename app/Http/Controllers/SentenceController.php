@@ -223,8 +223,10 @@ class SentenceController extends Controller
             'sentence_ru' => 'required|string|between:1,100',
             'course_id' => 'required|numeric',
         ];
-
-        if($request['upload_new_sentence_audio_file'] == 'true'){
+        if($request['upload_new_sentence_audio_file'] == 'generate'){
+            $rules['generate_new_sentence_audio_file'] = 'required|string';
+        }
+        elseif($request['upload_new_sentence_audio_file'] == 'true'){
                     
             $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
             ->first();
@@ -248,10 +250,23 @@ class SentenceController extends Controller
         $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence)));
         $new_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
+        if($request['upload_new_sentence_audio_file'] == 'generate'){;
+            $binary = base64_decode($request->input('generate_new_sentence_audio_file'));
+            $file_name = uniqid() . '.mp3';
 
-        $audio_file = $request->file('audio_file');
+            Storage::put("/public/{$file_name}", $binary);
+            $file_size = Storage::size("/public/{$file_name}");
 
-        if($request['upload_new_sentence_audio_file'] == 'true'){
+            $new_file = new MediaFile();
+            $new_file->file_name = $request['sentence'];
+            $new_file->target = $file_name;
+            $new_file->size = $file_size / 1048576;
+            $new_file->material_type_id = 2;
+            $new_file->save();
+
+            $new_sentence->audio_file_id = $new_file->file_id;
+        }
+        elseif($request['upload_new_sentence_audio_file'] == 'true'){
     
             $sentence_audio_file = $request->file('new_sentence_audio_file');
 

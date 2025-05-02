@@ -21,10 +21,16 @@ use File;
 use Image;
 use Storage;
 
+use App\Services\CourseService;
+
 class CourseController extends Controller
 {
-    public function __construct(Request $request)
+
+    protected $courseService;
+
+    public function __construct(Request $request, CourseService $courseService)
     {
+        $this->courseService = $courseService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -81,6 +87,10 @@ class CourseController extends Controller
 
         if (count($levels) == 0) {
             return response()->json(['error' => 'Levels not found'], 404);
+        }
+
+        foreach ($levels as $key => $level) {
+             $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
         }
 
         $data = new \stdClass();
@@ -167,6 +177,8 @@ class CourseController extends Controller
             return response()->json(['error' => 'Level not found'], 404);
         }
 
+        $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+
         $data->level = $level;
 
         $sections = CourseSection::where('level_id', '=', $level->level_id)
@@ -249,6 +261,8 @@ class CourseController extends Controller
         if (!$level) {
             return response()->json(['error' => 'Level not found'], 404);
         }
+
+        $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
 
         $data->level = $level;
 

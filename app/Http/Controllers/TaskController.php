@@ -1,7 +1,6 @@
 <?php
 
 namespace App\Http\Controllers;
-
 use App\Models\Task;
 use App\Models\TaskLang;
 use App\Models\TaskOption;
@@ -31,6 +30,7 @@ use DB;
 use File;
 use Image;
 use Storage;
+use Http;
 
 use Illuminate\Http\Request;
 
@@ -351,47 +351,121 @@ class TaskController extends Controller
     public function save_task_result(Request $request){
         $task = Task::findOrFail($request->task_id);
 
+        $task_type = TaskType::where('task_type_id', '=', $task->task_type_id);
+
         $task_result = json_decode($request->task_result);
 
-        if(count($task_result) > 0){
+        return $this->taskService->saveTaskResult($task->task_id, $task_result);
+    }
 
-            // Удаляем старые результаты выполнения задания
-            TaskAnswer::where('task_id', '=', $task->task_id)
-            ->where('learner_id', '=', auth()->user()->user_id)
-            ->delete();
+    public function check_answers(Request $request){
+        $task = Task::findOrFail($request->task_id);
+        $task_result = [];
+        $questions = json_decode($request->questions);
 
-            // Сохраняем результаты выполнения задания
-            foreach ($task_result as $key => $result) {
-                $new_task_answer = new TaskAnswer();
-                $new_task_answer->task_id = $task->task_id;
-                $new_task_answer->learner_id = auth()->user()->user_id;
-                $new_task_answer->is_correct = $result->is_correct;
+        foreach ($questions as $key => $question) {
+            if (strlen(trim($question->userInput)) > 0) {
+                if($question->checking_by == 'by_ai'){
+                    $prompt = "Question: {$question->sentence}\nLearner answer: {$question->userInput}";
     
-                if(isset($result->right_answer)){
-                    $new_task_answer->right_answer = $result->right_answer;
-                }
-                if(isset($result->user_answer)){
-                    $new_task_answer->user_answer = $result->user_answer;
-                }
+                    $response = Http::withHeaders([
+                        'Authorization' => 'Bearer ' . env('OPENAI_API_KEY'),
+                        'Content-Type' => 'application/json',
+                    ])->post(env('OPENAI_API_URL').'/chat/completions', [
+                        'model' => 'gpt-4', // или 'gpt-3.5-turbo'
+                        'messages' => [
+                            [
+                                'role' => 'system',
+                                'content' => <<<EOT
+                                    You are an English language examiner. Your task is to evaluate a student's answer to a basic question (A1–A2 level).
 
-                if(isset($result->word_id)){
-                    $new_task_answer->word_id = $result->word_id;
-                }
-                if(isset($result->sentence_id)){
-                    $new_task_answer->sentence_id = $result->sentence_id;
-                }
-                if(isset($result->question_id)){
-                    $new_task_answer->question_id = $result->question_id;
-                }
+                                    For each answer, assess:
+                                    - whether it is grammatically and semantically correct
+                                    - whether it matches the expected structure
+
+                                    Respond strictly in JSON format:
+                                    {
+                                    "grade": 1 or 0,
+                                    "comment": "A short comment, max 1 sentence. The correct answer to the question should be as an example. Mark the correct answer in the comment with the <b> tag"
+                                    }
+
+                                    Do not add any extra text before or after the JSON.
+
+                                    If the answer is grammatically correct and logical, return 1. A learner's partially correct answer won't do.
+                                    EOT,
+                            ],
+                            [
+                                'role' => 'user',
+                                'content' => $prompt,
+                            ],
+                        ],
+                        'temperature' => 0,
+                    ]);
     
-                $new_task_answer->save();
+                    if ($response->successful()) {
+                        $answer = $response['choices'][0]['message']['content'] ?? '';
+
+
+                        // Пытаемся вытащить JSON
+                        if (preg_match('/\{.*\}/s', $answer, $matches)) {
+                            $jsonAnswer = $matches[0];
+
+                            $parsed = json_decode($jsonAnswer, true);
+
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $grade = $parsed['grade'] ?? null;
+                                $comment = $parsed['comment'] ?? null;
+
+                                if (isset($grade)) {
+                                    array_push($task_result, [
+                                        'question_id' => $question->sentence_id,
+                                        'is_correct' => $grade,
+                                        'right_answer' => ($grade === 1 || $grade === '1') ? "<p class='font-medium mb-0 text-success underline'>{$question->userInput}</p>" : null,
+                                        'user_answer' => ($grade === 0 || $grade === '0') ? "<p class='font-medium mb-0 text-danger underline'>{$question->userInput}</p>" : null,
+                                        'comment' => $comment,
+                                    ]);
+                                } else {
+                                    array_push($task_result, [
+                                        'question_id' => $question->sentence_id,
+                                        'user_answer' => $question->userInput,
+                                    ]);
+                                }
+                            } else {
+                                array_push($task_result, [
+                                    'question_id' => $question->sentence_id,
+                                    'user_answer' => $question->userInput,
+                                ]);
+                            }
+                        } else {
+                            array_push($task_result, [
+                                'question_id' => $question->sentence_id,
+                                'user_answer' => $question->userInput,
+                            ]);
+                        }
+                    }
+                    else{
+                        array_push($task_result, [
+                            'question_id' => $question->sentence_id,
+                            'user_answer' => $question->userInput,
+                        ]);
+                    }
+                }
+                else{
+                    array_push($task_result, [
+                        'question_id' => $question->sentence_id,
+                        'user_answer' => $question->userInput,
+                    ]);
+                }
             }
+            else{
+                array_push($task_result, [
+                    'question_id' => $question->sentence_id,
+                    'is_correct' => 0
+                ]);
+            }
+        }
 
-            return response()->json($this->taskService->getTaskResult($task->task_id, auth()->user()->user_id), 200);
-        }
-        else{
-            return response()->json('Task result is empty', 422);
-        }
+        return $this->taskService->saveTaskResult($task->task_id, json_decode(json_encode($task_result)));
     }
 
     public function create_missing_letters_task(Request $request)
@@ -3776,9 +3850,7 @@ class TaskController extends Controller
                     $new_task_question = new TaskQuestion();
                     $new_task_question->task_id = $new_task->task_id;
                     $new_task_question->question_id = $question->sentence_id;
-                    if(isset($question->predefined_answer) && $question->predefined_answer != ''){
-                        $new_task_question->predefined_answer = e($question->predefined_answer);
-                    }
+                    $new_task_question->checking_by = $question->checking_by;
                     $new_task_question->save();
                 }
             }
@@ -3884,9 +3956,7 @@ class TaskController extends Controller
                     $new_task_question = new TaskQuestion();
                     $new_task_question->task_id = $edit_task->task_id;
                     $new_task_question->question_id = $question->sentence_id;
-                    if(isset($question->predefined_answer) && $question->predefined_answer != ''){
-                        $new_task_question->predefined_answer = e($question->predefined_answer);
-                    }
+                    $new_task_question->checking_by = $question->checking_by;
                     $new_task_question->save();
                 }
             }

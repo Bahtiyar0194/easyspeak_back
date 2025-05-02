@@ -131,8 +131,20 @@ class TaskService
                         'audio_file.target as audio_file'
                     )
                     ->first();
-;
                     $answer->sentence = $sentence;
+                }
+
+                if(isset($answer->question_id)){
+                    $question = Sentence::where('sentence_id', '=', $answer->question_id)
+                    ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+                    ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+                    ->select(
+                        'sentences.sentence',
+                        'image_file.target as image_file',
+                        'audio_file.target as audio_file'
+                    )
+                    ->first();
+                    $answer->question = $question;
                 }
             }
 
@@ -145,6 +157,62 @@ class TaskService
         else{
             $task_result->percentage = 0;
             return $task_result;
+        }
+    }
+
+    public function saveTaskResult($task_id, $task_result){
+        if(count($task_result) > 0){
+
+            // Удаляем старые результаты выполнения задания
+            TaskAnswer::where('task_id', '=', $task_id)
+            ->where('learner_id', '=', auth()->user()->user_id)
+            ->delete();
+
+            // Сохраняем результаты выполнения задания
+            foreach ($task_result as $key => $result) {
+                $new_task_answer = new TaskAnswer();
+                $new_task_answer->task_id = $task_id;
+                $new_task_answer->learner_id = auth()->user()->user_id;
+
+                if(isset($result->is_correct)){
+                    $new_task_answer->is_correct = $result->is_correct;
+                }
+    
+                if(isset($result->right_answer)){
+                    $new_task_answer->right_answer = $result->right_answer;
+                }
+
+                if(isset($result->user_answer)){
+                    $new_task_answer->user_answer = $result->user_answer;
+                }
+
+                if(isset($result->comment)){
+                    $new_task_answer->comment = $result->comment;
+                }
+
+                if(isset($result->word_id)){
+                    $new_task_answer->word_id = $result->word_id;
+                }
+
+                if(isset($result->sentence_id)){
+                    $new_task_answer->sentence_id = $result->sentence_id;
+                }
+
+                if(isset($result->question_id)){
+                    $new_task_answer->question_id = $result->question_id;
+                }
+
+                if(isset($result->comment)){
+                    $new_task_answer->comment = $result->comment;
+                }
+    
+                $new_task_answer->save();
+            }
+
+            return response()->json($this->getTaskResult($task_id, auth()->user()->user_id), 200);
+        }
+        else{
+            return response()->json('Task result is empty', 422);
         }
     }
 
@@ -262,7 +330,7 @@ class TaskService
         ->select(
             'sentences.sentence_id',
             'task_questions.task_question_id',
-            'task_questions.predefined_answer',
+            'task_questions.checking_by',
             'sentences.sentence',
             'image_file.target as image_file',
             'audio_file.target as audio_file',
