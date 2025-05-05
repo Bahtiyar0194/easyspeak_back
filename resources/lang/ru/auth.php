@@ -30,4 +30,5 @@ return [
     'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Для каждого предложения необходимо добавить два или более вариантов пропущенных слов.',
     'you_cannot_remove_a_word_with_one_letter' => 'Вы не можете удалить слово с одной буквой.',
     'add_materials_in_each_sentence' => 'Добавьте материалы в каждую фразу.',
+    'you_are_not_a_member_of_group' => 'Вы не являетесь участником группы. Пожалуйста, свяжитесь с администратором группы для получения доступа.',
 ];

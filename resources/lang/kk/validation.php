@@ -202,11 +202,23 @@ return [
             'min' => 'Кем дегенде тізімнен :min сөз таңдауыңыз қажет',
         ],
 
+        'generate_new_word_audio_file' => [
+            'required' => 'Сөзге дыбыс жазбасын генерациялау қажет',
+        ],
+
+        'generate_edit_word_audio_file' => [
+            'required' => 'Сөзге дыбыс жазбасын генерациялау қажет',
+        ],
+
         'sentences_count' => [
             'min' => 'Кем дегенде тізімнен :min сөйлем таңдауыңыз қажет',
         ],
 
         'generate_new_sentence_audio_file' => [
+            'required' => 'Cөйлемге дыбыс жазбасын генерациялау қажет',
+        ],
+
+        'generate_edit_sentence_audio_file' => [
             'required' => 'Cөйлемге дыбыс жазбасын генерациялау қажет',
         ],
 

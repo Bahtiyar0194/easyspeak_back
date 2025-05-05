@@ -233,6 +233,7 @@ class DictionaryController extends Controller
             'course_id' => 'required|numeric',
         ];
 
+
         if($request['upload_new_word_image_file'] == 'true'){
             
             $upload_config = UploadConfiguration::where('material_type_id', '=', 3)
@@ -244,7 +245,10 @@ class DictionaryController extends Controller
             $rules['new_word_image_file_id'] = 'numeric';
         }
 
-        if($request['upload_new_word_audio_file'] == 'true'){
+        if($request['upload_new_word_audio_file'] == 'generate'){
+            $rules['generate_new_word_audio_file'] = 'required|string';
+        }
+        elseif($request['upload_new_word_audio_file'] == 'true'){
             
             $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
             ->first();
@@ -269,6 +273,7 @@ class DictionaryController extends Controller
         $new_word->word = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->word)));
         $new_word->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
+        
         if($request['upload_new_word_image_file'] == 'true'){
     
             $word_image_file = $request->file('new_word_image_file');
@@ -298,7 +303,23 @@ class DictionaryController extends Controller
             }
         }
 
-        if($request['upload_new_word_audio_file'] == 'true'){
+        if($request['upload_new_word_audio_file'] == 'generate'){
+            $binary = base64_decode($request->input('generate_new_word_audio_file'));
+            $file_name = uniqid() . '.mp3';
+
+            Storage::put("/public/{$file_name}", $binary);
+            $file_size = Storage::size("/public/{$file_name}");
+
+            $new_file = new MediaFile();
+            $new_file->file_name = $request['word'];
+            $new_file->target = $file_name;
+            $new_file->size = $file_size / 1048576;
+            $new_file->material_type_id = 2;
+            $new_file->save();
+
+            $new_word->audio_file_id = $new_file->file_id;
+        }
+        elseif($request['upload_new_word_audio_file'] == 'true'){
     
             $word_audio_file = $request->file('new_word_audio_file');
 
@@ -372,7 +393,10 @@ class DictionaryController extends Controller
             $rules['edit_word_image_file_id'] = 'required|numeric';
         }
 
-        if($request['upload_edit_word_audio_file'] == 'true'){
+        if($request['upload_edit_word_audio_file'] == 'generate'){
+            $rules['generate_edit_word_audio_file'] = 'required|string';
+        }
+        elseif($request['upload_edit_word_audio_file'] == 'true'){
             
             $upload_config = UploadConfiguration::where('material_type_id', '=', 2)
             ->first();
@@ -427,7 +451,23 @@ class DictionaryController extends Controller
                 }
             }
     
-            if($request['upload_edit_word_audio_file'] == 'true'){
+            if($request['upload_edit_word_audio_file'] == 'generate'){
+                $binary = base64_decode($request->input('generate_edit_word_audio_file'));
+                $file_name = uniqid() . '.mp3';
+    
+                Storage::put("/public/{$file_name}", $binary);
+                $file_size = Storage::size("/public/{$file_name}");
+    
+                $new_file = new MediaFile();
+                $new_file->file_name = $request['word'];
+                $new_file->target = $file_name;
+                $new_file->size = $file_size / 1048576;
+                $new_file->material_type_id = 2;
+                $new_file->save();
+    
+                $edit_word->audio_file_id = $new_file->file_id;
+            }
+            elseif($request['upload_edit_word_audio_file'] == 'true'){
         
                 $word_audio_file = $request->file('edit_word_audio_file');
     

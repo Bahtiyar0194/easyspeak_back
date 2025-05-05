@@ -29,4 +29,5 @@ return [
     'you_must_add_two_or_more_options_of_the_missing_words_for_each_sentence' => 'Әр сөйлем үшін жетіспейтін сөздердің екі немесе одан да көп нұсқаларын қосу қажет.',
     'you_cannot_remove_a_word_with_one_letter' => 'Сөзде бір әріптен кем болмауы қажет',
     'add_materials_in_each_sentence' => 'Әр сөйлемге материал қосуыңыз қажет.',
+    'you_are_not_a_member_of_group' => 'Сіз бұл топтың мүшесі емессіз. Топ әкімшісімен хабарласып, қолжетімділікті сұрауыңыз қажет.',
 ];

@@ -360,6 +360,32 @@ class TaskController extends Controller
 
     public function check_answers(Request $request){
         $task = Task::findOrFail($request->task_id);
+
+        $mentor_id = $request->mentor_id;
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+
+        if($auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
+            $mentor_id = $auth_user->user_id;
+        }
+        else{
+            $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+            ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+            ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+            ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+            ->where('tasks.task_id', '=', $task->task_id)
+            ->where('group_members.member_id', '=', $auth_user->user_id)
+            ->first();
+    
+            if(!isset($is_member)){
+                // Если пользователь не является участником группы, возвращаем ошибку
+                return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
+            }
+        } 
+
+
         $task_result = [];
         $questions = json_decode($request->questions);
 
@@ -422,24 +448,28 @@ class TaskController extends Controller
                                         'is_correct' => $grade,
                                         'right_answer' => ($grade === 1 || $grade === '1') ? "<p class='font-medium mb-0 text-success underline'>{$question->userInput}</p>" : null,
                                         'user_answer' => ($grade === 0 || $grade === '0') ? "<p class='font-medium mb-0 text-danger underline'>{$question->userInput}</p>" : null,
+                                        'mentor_id' => $mentor_id,
                                         'comment' => $comment,
                                     ]);
                                 } else {
                                     array_push($task_result, [
                                         'question_id' => $question->sentence_id,
                                         'user_answer' => $question->userInput,
+                                        'mentor_id' => $mentor_id
                                     ]);
                                 }
                             } else {
                                 array_push($task_result, [
                                     'question_id' => $question->sentence_id,
                                     'user_answer' => $question->userInput,
+                                    'mentor_id' => $mentor_id
                                 ]);
                             }
                         } else {
                             array_push($task_result, [
                                 'question_id' => $question->sentence_id,
                                 'user_answer' => $question->userInput,
+                                'mentor_id' => $mentor_id
                             ]);
                         }
                     }
@@ -447,6 +477,7 @@ class TaskController extends Controller
                         array_push($task_result, [
                             'question_id' => $question->sentence_id,
                             'user_answer' => $question->userInput,
+                            'mentor_id' => $mentor_id
                         ]);
                     }
                 }
@@ -454,6 +485,7 @@ class TaskController extends Controller
                     array_push($task_result, [
                         'question_id' => $question->sentence_id,
                         'user_answer' => $question->userInput,
+                        'mentor_id' => $mentor_id
                     ]);
                 }
             }
@@ -3989,6 +4021,9 @@ class TaskController extends Controller
     public function get_answer_the_questions_task(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+                        
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
 
         $find_task = $this->taskService->findTask($request->task_id);
 
@@ -3999,17 +4034,31 @@ class TaskController extends Controller
             return response()->json('task option is not found', 404);
         }
 
-        $task_questions = $this->taskService->getTaskQuestions($find_task->task_id, $language, $task_options);
+        $is_member = Task::join('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+        ->join('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+        ->join('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+        ->join('groups', 'groups.level_id', '=', 'course_levels.level_id')
+        ->join('group_members', 'group_members.group_id', '=', 'groups.group_id')
+        ->where('tasks.task_id', $find_task->task_id)
+        ->where('group_members.member_id', $auth_user->user_id)
+        ->exists();
 
-        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+        // Проверяем, является ли пользователь участником группы
+        if($is_member || $auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
+            $task_questions = $this->taskService->getTaskQuestions($find_task->task_id, $language, $task_options);
+
+            $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+        
+            $task = new \stdClass();
     
-        $task = new \stdClass();
-
-        $task->task = $find_task;
-        $task->options = $task_options;
-        $task->questions = $task_questions;
-        $task->materials = $task_materials;
-
-        return response()->json($task, 200);
+            $task->task = $find_task;
+            $task->options = $task_options;
+            $task->questions = $task_questions;
+            $task->materials = $task_materials;
+    
+            return response()->json($task, 200);
+        }
+        // Если пользователь не является участником группы, возвращаем ошибку
+        return response()->json([trans('auth.you_are_not_a_member_of_group')], 422);
     }
 }

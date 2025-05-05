@@ -93,6 +93,10 @@ class CourseController extends Controller
              $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
         }
 
+        $levels = $levels->sortBy('level_id') // сортировка по level_id ↓
+        ->sortByDesc('is_available') // потом сортировка по is_available ↓
+        ->values(); // сброс ключей
+
         $data = new \stdClass();
         $data->course = $course;
         $data->levels = $levels;

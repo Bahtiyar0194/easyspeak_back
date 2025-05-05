@@ -202,6 +202,10 @@ class TaskService
                     $new_task_answer->question_id = $result->question_id;
                 }
 
+                if(isset($result->mentor_id)){
+                    $new_task_answer->mentor_id = $result->mentor_id;
+                }
+
                 if(isset($result->comment)){
                     $new_task_answer->comment = $result->comment;
                 }

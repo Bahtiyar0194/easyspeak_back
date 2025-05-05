@@ -210,14 +210,21 @@ return [
         'words_count' => [
             'min' => 'Минимальное количество выбранных слов должно быть :min',
         ],
+        'generate_new_word_audio_file' => [
+            'required' => 'Сгенерируйте аудиофайл для слова',
+        ],
+        'generate_edit_word_audio_file' => [
+            'required' => 'Сгенерируйте аудиофайл для слова',
+        ],
         'sentences_count' => [
             'min' => 'Минимальное количество выбранных фраз должно быть :min',
         ],
-
         'generate_new_sentence_audio_file' => [
             'required' => 'Сгенерируйте аудиофайл для фразы',
         ],
-
+        'generate_edit_sentence_audio_file' => [
+            'required' => 'Сгенерируйте аудиофайл для фразы',
+        ],
         'sections_count' => [
             'min' => 'Минимальное количество созданных секций должно быть :min',
         ],
