@@ -30,4 +30,6 @@ return [
     'you_cannot_remove_a_word_with_one_letter' => 'Сөзде бір әріптен кем болмауы қажет',
     'add_materials_in_each_sentence' => 'Әр сөйлемге материал қосуыңыз қажет.',
     'you_are_not_a_member_of_group' => 'Сіз бұл топтың мүшесі емессіз. Топ әкімшісімен хабарласып, қолжетімділікті сұрауыңыз қажет.',
+    'rate_the_unverified_answers' => 'Тексерілмеген жауаптарды "Дұрыс" немесе "Дұрыс емес" деп бағалауыңыз қажет.',
+    'please_comment_on_all_incorrect_answers' => 'Барлық дұрыс емес жауаптарға пікір қалдыруыңыз қажет.',
 ];

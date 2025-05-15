@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
+use App\Http\Controllers\ConferenceController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\OperationController;
@@ -83,6 +84,15 @@ Route::group([
             Route::post('/delete_logo/{logo_variable}', [SchoolController::class, 'delete_logo']);
             Route::post('/upload_favicon', [SchoolController::class, 'upload_favicon']);
             Route::post('/delete_favicon', [SchoolController::class, 'delete_favicon']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'conferences'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::post('/create', [ConferenceController::class, 'create'])->middleware('check_roles');
+            Route::get('/get_attributes', [ConferenceController::class, 'get_attributes']);
         });
     });
 
@@ -177,7 +187,9 @@ Route::group([
             Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
             Route::delete('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
             Route::post('/save_result/{task_id}', [TaskController::class, 'save_task_result'])->middleware('check_roles');
+            Route::post('/change_result/{completed_task_id}', [TaskController::class, 'change_task_result'])->middleware('check_roles');
             Route::post('/check_answers/{task_id}', [TaskController::class, 'check_answers'])->middleware('check_roles');
+            Route::post('/get_task_results', [TaskController::class, 'get_task_results']);
 
             Route::post('/create/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
             Route::post('/edit/missing_letters/{task_id}', [TaskController::class, 'edit_missing_letters_task'])->middleware('check_roles');

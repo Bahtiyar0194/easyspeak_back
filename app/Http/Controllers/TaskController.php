@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Models\Group;
 use App\Models\Task;
 use App\Models\TaskLang;
 use App\Models\TaskOption;
@@ -9,6 +10,8 @@ use App\Models\TaskWord;
 use App\Models\MissingLetter;
 use App\Models\TaskSentence;
 use App\Models\TaskQuestion;
+use App\Models\TaskAnswer;
+use App\Models\CompletedTask;
 use App\Models\MissingWord;
 use App\Models\WordSection;
 use App\Models\WordSectionItem;
@@ -20,8 +23,6 @@ use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\UploadConfiguration;
-
-use App\Models\TaskAnswer;
 
 use App\Services\TaskService;
 
@@ -85,6 +86,20 @@ class TaskController extends Controller
             'users.avatar'
         )
         ->distinct()
+        ->orderBy('users.last_name', 'asc')
+        ->get();
+
+        $mentors = CompletedTask::leftJoin('users', 'users.user_id', '=', 'completed_tasks.mentor_id')
+        ->select(
+            'users.user_id',
+            'users.first_name',
+            'users.last_name',
+            DB::raw("CONCAT(users.last_name, ' ', users.first_name) AS full_name"),
+            'users.avatar'
+        )
+        ->distinct()
+        ->where('users.school_id', '=', auth()->user()->school_id)
+        ->where('users.status_type_id', '!=', 2)
         ->orderBy('users.last_name', 'asc')
         ->get();
 
@@ -163,6 +178,30 @@ class TaskController extends Controller
 
                     $section->lessons = $lessons;
                 }
+
+                $groups = Group::leftJoin('users', 'users.user_id', '=', 'groups.mentor_id')
+                ->where('groups.level_id', '=', $level->level_id)
+                ->where('groups.status_type_id', '=', 1)
+                ->select(
+                    'groups.group_id',
+                    'groups.group_name'
+                );
+
+                // Проверяем роли авторизованного пользователя
+                $auth_user = auth()->user();
+                $isOwner = $auth_user->hasRole(['school_owner']);
+                $isAdmin = $auth_user->hasRole(['school_admin']);
+                $isMentor = $auth_user->hasRole(['mentor']);
+
+                // Если пользователь - куратор, то показываем только свои группы
+                if ($isMentor && !$isAdmin && !$isOwner) {
+                    $groups->where('groups.mentor_id', '=', $auth_user->user_id);
+                }
+                else{
+                    $groups->where('users.school_id', '=', $auth_user->school_id);
+                }
+
+                $level->groups = $groups->get();
             }
         }
 
@@ -172,6 +211,7 @@ class TaskController extends Controller
         $attributes->task_types = $task_types;
         $attributes->statuses = $statuses;
         $attributes->operators = $operators;
+        $attributes->mentors = $mentors;
         $attributes->courses = $courses;
 
         return response()->json($attributes, 200);
@@ -350,41 +390,20 @@ class TaskController extends Controller
 
     public function save_task_result(Request $request){
         $task = Task::findOrFail($request->task_id);
-
-        $task_type = TaskType::where('task_type_id', '=', $task->task_type_id);
-
         $task_result = json_decode($request->task_result);
 
         return $this->taskService->saveTaskResult($task->task_id, $task_result);
     }
 
+    public function change_task_result(Request $request){
+        $completed_task = CompletedTask::findOrFail($request->completed_task_id);
+        $answers = json_decode($request->answers);
+
+        return $this->taskService->changeTaskResult($completed_task->completed_task_id, $answers);
+    }
+
     public function check_answers(Request $request){
         $task = Task::findOrFail($request->task_id);
-
-        $mentor_id = $request->mentor_id;
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-
-        if($auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
-            $mentor_id = $auth_user->user_id;
-        }
-        else{
-            $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
-            ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
-            ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
-            ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-            ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-            ->where('tasks.task_id', '=', $task->task_id)
-            ->where('group_members.member_id', '=', $auth_user->user_id)
-            ->first();
-    
-            if(!isset($is_member)){
-                // Если пользователь не является участником группы, возвращаем ошибку
-                return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
-            }
-        } 
-
 
         $task_result = [];
         $questions = json_decode($request->questions);
@@ -448,28 +467,24 @@ class TaskController extends Controller
                                         'is_correct' => $grade,
                                         'right_answer' => ($grade === 1 || $grade === '1') ? "<p class='font-medium mb-0 text-success underline'>{$question->userInput}</p>" : null,
                                         'user_answer' => ($grade === 0 || $grade === '0') ? "<p class='font-medium mb-0 text-danger underline'>{$question->userInput}</p>" : null,
-                                        'mentor_id' => $mentor_id,
                                         'comment' => $comment,
                                     ]);
                                 } else {
                                     array_push($task_result, [
                                         'question_id' => $question->sentence_id,
                                         'user_answer' => $question->userInput,
-                                        'mentor_id' => $mentor_id
                                     ]);
                                 }
                             } else {
                                 array_push($task_result, [
                                     'question_id' => $question->sentence_id,
                                     'user_answer' => $question->userInput,
-                                    'mentor_id' => $mentor_id
                                 ]);
                             }
                         } else {
                             array_push($task_result, [
                                 'question_id' => $question->sentence_id,
                                 'user_answer' => $question->userInput,
-                                'mentor_id' => $mentor_id
                             ]);
                         }
                     }
@@ -477,7 +492,6 @@ class TaskController extends Controller
                         array_push($task_result, [
                             'question_id' => $question->sentence_id,
                             'user_answer' => $question->userInput,
-                            'mentor_id' => $mentor_id
                         ]);
                     }
                 }
@@ -485,7 +499,6 @@ class TaskController extends Controller
                     array_push($task_result, [
                         'question_id' => $question->sentence_id,
                         'user_answer' => $question->userInput,
-                        'mentor_id' => $mentor_id
                     ]);
                 }
             }
@@ -499,6 +512,179 @@ class TaskController extends Controller
 
         return $this->taskService->saveTaskResult($task->task_id, json_decode(json_encode($task_result)));
     }
+
+    public function get_task_results(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+    
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+    
+        // Получаем параметры лимита на страницу
+        $per_page = $request->per_page ?: 10;
+    
+        // Получаем параметры сортировки
+        $sortKey = $request->input('sort_key', 'completed_tasks.created_at');
+        $sortDirection = $request->input('sort_direction', 'asc');
+    
+        // Строим основной запрос
+        $query = CompletedTask::leftJoin('tasks', 'tasks.task_id', '=', 'completed_tasks.task_id')
+            ->leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
+            ->leftJoin('users as learner', 'learner.user_id', '=', 'completed_tasks.learner_id')
+            ->leftJoin('users as mentor', 'mentor.user_id', '=', 'completed_tasks.mentor_id')
+            ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
+            ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
+            ->leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+            ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+            ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+            ->leftJoin('course_levels_lang', 'course_levels_lang.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('courses', 'courses.course_id', '=', 'course_levels.course_id')
+            ->leftJoin('courses_lang', 'courses_lang.course_id', '=', 'courses.course_id')
+
+                // ← Добавляем связи с группами
+            ->leftJoin('group_members', function ($join) {
+                $join->on('group_members.member_id', '=', 'completed_tasks.learner_id');
+            })
+            ->leftJoin('groups', function ($join) {
+                $join->on('groups.group_id', '=', 'group_members.group_id')
+                    ->on('groups.mentor_id', '=', 'completed_tasks.mentor_id')
+                    ->where('groups.status_type_id', '=', 1);
+            })
+            ->select(
+                'completed_tasks.completed_task_id',
+                'completed_tasks.is_completed',
+                'completed_tasks.created_at',
+                'completed_tasks.updated_at',
+                'completed_tasks.learner_id',
+                'completed_tasks.mentor_id',
+                'tasks.task_id',
+                'tasks.task_slug',
+                'tasks_lang.task_name',
+                'lessons.lesson_name',
+                'course_sections.section_name',
+                'course_levels_lang.level_name',
+                'courses_lang.course_name',
+                'learner.first_name as learner_first_name',
+                'learner.last_name as learner_last_name',
+                'learner.avatar as learner_avatar',
+                'mentor.first_name as mentor_first_name',
+                'mentor.last_name as mentor_last_name',
+                'mentor.avatar as mentor_avatar',
+                'types_of_tasks_lang.task_type_name',
+
+                        // ← Поля группы
+                'groups.group_id',
+                'groups.group_name'
+            )
+            ->distinct()
+            ->where('learner.school_id', $auth_user->school_id)
+            ->where('mentor.school_id', $auth_user->school_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)  
+            ->where('courses_lang.lang_id', '=', $language->lang_id)  
+            ->where('tasks_lang.lang_id', $language->lang_id)
+            ->where('types_of_tasks_lang.lang_id', $language->lang_id);
+
+        // Проверяем роли авторизованного пользователя
+        $isOwner = $auth_user->hasRole(['school_owner']);
+        $isAdmin = $auth_user->hasRole(['school_admin']);
+        $isMentor = $auth_user->hasRole(['mentor']);
+
+
+        // Если пользователь - куратор, то показываем только свои задачи
+        if ($isMentor && !$isAdmin && !$isOwner) {
+            $query->where('completed_tasks.mentor_id', $auth_user->user_id);
+        }
+
+        // Параметры фильтрации
+        $task_name = $request->input('task_name');
+        $task_slug = $request->input('task_slug');
+        $task_types_id = $request->task_types;
+        $course_id = $request->course_id;
+        $level_id = $request->level_id;
+        $groups_id = $request->groups;
+        $section_id = $request->section_id;
+        $lesson_id = $request->lesson_id;
+        $learner_fio = $request->learner;
+        $mentors_id = $request->mentors;
+        $created_at_from = $request->created_at_from;
+        $created_at_to = $request->created_at_to;
+        $is_completed = $request->is_completed;
+    
+        // Применяем фильтрацию по task_slug ДО paginate
+        if (!empty($task_name)) {
+            $query->where('tasks_lang.task_name', 'LIKE', '%' . $task_name . '%');
+        }
+
+        if (!empty($task_slug)) {
+            $query->where('tasks.task_slug', 'LIKE', '%' . $task_slug . '%');
+        }
+
+        if(!empty($task_types_id)){
+            $query->whereIn('types_of_tasks.task_type_id', $task_types_id);
+        }
+
+        if (!empty($course_id)) {
+            $query->where('courses.course_id', '=', $course_id);
+        }
+
+        if (!empty($level_id)) {
+            $query->where('course_levels.level_id', '=', $level_id);
+        }
+
+        if(!empty($groups_id)){
+            $query->whereIn('groups.group_id', $groups_id);
+        }
+
+        if (!empty($section_id)) {
+            $query->where('course_sections.section_id', '=', $section_id);
+        }
+
+        if (!empty($lesson_id)) {
+            $query->where('lessons.lesson_id', '=', $lesson_id);
+        }
+
+        if (!empty($learner_fio)) {
+            $query->whereRaw("CONCAT(learner.last_name, ' ', learner.first_name) LIKE ?", ['%' . $learner_fio . '%']);
+        }
+
+        if(!empty($mentors_id)){
+            $query->whereIn('completed_tasks.mentor_id', $mentors_id);
+        }
+
+        if (!empty($lesson_id)) {
+            $query->where('lessons.lesson_id', '=', $lesson_id);
+        }
+
+        // Фильтрация по дате создания
+        if ($created_at_from && $created_at_to) {
+            $query->whereBetween('completed_tasks.created_at', [$created_at_from . ' 00:00:00', $created_at_to . ' 23:59:59']);
+        } elseif ($created_at_from) {
+            $query->where('completed_tasks.created_at', '>=', $created_at_from . ' 00:00:00');
+        } elseif ($created_at_to) {
+            $query->where('completed_tasks.created_at', '<=', $created_at_to . ' 23:59:59');
+        }
+
+        
+        if (!empty($is_completed)) {
+            $query->where('completed_tasks.is_completed', '=', $is_completed);
+        }
+    
+        // Сортировка
+        $query->orderBy($sortKey, $sortDirection);
+    
+        // Пагинация
+        $completed_tasks = $query->paginate($per_page)->onEachSide(1);
+    
+        // Добавляем результаты задач
+        $completed_tasks->getCollection()->transform(function ($task) {
+            $task->task_result = $this->taskService->getTaskResult($task->task_id, $task->learner_id);
+
+            return $task;
+        });
+    
+        return response()->json($completed_tasks, 200);
+    }    
 
     public function create_missing_letters_task(Request $request)
     {

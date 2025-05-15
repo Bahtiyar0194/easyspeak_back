@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class TaskAnswer extends Model
 {
     use HasFactory;
+    protected $table = 'task_answers';
+    protected $primaryKey = 'task_answer_id';
 }

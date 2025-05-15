@@ -222,7 +222,6 @@ class UserController extends Controller
         return response()->json($users->paginate($per_page)->onEachSide(1), 200);
     }
 
-
     public function get_user(Request $request)
     {
         // Получаем пользователя по school_id и user_id

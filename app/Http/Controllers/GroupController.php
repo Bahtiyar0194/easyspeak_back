@@ -162,10 +162,14 @@ class GroupController extends Controller
             ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
             ->orderBy($sortKey, $sortDirection);
 
-            $isOnlyMentor = auth()->user()->hasOnlyRoles(['mentor']);
+            // Получаем текущего аутентифицированного пользователя
+            $auth_user = auth()->user();
+            $isOwner = $auth_user->hasRole(['school_owner']);
+            $isAdmin = $auth_user->hasRole(['school_admin']);
+            $isMentor = $auth_user->hasRole(['mentor']);
 
-            if($isOnlyMentor){
-                $groups->where('mentor_id', '=', auth()->user()->user_id);
+            if(!$isOwner && !$isAdmin && $isMentor){
+                $groups->where('groups.mentor_id', '=', auth()->user()->user_id);
             }
 
 

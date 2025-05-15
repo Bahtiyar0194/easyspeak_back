@@ -13,6 +13,7 @@ use App\Models\TaskMaterial;
 use App\Models\TaskAnswer;
 use App\Models\TaskOption;
 use App\Models\TaskSentenceMaterial;
+use App\Models\CompletedTask;
 use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
@@ -85,27 +86,50 @@ class TaskService
     }
 
     public function getTaskResult($task_id, $learner_id){
+        $completed_task = CompletedTask::leftJoin('tasks', 'completed_tasks.task_id', '=', 'tasks.task_id')
+        ->leftJoin('types_of_tasks', 'tasks.task_type_id', '=', 'types_of_tasks.task_type_id')
+        ->where('completed_tasks.task_id', '=', $task_id)
+        ->where('completed_tasks.learner_id', '=', $learner_id)
+        ->select(
+            'completed_tasks.completed_task_id',
+            'completed_tasks.learner_id',
+            'completed_tasks.mentor_id',
+            'completed_tasks.is_completed',
+            'types_of_tasks.auto_result'
+        )
+        ->first();
+
+        if(!isset($completed_task)){
+            return response()->json(['error' => 'Completed task not found'], 404);
+        }
+        // Получаем результаты выполнения задания
         $task_result = new \stdClass();
 
-        $task_answers = TaskAnswer::where('task_id', '=', $task_id)
-        ->where('learner_id', '=', $learner_id)
+        $task_answers = TaskAnswer::where('completed_task_id', '=', $completed_task->completed_task_id)
         ->get();
 
         if(count($task_answers) > 0){
             $correct_anwers = [];
             $incorrect_answers = [];
+            $unverified_answers = [];
             $correct_answers_count = 0;
             $incorrect_answers_count = 0;
+            $unverified_answers_count = 0;
 
             foreach ($task_answers as $key => $answer) {
-                if($answer->is_correct == 1){
+                if($answer->is_correct === 1){
                     array_push($correct_anwers, $answer);
                     $correct_answers_count++;
                 }
-                else{
+                elseif($answer->is_correct === 0){
                     array_push($incorrect_answers, $answer);
                     $incorrect_answers_count++;
                 }
+                else{
+                    array_push($unverified_answers, $answer);
+                    $unverified_answers_count++;
+                }
+                
 
                 if(isset($answer->word_id)){
                     $word = Dictionary::where('word_id', '=', $answer->word_id)
@@ -148,9 +172,11 @@ class TaskService
                 }
             }
 
+            $task_result->completed_task = $completed_task;
             $task_result->correct_answers_count = $correct_answers_count;
             $task_result->incorrect_answers_count = $incorrect_answers_count;
-            $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers];
+            $task_result->unverified_answers_count = $unverified_answers_count;
+            $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers, 'unverified_answers' => $unverified_answers];
             $task_result->percentage = round(($correct_answers_count / count($task_answers)) * 100, 2);
             return $task_result;
         }
@@ -161,18 +187,60 @@ class TaskService
     }
 
     public function saveTaskResult($task_id, $task_result){
-        if(count($task_result) > 0){
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+        $is_completed = true;
 
+        if(count($task_result) > 0){
             // Удаляем старые результаты выполнения задания
-            TaskAnswer::where('task_id', '=', $task_id)
-            ->where('learner_id', '=', auth()->user()->user_id)
+            CompletedTask::where('task_id', '=', $task_id)
+            ->where('learner_id', '=', $auth_user->user_id)
             ->delete();
+
+            $new_completed_task = new CompletedTask();
+            $new_completed_task->task_id = $task_id;
+            $new_completed_task->learner_id = $auth_user->user_id;
+
+            if($auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
+                $mentor_id = $auth_user->user_id;
+            }
+            else{
+                $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+                ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+                ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+                ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+                ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('tasks.task_id', '=', $task_id)
+                ->where('group_members.member_id', '=', $auth_user->user_id)
+                ->select(
+                    'groups.mentor_id',
+                )
+                ->first();
+        
+                if(!isset($is_member)){
+                    // Если пользователь не является участником группы, возвращаем ошибку
+                    return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
+                }
+
+                $mentor_id = $is_member->mentor_id;
+            } 
+
+            foreach ($task_result as $key => $result) {
+                if(!isset($result->is_correct)){
+                    $is_completed = false;
+                    break;
+                }
+            }
+
+            $new_completed_task->is_completed = $is_completed;
+            $new_completed_task->mentor_id = $mentor_id;
+
+            $new_completed_task->save();
 
             // Сохраняем результаты выполнения задания
             foreach ($task_result as $key => $result) {
                 $new_task_answer = new TaskAnswer();
-                $new_task_answer->task_id = $task_id;
-                $new_task_answer->learner_id = auth()->user()->user_id;
+                $new_task_answer->completed_task_id = $new_completed_task->completed_task_id;
 
                 if(isset($result->is_correct)){
                     $new_task_answer->is_correct = $result->is_correct;
@@ -202,18 +270,63 @@ class TaskService
                     $new_task_answer->question_id = $result->question_id;
                 }
 
-                if(isset($result->mentor_id)){
-                    $new_task_answer->mentor_id = $result->mentor_id;
-                }
-
                 if(isset($result->comment)){
                     $new_task_answer->comment = $result->comment;
                 }
-    
+
                 $new_task_answer->save();
             }
 
-            return response()->json($this->getTaskResult($task_id, auth()->user()->user_id), 200);
+            return response()->json($this->getTaskResult($task_id, $auth_user->user_id), 200);
+        }
+        else{
+            return response()->json('Task result is empty', 422);
+        }
+    }
+
+    public function changeTaskResult($completed_task_id, $answers){
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+        $is_completed = true;
+
+        if(count($answers) > 0){
+
+            foreach ($answers as $key => $answer) {
+                if($answer->is_correct === null){
+                    return response()->json(trans('auth.rate_the_unverified_answers'), 422);
+                }
+            }
+
+            foreach ($answers as $key => $answer) {
+                if($answer->is_correct === 0 && $answer->comment === null){
+                    return response()->json(trans('auth.please_comment_on_all_incorrect_answers'), 422);
+                }
+            }
+
+            foreach ($answers as $key => $answer) {
+                $task_answer = TaskAnswer::findOrFail($answer->task_answer_id);
+
+                $task_answer->is_correct = $answer->is_correct;
+
+                if($answer->is_correct === 1){
+                    $task_answer->right_answer = "<p class='font-medium mb-0 text-success underline'>{$answer->user_answer}</p>";
+                    $task_answer->user_answer = null;
+                    $task_answer->comment = null;
+                }
+                else{
+                    $task_answer->right_answer = null;
+                    $task_answer->user_answer = "<p class='font-medium mb-0 text-danger underline'>{$answer->user_answer}</p>";
+                    $task_answer->comment = $answer->comment;
+                }
+
+                $task_answer->save();
+            }
+
+            $completed_task = CompletedTask::findOrFail($completed_task_id);
+            $completed_task->is_completed = true;
+            $completed_task->save();
+
+            return response()->json('success', 200);
         }
         else{
             return response()->json('Task result is empty', 422);
