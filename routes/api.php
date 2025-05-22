@@ -93,6 +93,10 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::post('/create', [ConferenceController::class, 'create'])->middleware('check_roles');
             Route::get('/get_attributes', [ConferenceController::class, 'get_attributes']);
+            Route::get('/get_current_conferences', [ConferenceController::class, 'get_current_conferences']);
+            Route::get('/get_conference/{conference_id}', [ConferenceController::class, 'get_conference']);
+            Route::get('/get_conference_tasks/{conference_id}', [ConferenceController::class, 'get_conference_tasks']);
+            Route::post('/run_task/{conference_id}/{task_id}', [ConferenceController::class, 'run_task']);
         });
     });
 

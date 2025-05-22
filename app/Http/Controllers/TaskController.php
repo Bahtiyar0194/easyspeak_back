@@ -331,36 +331,7 @@ class TaskController extends Controller
     public function get_lesson_tasks(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-
-        $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
-        ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
-        ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
-        ->select(
-            'tasks.task_id',
-            'tasks.task_slug',
-            'tasks.task_example',
-            'tasks.task_type_id',
-            'tasks.sort_num',
-            'types_of_tasks.task_type_component',
-            'types_of_tasks.icon',
-            'types_of_tasks_lang.task_type_name',
-            'tasks_lang.task_name',
-            'tasks.created_at'
-        )     
-        ->where('tasks_lang.lang_id', '=', $language->lang_id)
-        ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)    
-        ->where('tasks.lesson_id', '=', $request->lesson_id) 
-        ->distinct()
-        ->orderBy('tasks.sort_num', 'asc')
-        ->get();
-
-        if(count($tasks) > 0){
-            foreach ($tasks as $key => $task) {
-                $task->task_result = $this->taskService->getTaskResult($task->task_id, auth()->user()->user_id);
-            }
-        }
-
-        return response()->json($tasks, 200);
+        return response()->json($this->taskService->getLessonTasks($request->lesson_id, $language, true), 200);
     }
 
     public function order(Request $request){

@@ -99,90 +99,96 @@ class TaskService
         )
         ->first();
 
-        if(!isset($completed_task)){
-            return response()->json(['error' => 'Completed task not found'], 404);
-        }
         // Получаем результаты выполнения задания
         $task_result = new \stdClass();
 
-        $task_answers = TaskAnswer::where('completed_task_id', '=', $completed_task->completed_task_id)
-        ->get();
-
-        if(count($task_answers) > 0){
-            $correct_anwers = [];
-            $incorrect_answers = [];
-            $unverified_answers = [];
-            $correct_answers_count = 0;
-            $incorrect_answers_count = 0;
-            $unverified_answers_count = 0;
-
-            foreach ($task_answers as $key => $answer) {
-                if($answer->is_correct === 1){
-                    array_push($correct_anwers, $answer);
-                    $correct_answers_count++;
-                }
-                elseif($answer->is_correct === 0){
-                    array_push($incorrect_answers, $answer);
-                    $incorrect_answers_count++;
-                }
-                else{
-                    array_push($unverified_answers, $answer);
-                    $unverified_answers_count++;
-                }
-                
-
-                if(isset($answer->word_id)){
-                    $word = Dictionary::where('word_id', '=', $answer->word_id)
-                    ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
-                    ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
-                    ->select(
-                        'dictionary.word',
-                        'image_file.target as image_file',
-                        'audio_file.target as audio_file'
-                    )
-                    ->first();
-
-                    $answer->word = $word;
-                }
-
-                if(isset($answer->sentence_id)){
-                    $sentence = Sentence::where('sentence_id', '=', $answer->sentence_id)
-                    ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
-                    ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
-                    ->select(
-                        'sentences.sentence',
-                        'image_file.target as image_file',
-                        'audio_file.target as audio_file'
-                    )
-                    ->first();
-                    $answer->sentence = $sentence;
-                }
-
-                if(isset($answer->question_id)){
-                    $question = Sentence::where('sentence_id', '=', $answer->question_id)
-                    ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
-                    ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
-                    ->select(
-                        'sentences.sentence',
-                        'image_file.target as image_file',
-                        'audio_file.target as audio_file'
-                    )
-                    ->first();
-                    $answer->question = $question;
-                }
-            }
-
-            $task_result->completed_task = $completed_task;
-            $task_result->correct_answers_count = $correct_answers_count;
-            $task_result->incorrect_answers_count = $incorrect_answers_count;
-            $task_result->unverified_answers_count = $unverified_answers_count;
-            $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers, 'unverified_answers' => $unverified_answers];
-            $task_result->percentage = round(($correct_answers_count / count($task_answers)) * 100, 2);
+        if(!isset($completed_task)){
+            $task_result->percentage = 0;
+            $task_result->completed = false;
             return $task_result;
         }
         else{
-            $task_result->percentage = 0;
-            return $task_result;
+            $task_answers = TaskAnswer::where('completed_task_id', '=', $completed_task->completed_task_id)
+            ->get();
+    
+            if(count($task_answers) > 0){
+                $correct_anwers = [];
+                $incorrect_answers = [];
+                $unverified_answers = [];
+                $correct_answers_count = 0;
+                $incorrect_answers_count = 0;
+                $unverified_answers_count = 0;
+    
+                foreach ($task_answers as $key => $answer) {
+                    if($answer->is_correct === 1){
+                        array_push($correct_anwers, $answer);
+                        $correct_answers_count++;
+                    }
+                    elseif($answer->is_correct === 0){
+                        array_push($incorrect_answers, $answer);
+                        $incorrect_answers_count++;
+                    }
+                    else{
+                        array_push($unverified_answers, $answer);
+                        $unverified_answers_count++;
+                    }
+                    
+    
+                    if(isset($answer->word_id)){
+                        $word = Dictionary::where('word_id', '=', $answer->word_id)
+                        ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+                        ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
+                        ->select(
+                            'dictionary.word',
+                            'image_file.target as image_file',
+                            'audio_file.target as audio_file'
+                        )
+                        ->first();
+    
+                        $answer->word = $word;
+                    }
+    
+                    if(isset($answer->sentence_id)){
+                        $sentence = Sentence::where('sentence_id', '=', $answer->sentence_id)
+                        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+                        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+                        ->select(
+                            'sentences.sentence',
+                            'image_file.target as image_file',
+                            'audio_file.target as audio_file'
+                        )
+                        ->first();
+                        $answer->sentence = $sentence;
+                    }
+    
+                    if(isset($answer->question_id)){
+                        $question = Sentence::where('sentence_id', '=', $answer->question_id)
+                        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+                        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+                        ->select(
+                            'sentences.sentence',
+                            'image_file.target as image_file',
+                            'audio_file.target as audio_file'
+                        )
+                        ->first();
+                        $answer->question = $question;
+                    }
+                }
+    
+                $task_result->completed_task = $completed_task;
+                $task_result->correct_answers_count = $correct_answers_count;
+                $task_result->incorrect_answers_count = $incorrect_answers_count;
+                $task_result->unverified_answers_count = $unverified_answers_count;
+                $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers, 'unverified_answers' => $unverified_answers];
+                $task_result->completed = count($unverified_answers) > 0 ? false : true;
+                $task_result->percentage = round(($correct_answers_count / count($task_answers)) * 100, 2);
+                return $task_result;
+            }
+            else{
+                $task_result->percentage = 0;
+                $task_result->completed = false;
+                return $task_result;
+            }
         }
     }
 
@@ -380,6 +386,40 @@ class TaskService
         $new_task_option->save();
     }
 
+    public function getLessonTasks($lesson_id, $language, $get_result){
+        $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
+        ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
+        ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
+        ->select(
+            'tasks.task_id',
+            'tasks.task_slug',
+            'tasks.task_example',
+            'tasks.task_type_id',
+            'tasks.sort_num',
+            'types_of_tasks.task_type_component',
+            'types_of_tasks.icon',
+            'types_of_tasks_lang.task_type_name',
+            'tasks_lang.task_name',
+            'tasks.created_at'
+        )     
+        ->where('tasks_lang.lang_id', '=', $language->lang_id)
+        ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)    
+        ->where('tasks.lesson_id', '=', $lesson_id) 
+        ->distinct()
+        ->orderBy('tasks.sort_num', 'asc')
+        ->get();
+
+
+        if($get_result === true){
+            if(count($tasks) > 0){
+                foreach ($tasks as $key => $task) {
+                    $task->task_result = $this->getTaskResult($task->task_id, auth()->user()->user_id);
+                }
+            }
+        }
+
+        return $tasks;
+    }
 
     // Получить слова задания
     public function getTaskWords($task_id, $language, $task_options){
