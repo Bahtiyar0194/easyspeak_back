@@ -409,7 +409,6 @@ class TaskService
         ->orderBy('tasks.sort_num', 'asc')
         ->get();
 
-
         if($get_result === true){
             if(count($tasks) > 0){
                 foreach ($tasks as $key => $task) {

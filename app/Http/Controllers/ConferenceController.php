@@ -12,7 +12,9 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\Conference;
 use App\Models\ConferenceTask;
+use App\Models\ConferenceMember;
 
+use App\Services\CourseService;
 use App\Services\TaskService;
 
 use Illuminate\Http\Request;
@@ -21,10 +23,12 @@ use Str;
 
 class ConferenceController extends Controller
 {
+    protected $courseService;
     protected $taskService;
 
-    public function __construct(Request $request, TaskService $taskService)
+    public function __construct(Request $request, CourseService $courseService, TaskService $taskService)
     {
+        $this->courseService = $courseService;
         $this->taskService = $taskService;
         app()->setLocale($request->header('Accept-Language'));
     }
@@ -138,7 +142,7 @@ class ConferenceController extends Controller
         ->where('conferences.end_time', '>=', now())
         ->distinct();
 
-        $isOwner = $auth_user->hasRole(['school_owner', 'school_admin']);
+        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
         $isMentor = $auth_user->hasRole(['mentor']);
         $isLearner = $auth_user->hasRole(['learner']);
 
@@ -147,11 +151,9 @@ class ConferenceController extends Controller
                 if ($isOwner) {
                     $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
                 }
-                if ($isMentor) {
-                    $query->orWhere('groups.mentor_id', '=', $auth_user->user_id);
-                }
-                if ($isLearner) {
-                    $query->orWhere('group_members.member_id', '=', $auth_user->user_id);
+                if ($isMentor || $isLearner) {
+                    $query->orWhere('groups.mentor_id', '=', $auth_user->user_id)
+                    ->orWhere('group_members.member_id', '=', $auth_user->user_id);
                 }
             });
         }        
@@ -201,10 +203,12 @@ class ConferenceController extends Controller
             ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
             ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
             ->select(
+                'conferences.conference_id',
                 'conferences.uuid',
                 'conferences.created_at',
                 'conferences.start_time',
                 'conferences.end_time',
+                'conferences.participated',
                 'lessons.lesson_name',
                 'conferences.lesson_id',
                 'courses_lang.course_name',
@@ -245,20 +249,35 @@ class ConferenceController extends Controller
             $allowed = true;
         }
         
-    
         if (!$allowed) {
             return response()->json(['type' => 'error', 'message' => 'Access denied'], 403);
         }
         
-
         // Если конференция уже закончилась
         if (now()->greaterThan(Carbon::parse($conference->end_time))) {
-            return response()->json(['type' => 'error', 'message' => trans('auth.conference_has_already_ended'), 'conference' => $conference], 200);
+            return response()->json(['type' => 'ended', 'message' => trans('auth.conference_has_already_ended'), 'conference' => $conference], 200);
         }
     
         // Если конференция ещё не началась
         if (now()->lessThan(Carbon::parse($conference->start_time))) {
             return response()->json(['type' => 'pending', 'message' => trans('auth.conference_has_not_started_yet'), 'conference' => $conference], 200);
+        }
+
+        $conference->materials = $this->courseService->getLessonMaterials($conference->lesson_id, $language);
+
+        $find_conference_member = ConferenceMember::where('conference_id', '=', $conference->conference_id)
+        ->where('member_id', '=', $auth_user->user_id)
+        ->first();
+
+        if(!isset($find_conference_member)){
+            $conference_member = new ConferenceMember();
+            $conference_member->conference_id = $conference->conference_id;
+            $conference_member->member_id = $auth_user->user_id;
+            $conference_member->save();
+
+            $save_conference = Conference::find($conference->conference_id);
+            $save_conference->participated = $conference->participated + 1;
+            $save_conference->save();
         }
     
         return response()->json(['conference' => $conference], 200);
@@ -310,7 +329,7 @@ class ConferenceController extends Controller
                 $t->learners = collect($members->map(function ($member) {
                     return clone $member;
                 }));
-                
+
                 $completed_learners_tasks = 0;
 
                 foreach ($t->learners as $learner) {
@@ -332,11 +351,19 @@ class ConferenceController extends Controller
 
             if(isset($launched)){
                 $task->launched = true;
+
+                if($conference->mentor_id !== $auth_user->user_id){
+                    if($task->task_result->completed === false){
+                        $task->to_complete = true;
+                    }
+                }
             }
             else{
                 $task->launched = false;
             }
         }
+
+
 
         return response()->json($tasks, 200);
     }

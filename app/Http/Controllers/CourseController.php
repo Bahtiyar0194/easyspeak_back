@@ -200,6 +200,7 @@ class CourseController extends Controller
             ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
             ->select(
                 'lessons.lesson_id',
+                'lessons.section_id',
                 'lessons.sort_num',
                 'lessons.lesson_name',
                 'types_of_lessons.lesson_type_id',
@@ -210,6 +211,8 @@ class CourseController extends Controller
             ->get();
 
             foreach ($lessons as $l => $lesson) {
+                $lesson->is_available = $this->courseService->lessonIsAvailable($lesson);
+                
                 $lesson_tasks = Task::where('lesson_id', '=', $lesson->lesson_id)
                 ->where('status_type_id', '=', 1)
                 ->get();
@@ -276,60 +279,16 @@ class CourseController extends Controller
         ->where('lessons.lesson_id', '=', $request->lesson_id)
         ->select(
             'lessons.lesson_id',
+            'lessons.section_id',
+            'lessons.sort_num',
             'lessons.lesson_name',
             'lessons.lesson_description'
         )
         ->first();
 
-        $lesson_materials = LessonMaterial::leftJoin('files', 'lesson_materials.file_id', '=', 'files.file_id')
-        ->leftJoin('types_of_materials as file_types', 'files.material_type_id', '=', 'file_types.material_type_id')
-        ->leftJoin('types_of_materials_lang as file_types_lang', function ($join) use ($language) {
-            $join->on('file_types.material_type_id', '=', 'file_types_lang.material_type_id')
-                 ->where('file_types_lang.lang_id', '=', $language->lang_id);
-        })
-        ->leftJoin('blocks', 'lesson_materials.block_id', '=', 'blocks.block_id')
-        ->leftJoin('types_of_materials as block_types', 'blocks.material_type_id', '=', 'block_types.material_type_id')
-        ->leftJoin('types_of_materials_lang as block_types_lang', function ($join) use ($language) {
-            $join->on('block_types.material_type_id', '=', 'block_types_lang.material_type_id')
-                 ->where('block_types_lang.lang_id', '=', $language->lang_id);
-        })
-        ->select(
-            'lesson_materials.lesson_material_id',
-            'lesson_materials.annotation',
-            'files.target',
-            'blocks.content',
-            'blocks.options',
-            'file_types.material_type_slug as file_material_type_slug',
-            'file_types_lang.material_type_name as file_material_type_name',
-            'file_types.material_type_category as file_material_type_category',
-            'file_types.icon as file_icon',
-            'block_types.material_type_slug as block_material_type_slug',
-            'block_types_lang.material_type_name as block_material_type_name',
-            'block_types.material_type_category as block_material_type_category',
-            'block_types.icon as block_icon',
-            'lesson_materials.sort_num'
-        )
-        ->where('lesson_materials.lesson_id', '=', $lesson->lesson_id)
-        ->orderBy('lesson_materials.sort_num', 'asc')
-        ->groupBy(
-            'lesson_materials.lesson_material_id', 
-            'lesson_materials.annotation',
-            'files.target',
-            'blocks.content',
-            'blocks.options',
-            'file_material_type_slug',
-            'file_material_type_name',
-            'file_material_type_category',
-            'file_icon',
-            'block_material_type_slug',
-            'block_material_type_name',
-            'block_material_type_category',
-            'block_icon',
-            'lesson_materials.sort_num'
-        ) // Группировка по ID материала
-        ->get();
+        $lesson->is_available = $this->courseService->lessonIsAvailable($lesson);
 
-        $lesson->materials = $lesson_materials;
+        $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
 
         $data->lesson = $lesson;
         
@@ -471,7 +430,7 @@ class CourseController extends Controller
         $new_lesson->lesson_description = $request->lesson_description;
         $new_lesson->section_id = $section->section_id;
         $new_lesson->lesson_type_id = $request->lesson_type_id;
-        $new_lesson->sort_num = $last_lesson ? $last_lesson->sort_num + 1 : 1;
+        $new_lesson->sort_num = $last_lesson ? ($last_lesson->sort_num + 1) : 1;
         $new_lesson->save();
 
         return response()->json($new_lesson, 200);
