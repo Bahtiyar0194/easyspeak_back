@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\UserRole;
 use App\Models\UserOperation;
+use App\Models\Group;
 use App\Models\Language;
 use App\Models\School;
 use App\Models\RoleType;
@@ -183,6 +184,8 @@ class UserController extends Controller
         $roles_id = $request->roles;
         $created_at_from = $request->created_at_from;
         $created_at_to = $request->created_at_to;
+        // Проверка на то состоит ли пользователь в какой нибудь группе
+        $is_a_member = $request->is_a_member;
 
         // Фильтрация по ФИО пользователя
         if (!empty($user_fio)) {
@@ -218,7 +221,30 @@ class UserController extends Controller
             $users->where('users.created_at', '<=', $created_at_to . ' 23:59:59');
         }
 
-        // Возвращаем пагинированный результат
+        if (!empty($is_a_member)) {
+            // Сначала пагинация, потом map
+            $paginatedUsers = $users->paginate($per_page)->onEachSide(1);
+        
+            // Теперь модифицируем коллекцию
+            $paginatedUsers->getCollection()->transform(function ($user) {
+                $groups = Group::leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+                    ->select(
+                        'groups.group_id',
+                        'groups.group_name'
+                    )
+                    ->where('groups.status_type_id', '=', 1)
+                    ->where('group_members.member_id', '=', $user->user_id)
+                    ->get();
+        
+                $user->groups = $groups;
+        
+                return $user;
+            });
+        
+            return response()->json($paginatedUsers, 200);
+        }
+        
+        // Если $is_a_member пустой
         return response()->json($users->paginate($per_page)->onEachSide(1), 200);
     }
 

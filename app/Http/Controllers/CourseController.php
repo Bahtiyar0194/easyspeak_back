@@ -204,6 +204,7 @@ class CourseController extends Controller
                 'lessons.sort_num',
                 'lessons.lesson_name',
                 'types_of_lessons.lesson_type_id',
+                'types_of_lessons.lesson_type_slug',
                 'types_of_lessons_lang.lesson_type_name'
             )
             ->distinct()
@@ -237,6 +238,11 @@ class CourseController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $data = new \stdClass();
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+
+        $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
         ->where('courses.course_name_slug', '=', $request->course_slug)
@@ -273,7 +279,8 @@ class CourseController extends Controller
 
         $data->level = $level;
 
-        $lesson = Lesson::leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+        $lesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+        ->leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
         ->leftJoin('course_levels', 'course_sections.level_id', '=', 'course_levels.level_id')
         ->where('course_levels.level_id', '=', $level->level_id)
         ->where('lessons.lesson_id', '=', $request->lesson_id)
@@ -282,11 +289,13 @@ class CourseController extends Controller
             'lessons.section_id',
             'lessons.sort_num',
             'lessons.lesson_name',
-            'lessons.lesson_description'
+            'lessons.lesson_description',
+            'types_of_lessons.lesson_type_slug'
         )
         ->first();
 
         $lesson->is_available = $this->courseService->lessonIsAvailable($lesson);
+        $lesson->is_only_learner = $isOnlyLearner;
 
         $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
 
