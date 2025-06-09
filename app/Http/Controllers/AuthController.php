@@ -163,6 +163,7 @@ class AuthController extends Controller
         }
 
         $getSchoolUser->lang_id = $language->lang_id;
+        $getSchoolUser->status_type_id = 1;
         $getSchoolUser->save();
 
         return response()->json(['token' => auth()->user()->createToken(Str::random(60))->plainTextToken], 200);

@@ -92,6 +92,7 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::post('/create', [ConferenceController::class, 'create'])->middleware('check_roles');
+            Route::post('/delete/{uuid}', [ConferenceController::class, 'delete'])->middleware('check_roles');
             Route::get('/get_attributes', [ConferenceController::class, 'get_attributes']);
             Route::get('/get_current_conferences', [ConferenceController::class, 'get_current_conferences']);
             Route::get('/get_conference/{conference_id}', [ConferenceController::class, 'get_conference']);

@@ -346,7 +346,7 @@ class UserController extends Controller
             return response()->json($email_error, 422);
         }
 
-        $email_hash = Str::random(32);
+        $password = Str::random(8);
 
         $new_user = new User();
         $new_user->first_name = $request->first_name;
@@ -356,7 +356,7 @@ class UserController extends Controller
         $new_user->school_id = $auth_user->school_id;
         $new_user->current_role_id = $request->roles[0];
         $new_user->status_type_id = 4;
-        $new_user->email_hash = $email_hash;
+        $new_user->password = bcrypt($password);
         $new_user->save();
 
         $role_names = RoleType::leftJoin('types_of_user_roles_lang', 'types_of_user_roles.role_type_id', '=', 'types_of_user_roles_lang.role_type_id')
@@ -387,8 +387,11 @@ class UserController extends Controller
         $mail_body = new \stdClass();
         $mail_body->subject = $getSchool->school_name;
         $mail_body->first_name = $request->first_name;
-        $mail_body->activation_url = $request->header('Origin') . '/activation/' . $email_hash;
+        $mail_body->login_url = $request->header('Origin') . '/auth/login';
         $mail_body->school_name = $getSchool->school_name;
+        $mail_body->school_domain = $getSchool->school_domain;
+        $mail_body->login = $request->email;
+        $mail_body->password = $password;
 
         Mail::to($new_user->email)->send(new WelcomeMail($mail_body));
         return response()->json($new_user, 200);

@@ -125,6 +125,7 @@ class ConferenceController extends Controller
         ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
         ->select(
             'conferences.uuid',
+            'conferences.operator_id',
             'conferences.created_at',
             'conferences.start_time',
             'conferences.end_time',
@@ -182,7 +183,6 @@ class ConferenceController extends Controller
         
             return $conference;
         });
-
 
 
         return response()->json($current_conferences, 200);
@@ -400,10 +400,26 @@ class ConferenceController extends Controller
         $conference->uuid = str_replace('-', '', (string) Str::uuid());
         $conference->group_id = $request->group_id;
         $conference->lesson_id = $request->lesson_id;
+        $conference->operator_id = auth()->user()->user_id;
         $conference->start_time = date('Y-m-d H:i:s');
         $conference->end_time = date('Y-m-d H:i:s', strtotime('+2 hour'));
         $conference->save();
 
         return response()->json($conference, 200);
+    }
+
+    public function delete(Request $request)
+    {
+        $auth_user = auth()->user();
+
+        $conference = Conference::where('uuid', $request->uuid)
+        ->first();
+
+        if(isset($conference) && $conference->operator_id === $auth_user->user_id){
+            $conference->delete();
+            return response()->json('delete conference is success', 200);
+        }
+
+        return response()->json('delete conference is failed', 404);
     }
 }
