@@ -385,7 +385,7 @@ class UserController extends Controller
         $getSchool = School::find(auth()->user()->school_id);
 
         $mail_body = new \stdClass();
-        $mail_body->subject = $getSchool->school_name;
+        $mail_body->subject = $getSchool->school_name.' | Регистрация нового пользователя.';
         $mail_body->first_name = $request->first_name;
         $mail_body->login_url = $request->header('Origin') . '/auth/login';
         $mail_body->school_name = $getSchool->school_name;

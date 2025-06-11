@@ -36,6 +36,9 @@ Route::group([
     ], function ($router) {
         Route::post('/login', [AuthController::class, 'login']);
         Route::post('/register', [AuthController::class, 'register']);
+        Route::post('/password_recovery', [AuthController::class, 'password_recovery']);
+        Route::get('/check_email_hash/{hash}', [AuthController::class, 'check_email_hash']);
+        Route::post('/new_password/{hash}', [AuthController::class, 'new_password']);
 
         Route::group(['prefix' => 'google'], function () {
             Route::get('/login', [AuthController::class, 'google_login']);

@@ -1,9 +1,10 @@
 @extends('layouts.email')
 
-@section('title', '{{$mail_body->school_name}}')
+@section('title', '{{$mail_body->school_name}} | Восстановление пароля.')
 
 @section('content')
-<b>{{$mail_body->first_name}}, Добро пожаловать!</b>
-<p>Вас приветствует {{$mail_body->school_name}}.</p>
-<p>Для восстановления пароля Вашего аккаунта просим Вас перейти по данной <a href="{{$mail_body->verification_url}}">ссылке</a>. Код восстановления: <b>{{$mail_body->verification_code}}</b></p>
+<b>Здравствуйте, {{$mail_body->first_name}}.</b>
+<p>Вы отправили запрос на восстановление пароля.</p>
+<p>Ссылка для восстановления пароля вашего аккаунта: <a href="{{$mail_body->recovery_url}}"><b>{{$mail_body->recovery_url}}</b></a></p>
+<p>Если это были не вы — проигнорируйте данное письмо и пароль останется прежним. Возможно кто то отправил запрос по ошибке. Но лучше убедиться в том, что никто не имеет доступа к вашему почтовому ящику.</p>
 @endsection

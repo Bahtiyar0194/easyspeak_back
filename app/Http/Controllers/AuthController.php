@@ -13,6 +13,9 @@ use App\Models\UserRole;
 use App\Models\Language;
 use App\Models\School;
 
+use Mail;
+use App\Mail\PasswordRecoveryMail;
+
 use App\Services\TwilioWhatsAppService;
 
 class AuthController extends Controller
@@ -35,8 +38,8 @@ class AuthController extends Controller
             'first_registration' => 'required',
             'school_name' => 'nullable|required_if:first_registration,true|string|between:2,100',
             'school_domain' => 'nullable|required_if:first_registration,true|string|between:2,20|regex:/^[a-z]+$/u|unique:schools',
-            'password' => 'required|string|min:6',
-            'password_confirmation' => 'required_with:password|same:password|min:6',
+            'password' => 'required|string|min:8',
+            'password_confirmation' => 'required_with:password|same:password|min:8',
             'lang' => 'required'
         ]);
 
@@ -73,7 +76,7 @@ class AuthController extends Controller
             return response()->json(['registration_failed' => 'First registration: true or false'], 422);
         }
 
-        $this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
+        //$this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
 
         $new_user = new User();
         $new_user->first_name = e($request->first_name);
@@ -169,6 +172,96 @@ class AuthController extends Controller
         return response()->json(['token' => auth()->user()->createToken(Str::random(60))->plainTextToken], 200);
     }
 
+    public function password_recovery(Request $request)
+    {
+        $rules = [
+            'email' => 'required|email',
+            'school_domain' => 'required',
+            'lang' => 'required',
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        app()->setLocale($request->lang);
+        $language = Language::where('lang_tag', '=', $request->lang)->first();
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $getSchool = School::where('school_domain', $request->school_domain)->first();
+
+        if (!isset($getSchool)) {
+            return response()->json(['school_domain' => [trans('auth.school_not_found')]], 422);
+        }
+
+        $getSchoolUser = User::where('email', $request->email)
+            ->where('school_id', $getSchool->school_id)
+            ->first();
+
+        if (!isset($getSchoolUser)) {
+            return response()->json(['email' => [trans('auth.not_found')]], 401);
+        }
+
+        $email_hash = Str::random(32);
+
+        $getSchoolUser->email_hash = $email_hash;
+        $getSchoolUser->status_type_id = 5;
+        $getSchoolUser->save();
+
+        $mail_body = new \stdClass();
+        $mail_body->subject = $getSchool->school_name.' | Восстановление пароля.';
+        $mail_body->first_name = $getSchoolUser->first_name;
+        $mail_body->recovery_url = $request->header('Origin') . '/auth/change-password/'.$email_hash;
+        $mail_body->school_name = $getSchool->school_name;
+
+        Mail::to($getSchoolUser->email)->send(new PasswordRecoveryMail($mail_body));
+
+        return response()->json("success", 200);
+    }
+
+    public function check_email_hash(Request $request)
+    {
+        $getUser = User::where('email_hash', '=', $request->hash)
+            ->where('status_type_id', '=', 5)
+            ->select(
+                'first_name'
+            )
+            ->first();
+
+        if(isset($getUser)){
+            return response()->json($getUser, 200);
+        }
+        else{
+            return response()->json(['invalid' => true], 422);
+        }
+    }
+
+    public function new_password(Request $request){
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string|min:8',
+            'password_confirmation' => 'required_with:password|same:password|min:8'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $getUser = User::where('email_hash', '=', $request->hash)
+            ->where('status_type_id', '=', 5)
+            ->first();
+
+        if(isset($getUser)){
+            $getUser->password = bcrypt($request->password);
+            $getUser->status_type_id = 1;
+            $getUser->save();
+
+            return response()->json("success", 200);
+        }
+        else{
+            return response()->json(['invalid' => true], 422);
+        }
+    }
 
     public function google_login()
     {

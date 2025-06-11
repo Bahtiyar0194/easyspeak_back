@@ -260,10 +260,10 @@ return [
         'last_name'             => 'Тегіңіз',
         'login'                 => 'Логин', 
         'iin'                   => 'ЖСН',
-        'password'              => 'Құпия сөз',
-        'password_confirmation' => 'Құпия сөзді растау',
+        'password'              => 'Құпиясөз',
+        'password_confirmation' => 'Құпиясөзді растау',
 
-        'recovery_code'         => 'Құпия сөзді қалпына келтіру коды',
+        'recovery_code'         => 'Құпиясөзді қалпына келтіру коды',
 
         'school_name'           => 'Мектептің атауы',
         'school_domain'         => 'Мектептің домендік атауы',
