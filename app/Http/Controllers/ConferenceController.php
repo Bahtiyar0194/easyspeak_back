@@ -265,6 +265,12 @@ class ConferenceController extends Controller
 
         $conference->materials = $this->courseService->getLessonMaterials($conference->lesson_id, $language);
 
+        if(count($conference->materials) > 0){
+            foreach ($conference->materials as $key => $material) {
+                $material->is_show = false;
+            }
+        }
+
         $find_conference_member = ConferenceMember::where('conference_id', '=', $conference->conference_id)
         ->where('member_id', '=', $auth_user->user_id)
         ->first();
