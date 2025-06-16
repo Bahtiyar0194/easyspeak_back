@@ -285,6 +285,18 @@ class ConferenceController extends Controller
             $save_conference->participated = $conference->participated + 1;
             $save_conference->save();
         }
+
+        $members = GroupMember::where('group_id', '=', $conference->group_id)
+        ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
+        ->select(
+            'users.user_id',
+            'users.last_name',
+            'users.first_name',
+            'users.avatar'
+        )
+        ->get();
+
+        $conference->members = $members;
     
         return response()->json(['conference' => $conference], 200);
     }    
