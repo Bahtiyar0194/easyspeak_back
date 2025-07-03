@@ -44,9 +44,10 @@ class CourseService
             return true;
         }
         else{
-            $conferenceLesson = Lesson::where('lessons.section_id', '=', $lesson->section_id)
+            $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+            ->where('lessons.section_id', '=', $lesson->section_id)
             ->where('lessons.sort_num', '<=', $lesson->sort_num)
-            ->where('lessons.lesson_type_id', '=', 1)
+            ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
             ->orderBy('lessons.sort_num', 'desc')
             ->first();
 

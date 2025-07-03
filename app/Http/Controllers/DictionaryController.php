@@ -390,7 +390,7 @@ class DictionaryController extends Controller
             $rules['edit_word_image_file'] = 'file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
         }
         else{
-            $rules['edit_word_image_file_id'] = 'required|numeric';
+            $rules['edit_word_image_file_id'] = 'numeric';
         }
 
         if($request['upload_edit_word_audio_file'] == 'generate'){

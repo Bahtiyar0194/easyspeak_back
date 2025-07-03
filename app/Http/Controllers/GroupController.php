@@ -11,14 +11,19 @@ use App\Models\Language;
 use App\Models\UserOperation;
 use App\Models\UserRequest;
 
+use App\Services\ConferenceService;
+
 use Illuminate\Http\Request;
 use Validator;
 use DB;
 
 class GroupController extends Controller
 {
-    public function __construct(Request $request)
+    protected $conferenceService;
+
+    public function __construct(Request $request, ConferenceService $conferenceService)
     {
+        $this->conferenceService = $conferenceService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -144,6 +149,7 @@ class GroupController extends Controller
                 'groups.group_name',
                 'groups.group_description',
                 'groups.created_at',
+                'groups.started_at',
                 'course_levels_lang.level_name',
                 'courses_lang.course_name',
                 'mentor.first_name as mentor_first_name',
@@ -232,6 +238,7 @@ class GroupController extends Controller
                 'groups.group_description',
                 'groups.level_id',
                 'groups.created_at',
+                'groups.started_at',
                 'groups.mentor_id',
                 'groups.operator_id'
             )
@@ -262,6 +269,9 @@ class GroupController extends Controller
         ->distinct()
         ->first();
 
+        $group->start_date = date('Y-m-d', strtotime($group->started_at));
+        $group->start_time = date('H:i', strtotime($group->started_at));
+
         $group->group_members = $members;
         $group->level = $level;
         $group->mentor = $mentor->only(['last_name', 'first_name', 'avatar']);
@@ -281,6 +291,8 @@ class GroupController extends Controller
                 'course_id' => 'required|numeric',
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
+                'start_date' => 'required|date|after_or_equal:today',
+                'start_time' => 'required|date_format:H:i',
                 'step' => 'required|numeric',
             ];
 
@@ -353,6 +365,7 @@ class GroupController extends Controller
             $new_group->group_name = $request->group_name;
             $new_group->group_description = $request->group_description;
             $new_group->level_id = $request->level_id;
+            $new_group->started_at = $request->start_date.' '.$request->start_time;
             $new_group->save();
 
             $group_members = json_decode($request->members);
@@ -370,6 +383,8 @@ class GroupController extends Controller
                 }
             }
 
+            $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at);
+
             $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
             <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
             <p><span>Категория группы:</span> <b>{$level->level_name}</b></p>
@@ -380,6 +395,8 @@ class GroupController extends Controller
             $user_operation->operation_type_id = 3;
             $user_operation->description = $description;
             $user_operation->save();
+
+            
 
             return response()->json('success', 200);
         }
@@ -396,6 +413,8 @@ class GroupController extends Controller
                 'course_id' => 'required|numeric',
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
+                'start_date' => 'required|date',
+                'start_time' => 'required|date_format:H:i',
                 'step' => 'required|numeric',
             ];
 
@@ -470,6 +489,7 @@ class GroupController extends Controller
             $edit_group->group_name = $request->group_name;
             $edit_group->group_description = $request->group_description;
             $edit_group->level_id = $request->level_id;
+            $edit_group->started_at = $request->start_date.' '.$request->start_time;
             $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
 
@@ -539,6 +559,8 @@ class GroupController extends Controller
                     return "{$user->last_name} {$user->first_name}";
                 })
                 ->toArray();
+
+            $this->conferenceService->createConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at);
 
             // Формирование описания
             $description = "<p><span>Название группы:</span> <b>" . e($request->group_name) . "</b></p>

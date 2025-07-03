@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\Language;
@@ -14,20 +13,23 @@ use App\Models\Conference;
 use App\Models\ConferenceTask;
 use App\Models\ConferenceMember;
 
+use App\Services\ConferenceService;
 use App\Services\CourseService;
 use App\Services\TaskService;
 
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 use Validator;
-use Str;
 
 class ConferenceController extends Controller
 {
+    protected $conferenceService;
     protected $courseService;
     protected $taskService;
 
-    public function __construct(Request $request, CourseService $courseService, TaskService $taskService)
+    public function __construct(Request $request, ConferenceService $conferenceService, CourseService $courseService, TaskService $taskService)
     {
+        $this->conferenceService = $conferenceService;
         $this->courseService = $courseService;
         $this->taskService = $taskService;
         app()->setLocale($request->header('Accept-Language'));
@@ -87,7 +89,7 @@ class ConferenceController extends Controller
                 $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
                 ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
                 ->where('lessons.section_id', '=', $section->section_id)
-                ->where('lessons.lesson_type_id', '=', 1)
+                ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
                 ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
                 ->select(
                     'lessons.lesson_id',
@@ -202,6 +204,7 @@ class ConferenceController extends Controller
             ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
             ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
             ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
+            ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
             ->select(
                 'conferences.conference_id',
                 'conferences.uuid',
@@ -210,6 +213,7 @@ class ConferenceController extends Controller
                 'conferences.end_time',
                 'conferences.participated',
                 'lessons.lesson_name',
+                'types_of_lessons.lesson_type_slug',
                 'conferences.lesson_id',
                 'courses_lang.course_name',
                 'course_levels_lang.level_name',
@@ -414,16 +418,9 @@ class ConferenceController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $conference = new Conference();
-        $conference->uuid = str_replace('-', '', (string) Str::uuid());
-        $conference->group_id = $request->group_id;
-        $conference->lesson_id = $request->lesson_id;
-        $conference->operator_id = auth()->user()->user_id;
-        $conference->start_time = date('Y-m-d H:i:s');
-        $conference->end_time = date('Y-m-d H:i:s', strtotime('+2 hour'));
-        $conference->save();
+        $new_conference = $this->conferenceService->createConference($request->group_id, $request->lesson_id, date('Y-m-d H:i:s'), date('Y-m-d H:i:s', strtotime('+2 hour')));
 
-        return response()->json($conference, 200);
+        return response()->json($new_conference, 200);
     }
 
     public function delete(Request $request)
@@ -435,9 +432,9 @@ class ConferenceController extends Controller
 
         if(isset($conference) && $conference->operator_id === $auth_user->user_id){
             $conference->delete();
-            return response()->json('delete conference is success', 200);
+            return response()->json('Delete conference is success', 200);
         }
 
-        return response()->json('delete conference is failed', 404);
+        return response()->json('Delete conference is failed', 404);
     }
 }

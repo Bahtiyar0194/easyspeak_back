@@ -34,5 +34,6 @@ return [
     'rate_the_unverified_answers' => 'Вы должны оценить непроверенные ответы как "Правильный" или "Неправильный".',
     'please_comment_on_all_incorrect_answers' => 'Вы должны оставить комментарий на все неправильные ответы.',
     'conference_has_already_ended' => 'Время конференции истекло.',
-    'conference_has_not_started_yet' => 'Ожидается начало конференции...'
+    'conference_has_not_started_yet' => 'Ожидается начало конференции...',
+    'date_should_be_no_earlier_or_no_later_than_two_days' => 'Дата должна быть не раньше или не позже двух дней.'
 ];

@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ConferenceController;
+use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\OperationController;
@@ -101,6 +102,16 @@ Route::group([
             Route::get('/get_conference/{conference_id}', [ConferenceController::class, 'get_conference']);
             Route::get('/get_conference_tasks/{conference_id}', [ConferenceController::class, 'get_conference_tasks']);
             Route::post('/run_task/{conference_id}/{task_id}', [ConferenceController::class, 'run_task']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'schedule'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_attributes', [ScheduleController::class, 'get_schedule_attributes']);
+            Route::post('/get', [ScheduleController::class, 'get_schedule']);
+            Route::post('/update/{uuid}', [ScheduleController::class, 'update']);
         });
     });
 

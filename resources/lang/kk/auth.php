@@ -33,5 +33,6 @@ return [
     'rate_the_unverified_answers' => 'Тексерілмеген жауаптарды "Дұрыс" немесе "Дұрыс емес" деп бағалауыңыз қажет.',
     'please_comment_on_all_incorrect_answers' => 'Барлық дұрыс емес жауаптарға пікір қалдыруыңыз қажет.',
     'conference_has_already_ended' => 'Конференцияның уақыты бітті.',
-    'conference_has_not_started_yet' => 'Конференцияның басталуы күтілуде...'
+    'conference_has_not_started_yet' => 'Конференцияның басталуы күтілуде...',
+    'date_should_be_no_earlier_or_no_later_than_two_days' => 'Екі күннен ерте немесе кеш болмауы керек.'
 ];
