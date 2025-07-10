@@ -2286,20 +2286,18 @@ class TaskController extends Controller
         $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
 
         foreach ($task_sentences as $sentence) {
-            $missing_words = MissingWord::where('task_sentence_id', '=', $sentence->task_sentence_id)
-            ->select(
-                'missing_words.missing_word_id',
-                'missing_words.word_position',
-                'missing_words.word_option'
-            );
+            $missing_words = MissingWord::where('task_sentence_id', $sentence->task_sentence_id)
+                ->select(
+                    'missing_words.missing_word_id',
+                    'missing_words.word_position',
+                    'missing_words.word_option'
+                );
 
-            if($task_options->find_word_option == 'with_hints'){
-                $missing_words->orderBy('word_position', 'asc');
-            }
-            
-            $missing_words = $missing_words->get();
+            if ($task_options->find_word_option == 'with_hints') {
+                $missing_words = $missing_words->orderBy('word_position', 'asc');
+            } 
 
-            $sentence->missingWords = $missing_words;
+            $sentence->missingWords = $missing_words->get();
         }
 
         $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);

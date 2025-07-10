@@ -119,7 +119,7 @@ class ConferenceController extends Controller
         $auth_user = auth()->user();
         $current_conferences = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
         ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-        ->leftJoin('users as mentor', 'groups.mentor_id', '=', 'mentor.user_id')
+        ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
         ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
         ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
         ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
@@ -155,7 +155,7 @@ class ConferenceController extends Controller
                     $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
                 }
                 if ($isMentor || $isLearner) {
-                    $query->orWhere('groups.mentor_id', '=', $auth_user->user_id)
+                    $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
                     ->orWhere('group_members.member_id', '=', $auth_user->user_id);
                 }
             });
@@ -198,7 +198,7 @@ class ConferenceController extends Controller
         // Получаем конференцию без ограничения по времени
         $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
             ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-            ->leftJoin('users', 'groups.mentor_id', '=', 'users.user_id')
+            ->leftJoin('users', 'conferences.mentor_id', '=', 'users.user_id')
             ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
             ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
             ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
@@ -218,7 +218,7 @@ class ConferenceController extends Controller
                 'courses_lang.course_name',
                 'course_levels_lang.level_name',
                 'groups.group_name',
-                'groups.mentor_id',
+                'conferences.mentor_id',
                 'groups.group_id',
                 'users.school_id',
                 'group_members.member_id'
@@ -251,6 +251,7 @@ class ConferenceController extends Controller
 
         if ($isMember) {
             $allowed = true;
+            $conference->is_member = true;
         }
         
         if (!$allowed) {
@@ -311,12 +312,11 @@ class ConferenceController extends Controller
         $auth_user = auth()->user();
 
         $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-        ->leftJoin('users', 'groups.mentor_id', '=', 'users.user_id')
         ->select(
             'conferences.conference_id',
             'conferences.uuid',
             'conferences.lesson_id',
-            'groups.mentor_id',
+            'conferences.mentor_id',
             'groups.group_id'
         )
         ->where('conferences.uuid', '=', $request->conference_id)
@@ -384,8 +384,6 @@ class ConferenceController extends Controller
                 $task->launched = false;
             }
         }
-
-
 
         return response()->json($tasks, 200);
     }

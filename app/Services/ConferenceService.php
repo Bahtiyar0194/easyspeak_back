@@ -3,18 +3,22 @@ namespace App\Services;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\Conference;
-
+use App\Models\Group;
 use Str;
 use Carbon\Carbon;
 
 class ConferenceService
 {
     public function createConference($group_id, $lesson_id, $start_time, $end_time){
+
+        $group = Group::findOrFail($group_id);
+
         $conference = new Conference();
         $conference->uuid = str_replace('-', '', (string) Str::uuid());
         $conference->group_id = $group_id;
         $conference->lesson_id = $lesson_id;
         $conference->operator_id = auth()->user()->user_id;
+        $conference->mentor_id = $group->mentor_id;
         $conference->start_time = $start_time;
         $conference->end_time = $end_time;
         $conference->save();

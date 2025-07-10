@@ -68,7 +68,7 @@ class ScheduleController extends Controller
         ->orderBy('users.last_name', 'asc')
         ->get();
 
-        $mentors = Group::leftJoin('users', 'users.user_id', '=', 'groups.mentor_id')
+        $mentors = Conference::leftJoin('users', 'users.user_id', '=', 'conferences.mentor_id')
         ->where('users.school_id', '=', auth()->user()->school_id)
         ->where('users.status_type_id', '!=', 2)
         ->select(
@@ -100,7 +100,7 @@ class ScheduleController extends Controller
 
         $conferences = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
         ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-        ->leftJoin('users as mentor', 'groups.mentor_id', '=', 'mentor.user_id')
+        ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
         ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
         ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
         ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
@@ -121,7 +121,7 @@ class ScheduleController extends Controller
             'mentor.last_name as mentor_last_name',
             'courses_lang.course_name',
             'course_levels_lang.level_name',
-            'groups.mentor_id',
+            'conferences.mentor_id',
             'groups.group_name',
             'groups.group_id'
         )
@@ -148,7 +148,7 @@ class ScheduleController extends Controller
         }
 
         if(!empty($mentors_id)){
-            $conferences->whereIn('groups.mentor_id', $mentors_id);
+            $conferences->whereIn('conferences.mentor_id', $mentors_id);
         }
 
         if (!empty($group_name)) {
@@ -181,7 +181,7 @@ class ScheduleController extends Controller
                     $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
                 }
                 if ($isMentor || $isLearner) {
-                    $query->orWhere('groups.mentor_id', '=', $auth_user->user_id)
+                    $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
                     ->orWhere('group_members.member_id', '=', $auth_user->user_id);
                 }
             });
@@ -242,21 +242,67 @@ class ScheduleController extends Controller
             $referenceDate = Carbon::parse($conference->start_time)->toDateString();
             $requestDate = Carbon::parse($request->start_date)->toDateString();
 
+            $diffInDays = Carbon::parse($conference->start_time)->diffInDays($request->start_date.' '.$request->start_time);
+
             // Создаем допустимый диапазон: от -2 до +2 дней
             $minDate = Carbon::parse($referenceDate)->subDays(2);
             $maxDate = Carbon::parse($referenceDate)->addDays(2);
 
-            if ($requestDate < $minDate->toDateString() || $requestDate > $maxDate->toDateString()) {
-                return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+            if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
+                if ($requestDate < $minDate->toDateString()) {
+                    return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+                }
+            }
+            else{
+                if ($requestDate < $minDate->toDateString() || $requestDate > $maxDate->toDateString()) {
+                    return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+                }
             }
 
-            $conference->start_time = $request->start_date.' '.$request->start_time;
+            if(isset($request->mentor_only_for_this_lesson) && $request->mentor_only_for_this_lesson == 0){
+                $conferences = Conference::where('start_time', '>=', $conference->start_time)
+                ->where('group_id', '=', $conference->group_id)
+                ->get();
+
+                if(count($conferences) > 0){
+                    foreach ($conferences as $key => $value) {
+                        $c = Conference::find($value->conference_id);
+                        $c->mentor_id = $request->mentor_id;
+                        $c->save();
+                    }
+                }
+            }
+            else{
+                $conference->mentor_id = $request->mentor_id;
+            }
+
+            if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
+
+                $conferences = Conference::where('start_time', '>=', $conference->start_time)
+                ->where('group_id', '=', $conference->group_id)
+                ->get();
+
+                if(count($conferences) > 0){
+                    foreach ($conferences as $key => $value) {
+                        $c = Conference::find($value->conference_id);
+                        if($referenceDate < $requestDate){
+                            $c->start_time = Carbon::parse($c->start_time)->addDays($diffInDays);
+                            $c->end_time = Carbon::parse($c->end_time)->addDays($diffInDays);
+                        }
+                        elseif($referenceDate > $requestDate){
+                            $c->start_time = Carbon::parse($c->start_time)->subDays($diffInDays);
+                            $c->end_time = Carbon::parse($c->end_time)->subDays($diffInDays);
+                        }
+                        $c->save();
+                    }
+                }
+            }
+            else{
+                $conference->start_time = $request->start_date.' '.$request->start_time;
+                $conference->end_time = Carbon::parse($conference->start_time)->addHours(2)->format('Y-m-d H:i:s');
+            }
+
             $conference->save();
-
-            $group = Group::findOrFail($conference->group_id);
-
-            $group->mentor_id = $request->mentor_id;
-            $group->save();
 
             return response()->json('Conference saved sucessfully', 200);
         }
