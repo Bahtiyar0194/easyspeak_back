@@ -14,7 +14,6 @@ class AddOnDeleteAtToTasksTable extends Migration
     public function up()
     {
         Schema::table('tasks', function (Blueprint $table) {
-            $table->dropForeign(['lesson_id']);
             $table->foreign('lesson_id')->references('lesson_id')->on('lessons')->onDelete('cascade');
         });
     }
