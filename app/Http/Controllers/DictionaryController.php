@@ -3,6 +3,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Dictionary;
 use App\Models\DictionaryTranslate;
+
+use App\Models\LessonDictionary;
+use App\Models\LessonDictionaryCategory;
+use App\Models\LessonDictionaryCategoryLang;
+
 use App\Models\Language;
 use App\Models\UploadConfiguration;
 use App\Models\User;
@@ -522,5 +527,121 @@ class DictionaryController extends Controller
     
             return response()->json($edit_word, 200);
         }
+    }
+
+    public function add_lesson_dictionary(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'words_count' => 'required|numeric|min:2',
+                'words' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'category_slug' => 'required',
+                'category_name_kk' => 'required',
+                'category_name_ru' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            // Получаем текущего аутентифицированного пользователя
+            $auth_user = auth()->user();
+
+            $categories_count = LessonDictionaryCategory::where("lesson_id", $request->lesson_id)->count();
+
+            $new_category = new LessonDictionaryCategory();
+            $new_category->category_slug = $request->category_slug;
+            $new_category->lesson_id = $request->lesson_id;
+            $new_category->operator_id = $auth_user->user_id;
+            $new_category->sort_num = $categories_count + 1;
+            $new_category->save();
+
+            $new_category_translate = new LessonDictionaryCategoryLang();
+            $new_category_translate->category_name = $request->category_name_kk;
+            $new_category_translate->category_id = $new_category->category_id;
+            $new_category_translate->lang_id = 1;
+            $new_category_translate->save();
+
+            $new_category_translate = new LessonDictionaryCategoryLang();
+            $new_category_translate->category_name = $request->category_name_ru;
+            $new_category_translate->category_id = $new_category->category_id;
+            $new_category_translate->lang_id = 2;
+            $new_category_translate->save();
+
+            $words = json_decode($request->words);
+
+            if (count($words) > 0) {
+                foreach ($words as $word) {
+                    $new_lesson_dictionary = new LessonDictionary();
+                    $new_lesson_dictionary->category_id = $new_category->category_id;
+                    $new_lesson_dictionary->word_id = $word->word_id;
+                    $new_lesson_dictionary->save();
+                }
+            }
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_lesson_dictionary(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $categories = LessonDictionaryCategory::leftJoin('lesson_dictionary_category_lang', 'lesson_dictionary_category.category_id', '=', 'lesson_dictionary_category_lang.category_id')
+        ->where('lesson_dictionary_category.lesson_id', '=', $request->lesson_id)
+        ->where('lesson_dictionary_category_lang.lang_id', '=', $language->lang_id)
+        ->select(
+            'lesson_dictionary_category.category_id',
+            'lesson_dictionary_category.category_slug',
+            'lesson_dictionary_category_lang.category_name'
+        )
+        ->distinct()
+        ->get();
+
+        if(count($categories) > 0){
+            foreach ($categories as $key => $category) {
+                $dictionary = LessonDictionary::leftJoin('dictionary', 'lesson_dictionary.word_id', '=', 'dictionary.word_id')
+                ->leftJoin('dictionary_translate', 'dictionary.word_id', '=', 'dictionary_translate.word_id')
+                ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+                ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
+                ->select(
+                    'dictionary.word_id',
+                    'dictionary.word',
+                    'dictionary.transcription',
+                    'dictionary_translate.word_translate',
+                    'image_file.target as image_file',
+                    'audio_file.target as audio_file'
+                )            
+                ->where('lesson_dictionary.category_id', '=', $category->category_id)
+                ->where('dictionary_translate.lang_id', '=', $language->lang_id)
+                ->distinct()
+                ->get();
+
+                $category->dictionary = $dictionary;
+            }
+        }
+        
+        return response()->json($categories, 200);
     }
 }

@@ -287,6 +287,7 @@ class CourseController extends Controller
         ->select(
             'lessons.lesson_id',
             'lessons.section_id',
+            'course_sections.section_name',
             'lessons.sort_num',
             'lessons.lesson_name',
             'lessons.lesson_description',

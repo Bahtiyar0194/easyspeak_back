@@ -181,6 +181,9 @@ Route::group([
             Route::get('/get/{word_id}', [DictionaryController::class, 'get_word']);
             Route::post('/add', [DictionaryController::class, 'add'])->middleware('check_roles');
             Route::post('/update/{word_id}', [DictionaryController::class, 'update'])->middleware('check_roles');
+
+            Route::post('/add_lesson_dictionary/{lesson_id}', [DictionaryController::class, 'add_lesson_dictionary'])->middleware('check_roles');
+            Route::get('/get_lesson_dictionary/{lesson_id}', [DictionaryController::class, 'get_lesson_dictionary']);
         });
     });
 
