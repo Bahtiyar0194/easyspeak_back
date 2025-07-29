@@ -272,6 +272,14 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/translate', [TranslateController::class, 'translate']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'elevenlabs'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/list_voices', [TextToSpeechController::class, 'list_voices']);
             Route::get('/tts', [TextToSpeechController::class, 'tts']);
         });
     });
