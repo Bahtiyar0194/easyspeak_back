@@ -20,6 +20,7 @@ use DB;
 use File;
 use Image;
 use Storage;
+use Auth;
 
 use App\Services\CourseService;
 
@@ -89,8 +90,10 @@ class CourseController extends Controller
             return response()->json(['error' => 'Levels not found'], 404);
         }
 
-        foreach ($levels as $key => $level) {
-             $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+        if(Auth::check()){
+            foreach ($levels as $key => $level) {
+                $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+            }
         }
 
         $levels = $levels->sortBy('level_id') // сортировка по level_id ↓

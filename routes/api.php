@@ -153,8 +153,10 @@ Route::group([
     Route::group([
         'prefix' => 'courses'
     ], function ($router) {
+        Route::get('/get', [CourseController::class, 'get_courses']);
+        Route::get('/get_levels_index/{course_slug}', [CourseController::class, 'get_levels']);
+
         Route::group(['middleware' => ['auth:sanctum']], function () {
-            Route::get('/get', [CourseController::class, 'get_courses']);
             Route::get('/get_levels/{course_slug}', [CourseController::class, 'get_levels']);
             Route::get('/get_level/{course_slug}/{level_slug}', [CourseController::class, 'get_level']);
             Route::get('/{course_slug}/{level_slug}/get_lessons', [CourseController::class, 'get_lessons']);
