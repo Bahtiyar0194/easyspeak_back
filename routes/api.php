@@ -76,7 +76,7 @@ Route::group([
     Route::group([
         'prefix' => 'school'
     ], function ($router) {
-        Route::get('/get', [SchoolController::class, 'get_school'])->middleware('check_subdomain');
+        Route::post('/get', [SchoolController::class, 'get_school'])->middleware('check_subdomain');
         Route::get('/get_logo/{logo_file}/{logo_variable}', [SchoolController::class, 'get_logo']);
         Route::get('/get_favicon/{school_id}/{file_name}', [SchoolController::class, 'get_favicon']);
 

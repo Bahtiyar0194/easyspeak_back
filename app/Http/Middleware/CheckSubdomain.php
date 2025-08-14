@@ -24,11 +24,12 @@ class CheckSubdomain
         $host = str_replace('www.', '', $origin['host']);
         $parts = explode('.', $host);
 
-        if (((count($parts) == 1 && $parts[0] == 'localhost') || (count($parts) == 2 && $parts[1] != 'localhost')) && $request->header('subdomain') === null) {
+        if (((count($parts) == 1 && $parts[0] == 'localhost') || (count($parts) == 2 && $parts[1] != 'localhost')) && $request->subdomain === null) {
             return response()->json('main', 200);
-        } else {
-            if ($request->header('subdomain') !== null) {
-                $subdomain = $request->header('subdomain');
+        } 
+        else {
+            if ($request->subdomain !== null) {
+                $subdomain = $request->subdomain;
             } else {
                 $subdomain = $parts[0];
             }
