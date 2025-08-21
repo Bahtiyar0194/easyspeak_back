@@ -30,18 +30,29 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'first_name' => 'required|string|between:2,100',
-            'last_name' => 'required|string|between:2,100',
-            'email' => 'required|string|email|max:100',
-            'phone' => 'required|regex:/^((?!_).)*$/s',
-            'first_registration' => 'required',
-            'school_name' => 'nullable|required_if:first_registration,true|string|between:2,100',
-            'school_domain' => 'nullable|required_if:first_registration,true|string|between:2,20|regex:/^[a-z]+$/u|unique:schools',
-            'password' => 'required|string|min:8',
-            'password_confirmation' => 'required_with:password|same:password|min:8',
-            'lang' => 'required'
-        ]);
+        $rules = [
+            [
+                'school_name' => 'required|string|between:2,100',
+                'full_school_name' => 'required|string|between:2,100',
+                'bin' => 'required|string|size:12',
+                'location_id' => 'required|numeric',
+                'fact_address' => 'required|string|between:2,100',
+                'school_domain' => 'required|string|between:2,20|regex:/^[a-z]+$/u|unique:schools',
+                'lang' => 'required'
+            ],
+            [
+                'first_name' => 'required|string|between:2,100',
+                'last_name' => 'required|string|between:2,100',
+                'email' => 'required|string|email|max:100',
+                'phone' => 'required|regex:/^((?!_).)*$/s',
+                'password' => 'required|string|min:8',
+                'password_confirmation' => 'required_with:password|same:password|min:8',
+                'lang' => 'required'
+            ]   
+        ];
+
+
+        $validator = Validator::make($request->all(), $rules[$request->first_registration == 'true' ? $request->step - 1 : 1]);
 
         app()->setLocale($request->lang);
 
@@ -51,10 +62,20 @@ class AuthController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
+        if($request->first_registration == 'true' && $request->step == 1){
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+
         if ($request->first_registration == 'true') {
             $school = new School();
             $school->school_domain = str_replace(' ', '', e($request->school_domain));
             $school->school_name = e($request->school_name);
+            $school->full_school_name = e($request->full_school_name);
+            $school->bin = e($request->bin);
+            $school->location_id = e($request->location_id);
+            $school->fact_address = e($request->fact_address);
             $school->school_type_id = 1;
             $school->subscription_expiration_at = date('Y-m-d H:i:s', strtotime('+14 days'));
             $school->save();

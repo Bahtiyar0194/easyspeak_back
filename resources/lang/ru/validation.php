@@ -276,7 +276,11 @@ return [
         'password_confirmation' => 'Подтверждение пароля',
 
         'school_name'           => 'Название школы',
+        'full_school_name'      => 'Полное название школы',
         'school_domain'         => 'Доменное имя школы',
+        'bin'                   => 'БИН/ИИН',
+        'fact_address'          => 'Фактический адрес',
+        'legal_address'         => 'Юридический адрес',
 
         'recovery_code'         => 'Код восстановления пароля',
 

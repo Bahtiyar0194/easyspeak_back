@@ -2,7 +2,9 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\DemoController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ConferenceController;
@@ -33,6 +35,12 @@ Route::group([
     'prefix' => 'v1'
 ], function ($router) {
     Route::group([
+        'prefix' => 'demo'
+    ], function ($router) {
+        Route::post('/request', [DemoController::class, 'request']);
+    });
+
+    Route::group([
         'prefix' => 'auth'
     ], function ($router) {
         Route::post('/login', [AuthController::class, 'login']);
@@ -58,6 +66,12 @@ Route::group([
             // Route::post('/change_password', [AuthController::class, 'change_password']);
             Route::post('/logout', [AuthController::class, 'logout']);
         });
+    });
+
+    Route::group([
+        'prefix' => 'locations'
+    ], function ($router) {
+        Route::get('/get', [LocationController::class, 'get']);
     });
 
     Route::group([
