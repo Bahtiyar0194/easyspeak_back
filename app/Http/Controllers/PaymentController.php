@@ -73,12 +73,15 @@ class PaymentController extends Controller
             // транзакция прошла успешно
             return redirect()->away($redirectUrl . 'true&order=' . $result['Model']['TransactionId']);
         } else {
-            // транзакция отклонена
-            //if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
-                return redirect()->away($redirectUrl . 'false&message='.$result['Model']['CardHolderMessage'].'&reason=' . ($result['Model']['ReasonCode'] ?? 'unknown'));
-            //}
 
-            //return redirect()->away($redirectUrl . 'false&reason=unknown');
+            var_dump($result);
+
+            // транзакция отклонена
+            // if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
+            //     return redirect()->away($redirectUrl . 'false&message='.$result['Model']['CardHolderMessage'].'&reason=' . ($result['Model']['ReasonCode'] ?? 'unknown'));
+            // }
+
+            // return redirect()->away($redirectUrl . 'false&reason=unknown');
         }
     }
 }
