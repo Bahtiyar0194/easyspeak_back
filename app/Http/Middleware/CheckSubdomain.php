@@ -8,6 +8,7 @@ use App\Models\School;
 use App\Models\Color;
 use App\Models\Font;
 use App\Models\FaviconType;
+use App\Models\Language;
 
 class CheckSubdomain
 {
@@ -24,6 +25,8 @@ class CheckSubdomain
         $host = str_replace('www.', '', $origin['host']);
         $parts = explode('.', $host);
 
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
         if (((count($parts) == 1 && $parts[0] == 'localhost') || (count($parts) == 2 && $parts[1] != 'localhost')) && $request->subdomain === null) {
             return response()->json('main', 200);
         } 
@@ -34,12 +37,16 @@ class CheckSubdomain
                 $subdomain = $parts[0];
             }
 
-            $school = School::leftJoin('types_of_subscription_plans', 'types_of_subscription_plans.subscription_plan_id', '=', 'schools.subscription_plan_id')
+            $school = School::leftJoin('locations', 'schools.location_id', '=', 'locations.location_id')
+            ->leftJoin('locations_lang', 'locations.location_id', '=', 'locations_lang.location_id')
+            ->leftJoin('types_of_subscription_plans', 'types_of_subscription_plans.subscription_plan_id', '=', 'schools.subscription_plan_id')
                 ->select(
                     'schools.*',
+                    'locations_lang.location_name',
                     'types_of_subscription_plans.subscription_plan_name'
                 )
                 ->where('school_domain', $subdomain)
+                ->where('locations_lang.lang_id', '=', $language->lang_id)
                 ->first();
 
             $icons = FaviconType::where('icon_name', '=', 'android-icon')

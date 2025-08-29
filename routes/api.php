@@ -16,6 +16,7 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\SentenceController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TranslateController;
 use App\Http\Controllers\TextToSpeechController;
 
@@ -277,10 +278,25 @@ Route::group([
             Route::post('/edit/answer_the_questions/{task_id}', [TaskController::class, 'edit_answer_the_questions_task'])->middleware('check_roles');
             Route::get('/get/answer_the_questions/{task_id}', [TaskController::class, 'get_answer_the_questions_task']);
 
+            Route::post('/create/pronunciation_check/{lesson_id}', [TaskController::class, 'create_pronunciation_check_task'])->middleware('check_roles');
+            Route::post('/edit/pronunciation_check/{task_id}', [TaskController::class, 'edit_pronunciation_check_task'])->middleware('check_roles');
+            Route::get('/get/pronunciation_check/{task_id}', [TaskController::class, 'get_pronunciation_check_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
         });
+    });
+
+    Route::group([
+        'prefix' => 'payment'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_attributes', [PaymentController::class, 'get_attributes']);
+            Route::post('/tiptop/handle', [PaymentController::class, 'tiptop_handle']);
+        });
+
+        Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);
     });
 
     Route::group([

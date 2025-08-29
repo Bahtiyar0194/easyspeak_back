@@ -4216,4 +4216,119 @@ class TaskController extends Controller
         // Если пользователь не является участником группы, возвращаем ошибку
         return response()->json([trans('auth.you_are_not_a_member_of_group')], 422);
     }
+
+    public function create_pronunciation_check_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'sentences_count' => 'required|numeric|min:1',
+                'sentences' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'show_audio_button' => 'required|boolean',
+                'show_translate' => 'required|boolean',
+                'impression_limit' => 'required|min:1',
+                'seconds_per_sentence' => 'required|numeric|min:15',
+                'max_attempts' => 'required|numeric',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+            
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 14);
+
+            $sentences = json_decode($request->sentences);
+
+            if (count($sentences) > 0) {
+                foreach ($sentences as $sentence) {
+                    $new_task_sentence = new TaskSentence();
+                    $new_task_sentence->task_id = $new_task->task_id;
+                    $new_task_sentence->sentence_id = $sentence->sentence_id;
+                    $new_task_sentence->save();
+                }
+            }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // $user_operation = new UserOperation();
+            // $user_operation->operator_id = auth()->user()->user_id;
+            // $user_operation->operation_type_id = 3;
+            // $user_operation->description = $description;
+            // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
+
+    public function get_pronunciation_check_task(Request $request)
+    {
+        // Получаем язык из заголовка
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $find_task = $this->taskService->findTask($request->task_id);
+
+        $task_options = TaskOption::where('task_id', '=', $find_task->task_id)
+        ->first();
+
+        if(!isset($task_options)){
+            return response()->json('task option is not found', 404);
+        }
+
+        $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
+
+        $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
+
+        $task = new \stdClass();
+
+        $task->task = $find_task;
+        $task->options = $task_options;
+        $task->sentences = $task_sentences;
+        $task->materials = $task_materials;
+
+        return response()->json($task, 200);
+    }
 }
