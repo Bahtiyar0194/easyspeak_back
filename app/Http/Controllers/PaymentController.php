@@ -57,9 +57,7 @@ class PaymentController extends Controller
 
         // Отправляем их обратно в платёжный шлюз для подтверждения
         $response = Http::withBasicAuth($apiPublicId, $apiSecretKey)
-        ->withHeaders([
-            'Content-Type' => 'application/json',
-        ])->post($api3dsUrl, [
+        ->post($api3dsUrl, [
             'MD'   => $md,
             'PaRes' => $paRes,
         ]);
@@ -71,16 +69,16 @@ class PaymentController extends Controller
         //Логируем, чтобы посмотреть
         \Log::info('3DS Result', $result);
 
-        if ($result['Success'] === true && $result['Model']['ReasonCode'] === 0) {
+        if ($result['Success'] === true) {
             // транзакция прошла успешно
             return redirect()->away($redirectUrl . 'true&order=' . $result['Model']['TransactionId']);
         } else {
             // транзакция отклонена
-            if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
+            //if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
                 return redirect()->away($redirectUrl . 'false&message='.$result['Model']['CardHolderMessage'].'&reason=' . ($result['Model']['ReasonCode'] ?? 'unknown'));
-            }
+            //}
 
-            return redirect()->away($redirectUrl . 'false&reason=unknown');
+            //return redirect()->away($redirectUrl . 'false&reason=unknown');
         }
     }
 }
