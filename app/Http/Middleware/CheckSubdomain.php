@@ -45,7 +45,7 @@ class CheckSubdomain
                     'locations_lang.location_name',
                     'types_of_subscription_plans.subscription_plan_name'
                 )
-                ->where('school_domain', $subdomain)
+                ->where('school_domain', '=', $subdomain)
                 ->where('locations_lang.lang_id', '=', $language->lang_id)
                 ->first();
 
