@@ -35,11 +35,23 @@ class PaymentController extends Controller
 
     public function tiptop_handle(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+                
         $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');
         $apiSecretKey = env('TIPTOPPAY_SECRET_KEY');
         $apiUrl = env('TIPTOPPAY_API_URL');
 
-        $selectedPlan = SubscriptionPlanType::findOrFail($request->selectedPlanId);
+        $selectedPlan = SubscriptionPlanType::leftJoin('types_of_subscription_plans_lang', 'types_of_subscription_plans.subscription_plan_id', '=', 'types_of_subscription_plans_lang.subscription_plan_id')
+        ->select(
+            'types_of_subscription_plans.subscription_plan_id',
+            'types_of_subscription_plans_lang.subscription_plan_name'
+        )
+        ->where('types_of_subscription_plans.subscription_plan_id', '=', $request->selectedPlanId)
+        ->first();
+
+        if (!$selectedPlan) {
+            return response()->json(['error' => 'Subscription plan is not found'], 404);
+        }
 
         $amount = number_format($selectedPlan->price, 2, '.', '');
         $currency = 'KZT';
@@ -51,7 +63,8 @@ class PaymentController extends Controller
         ])->post($apiUrl, [
             'Amount' => $amount,
             'Currency' => $currency,
-            'CardCryptogramPacket' => $cryptogram
+            'CardCryptogramPacket' => $cryptogram,
+            'Description' => $selectedPlan->subscription_plan_name
         ]);
 
         if ($response->ok()) {
