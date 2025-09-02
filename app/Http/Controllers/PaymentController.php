@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Language;
+use App\Models\SubscriptionPlanType;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -9,7 +12,18 @@ class PaymentController extends Controller
 {
     public function get_attributes(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $plans = SubscriptionPlanType::leftJoin('types_of_subscription_plans_lang', 'types_of_subscription_plans.subscription_plan_id', '=', 'types_of_subscription_plans_lang.subscription_plan_id')
+        ->select(
+            'types_of_subscription_plans.subscription_plan_id',
+            'types_of_subscription_plans_lang.subscription_plan_name'
+        )
+        ->where('types_of_subscription_plans_lang.lang_id', '=', $language->lang_id)
+        ->get();
+
         $data = [
+            'plans' => $plans,
             'tiptop' => [
                 'public_id' => env('TIPTOPPAY_PUBLIC_ID'),
                 'checkout_url' => env('TIPTOPPAY_CHECKOUT_URL')
@@ -25,8 +39,10 @@ class PaymentController extends Controller
         $apiSecretKey = env('TIPTOPPAY_SECRET_KEY');
         $apiUrl = env('TIPTOPPAY_API_URL');
 
-        $amount = $request->amount;
-        $currency = $request->currency;
+        $selectedPlan = SubscriptionPlanType::findOrFail($request->selectedPlanId);
+
+        $amount = number_format($selectedPlan->price, 2, '.', '');
+        $currency = 'KZT';
         $cryptogram = $request->cryptogram;
 
         $response = Http::withBasicAuth($apiPublicId, $apiSecretKey)
@@ -58,7 +74,7 @@ class PaymentController extends Controller
         // Отправляем их обратно в платёжный шлюз для подтверждения
         $response = Http::withBasicAuth($apiPublicId, $apiSecretKey)
         ->post($api3dsUrl, [
-            'MD'   => $md,
+            'TransactionId' => $md,
             'PaRes' => $paRes,
         ]);
 
