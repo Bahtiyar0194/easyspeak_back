@@ -268,6 +268,7 @@ return [
         'name'                  => 'Имя',
         'username'              => 'Никнейм',
         'email'                 => 'E-Mail адрес',
+        'school_email'          => 'E-Mail адрес школы',
         'first_name'            => 'Имя',
         'last_name'             => 'Фамилия',
         'login'                 => 'Логин', 
@@ -342,8 +343,8 @@ return [
         'group_name'            => 'Название группы',
 
         'flat'                  => 'Квартира',
-        'house'                 => 'Дом',
-        'street'                => 'Улица',
+        'house'                 => '№ дома, строения',
+        'street'                => 'Улица, мкр-н',
         'city'                  => 'Город',
         'region'                => 'Регион',
         'country'               => 'Страна',

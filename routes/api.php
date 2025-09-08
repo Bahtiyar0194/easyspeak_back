@@ -293,7 +293,7 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [PaymentController::class, 'get_attributes']);
-            Route::post('/tiptop/handle', [PaymentController::class, 'tiptop_handle']);
+            Route::post('/handle', [PaymentController::class, 'handle']);
         });
 
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);

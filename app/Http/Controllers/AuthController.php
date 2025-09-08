@@ -35,8 +35,10 @@ class AuthController extends Controller
                 'school_name' => 'required|string|between:2,100',
                 'full_school_name' => 'required|string|between:2,100',
                 'bin' => 'required|string|size:12',
+                'school_email' => 'required|string|email|max:100',
                 'location_id' => 'required|numeric',
-                'fact_address' => 'required|string|between:2,100',
+                'street' => 'required|string|between:2,100',
+                'house' => 'required|string|between:2,10',
                 'school_domain' => 'required|string|between:2,20|regex:/^[a-z]+$/u|unique:schools',
                 'lang' => 'required'
             ],
@@ -74,8 +76,10 @@ class AuthController extends Controller
             $school->school_name = e($request->school_name);
             $school->full_school_name = e($request->full_school_name);
             $school->bin = e($request->bin);
+            $school->email = e($request->school_email);
             $school->location_id = e($request->location_id);
-            $school->fact_address = e($request->fact_address);
+            $school->street = e($request->street);
+            $school->house = e($request->house);
             $school->school_type_id = 1;
             $school->subscription_expiration_at = date('Y-m-d H:i:s', strtotime('+14 days'));
             $school->save();
