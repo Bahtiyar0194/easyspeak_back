@@ -7,9 +7,10 @@ use Carbon\Carbon;
 
 class PaymentService
 {
-    public function savePayment($payment_id){
+    public function savePayment($payment_id, $operator_id){
 
         $payment = Payment::find($payment_id);
+        $payment->operator_id = $operator_id;
         $payment->is_paid = 1;
         $payment->save();
 
@@ -27,6 +28,7 @@ class PaymentService
         // Добавляем нужное количество месяцев
         $end_date = $start_date->copy()->addMonths($selectedPlan->months_count);
 
+        $school->subscription_plan_id = $selectedPlan->subscription_plan_id;
         $school->subscription_expiration_at = $end_date;
         $school->save();
     }

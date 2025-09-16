@@ -38,8 +38,17 @@ class PaymentController extends Controller
         ->where('types_of_subscription_plans_lang.lang_id', '=', $language->lang_id)
         ->get();
 
+        $methods = PaymentMethod::leftJoin('payment_methods_lang', 'payment_methods_lang.payment_method_id', '=', 'payment_methods.payment_method_id')
+        ->select(
+            'payment_methods.payment_method_id',
+            'payment_methods_lang.payment_method_name',
+        )
+        ->where('payment_methods_lang.lang_id', '=', $language->lang_id)
+        ->get();
+
         $data = [
             'plans' => $plans,
+            'methods' => $methods,
             'tiptop' => [
                 'public_id' => env('TIPTOPPAY_PUBLIC_ID'),
                 'checkout_url' => env('TIPTOPPAY_CHECKOUT_URL')
@@ -47,6 +56,100 @@ class PaymentController extends Controller
         ];
 
         return response()->json($data, 200);
+    }
+
+    public function get_payments(Request $request)
+    {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $per_page = $request->per_page ? $request->per_page : 10;
+        // Получаем параметры сортировки
+        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
+        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
+
+        $payments = Payment::leftJoin('types_of_subscription_plans', 'types_of_subscription_plans.subscription_plan_id', '=', 'payments.subscription_plan_id')
+        ->leftJoin('types_of_subscription_plans_lang', 'types_of_subscription_plans.subscription_plan_id', '=', 'types_of_subscription_plans_lang.subscription_plan_id')
+        ->leftJoin('schools', 'schools.school_id', '=', 'payments.school_id')
+        ->leftJoin('payment_methods', 'payment_methods.payment_method_id', '=', 'payments.payment_method_id')
+        ->leftJoin('payment_methods_lang', 'payment_methods_lang.payment_method_id', '=', 'payment_methods.payment_method_id')
+        ->leftJoin('users as iniciator', 'payments.iniciator_id', '=', 'iniciator.user_id')
+        ->leftJoin('users as operator', 'payments.operator_id', '=', 'operator.user_id')
+        ->select(
+            'payments.payment_id',
+            'payments.sum',
+            'payments.is_paid',
+            'payments.created_at',
+            'payments.accepted_at',
+            'payments.expiration_at',
+            'types_of_subscription_plans.subscription_plan_id',
+            'types_of_subscription_plans_lang.subscription_plan_name',
+            'schools.school_name',
+            'schools.full_school_name',
+            'schools.bin',
+            'payment_methods.payment_method_id',
+            'payment_methods.payment_method_slug',
+            'payment_methods_lang.payment_method_name',
+            'iniciator.first_name as iniciator_first_name',
+            'iniciator.last_name as iniciator_last_name',
+            'operator.first_name as operator_first_name',
+            'operator.last_name as operator_last_name',
+        )
+        ->where('types_of_subscription_plans_lang.lang_id', '=', $language->lang_id)
+        ->where('payment_methods_lang.lang_id', '=', $language->lang_id)
+        ->orderBy($sortKey, $sortDirection);
+
+
+        $payment_id = ltrim($request->payment_id, '0');
+        $school_name = $request->school_name;
+        $full_school_name = $request->full_school_name;
+        $bin = $request->bin;
+        $subscription_plans_id = $request->subscription_plans;
+        $payment_methods_id = $request->payment_methods;
+        $created_at_from = $request->created_at_from;
+        $created_at_to = $request->created_at_to;
+        $is_paid = $request->is_paid;
+
+        if (!empty($payment_id)) {
+            $payments->where('payments.payment_id', '=', $payment_id);
+        }
+
+        if (!empty($school_name)) {
+            $payments->where('schools.school_name', 'LIKE', '%' . $school_name . '%');
+        }
+
+        if (!empty($full_school_name)) {
+            $payments->where('schools.full_school_name', 'LIKE', '%' . $full_school_name . '%');
+        }
+
+        if (!empty($bin)) {
+            $payments->where('schools.bin', 'LIKE', '%' . $bin . '%');
+        }
+
+        if(!empty($subscription_plans_id)){
+            $payments->whereIn('payments.subscription_plan_id', $subscription_plans_id);
+        }
+
+        if(!empty($payment_methods_id)){
+            $payments->whereIn('payments.payment_method_id', $payment_methods_id);
+        }
+
+        if ($created_at_from && $created_at_to) {
+            $payments->whereBetween('payments.created_at', [$created_at_from . ' 00:00:00', $created_at_to . ' 23:59:00']);
+        }
+
+        if ($created_at_from) {
+            $payments->where('payments.created_at', '>=', $created_at_from . ' 00:00:00');
+        }
+
+        if ($created_at_to) {
+            $payments->where('payments.created_at', '<=', $created_at_to . ' 23:59:00');
+        }
+
+        if ($is_paid != '') {
+            $payments->where('payments.is_paid', '=', $is_paid);
+        }
+
+        return response()->json($payments->paginate($per_page)->onEachSide(1), 200);
     }
 
     public function handle(Request $request)
@@ -192,7 +295,7 @@ class PaymentController extends Controller
 
                     if ($result['Success'] === true) {
                         // транзакция прошла успешно
-                        $this->paymentService->savePayment($result['Model']['InvoiceId']);
+                        $this->paymentService->savePayment($result['Model']['InvoiceId'], null);
                     }
 
                     return response()->json($response->json(), 200);
@@ -233,7 +336,7 @@ class PaymentController extends Controller
             if ($result['Success'] === true) {
                 // транзакция прошла успешно
 
-                $this->paymentService->savePayment($result['Model']['InvoiceId']);
+                $this->paymentService->savePayment($result['Model']['InvoiceId'], null);
 
                 return redirect()->away($redirectUrl . 'true');
             } else {
@@ -245,5 +348,13 @@ class PaymentController extends Controller
                 return redirect()->away($redirectUrl . 'false&message='.$result['Message'].'&reason=unknown');
             }
         }
+    }
+
+    public function accept_payment(Request $request)
+    {
+        $operator_id = auth()->user()->user_id;
+        $this->paymentService->savePayment($request->payment_id, $operator_id);
+
+        return response()->json(['success' => true], 200);
     }
 }
