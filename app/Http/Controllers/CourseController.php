@@ -193,7 +193,7 @@ class CourseController extends Controller
             'section_id',
             'section_name'
         )
-        ->orderBy('section_id', 'asc')
+        ->orderBy('sort_num', 'asc')
         ->get();
 
         foreach ($sections as $s => $section) {
@@ -732,7 +732,7 @@ class CourseController extends Controller
                     'section_id',
                     'section_name'
                 )
-                ->orderBy('section_id', 'asc')
+                ->orderBy('sort_num', 'asc')
                 ->get();
 
                 $level->sections = $sections;
