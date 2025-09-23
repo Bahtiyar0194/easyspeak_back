@@ -83,6 +83,7 @@ Route::group([
             Route::get('/get_attributes', [MediaController::class, 'get_attributes']);
             Route::post('/get', [MediaController::class, 'get_files']);
             Route::post('/add', [MediaController::class, 'add_file'])->middleware('check_roles');
+            Route::post('/replace/{file_id}', [MediaController::class, 'replace_file'])->middleware('check_roles');
         });
 
         Route::get('get/{file_name}', [MediaController::class, 'get_file']);

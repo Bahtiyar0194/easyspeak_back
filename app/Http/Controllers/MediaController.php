@@ -199,4 +199,67 @@ class MediaController extends Controller
             return response()->json('success', 200);
         }
     }
+
+    public function replace_file(Request $request){
+        $rules = [
+            'upload_file' => 'required|file'
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $findFile = MediaFile::findOrFail($request->file_id);
+
+        $material_type = MaterialType::where('material_type_id', '=', $findFile->material_type_id)
+        ->first();
+
+        if (!$material_type) {
+            return response()->json(['error' => 'Material type is not found'], 404);
+        }
+
+        $upload_config = UploadConfiguration::leftJoin('types_of_materials', 'upload_configuration.material_type_id', '=', 'types_of_materials.material_type_id')
+        ->where('types_of_materials.material_type_slug', '=', $material_type->material_type_slug)
+        ->select(
+            'upload_configuration.max_file_size_mb',
+            'upload_configuration.mimes'
+        )
+        ->first();
+        
+        $rules['upload_file'] = 'required|file|mimes:'.$upload_config->mimes.'|max_mb:'.$upload_config->max_file_size_mb;
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $file = $request->file('upload_file');
+
+        if($file){
+            $file_name = $file->hashName();
+
+            if($material_type->material_type_slug == 'image'){
+                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                })->stream('png', 80);
+                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
+            }
+            else{
+                $file->storeAs('/public/', $file_name);
+            }
+
+            if (Storage::exists('/public/' . $findFile->target)) {
+                Storage::delete('/public/' . $findFile->target);
+            }
+
+            $findFile->target = $file_name;
+            $findFile->size = $file->getSize() / 1048576;
+            $findFile->save();
+
+            return response()->json($findFile, 200);
+        }
+    }
 }
