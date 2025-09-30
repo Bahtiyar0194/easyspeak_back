@@ -350,6 +350,25 @@ class PaymentController extends Controller
         }
     }
 
+    public function tiptop_check(Request $request)
+    {
+        $findPayment = Payment::where('payment_id', '=', $request['InvoiceId'])
+        ->where('is_paid', '=', 0)
+        ->first();
+
+        if(isset($findPayment)){
+            if($findPayment->sum == $request['Amount']){
+                return response()->json(['code' => 0], 200);
+            }
+            else{
+                return response()->json(['code' => 12], 200);
+            }
+        }
+        else{
+            return response()->json(['code' => 10], 200);
+        }
+    }
+
     public function accept_payment(Request $request)
     {
         $operator_id = auth()->user()->user_id;

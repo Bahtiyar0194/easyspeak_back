@@ -93,6 +93,7 @@ Route::group([
         'prefix' => 'school'
     ], function ($router) {
         Route::post('/get', [SchoolController::class, 'get_school'])->middleware('check_subdomain');
+        Route::get('/get_schools_from_city/{location_id}', [SchoolController::class, 'get_schools_from_city']);
         Route::get('/get_logo/{logo_file}/{logo_variable}', [SchoolController::class, 'get_logo']);
         Route::get('/get_favicon/{school_id}/{file_name}', [SchoolController::class, 'get_favicon']);
 
@@ -171,6 +172,7 @@ Route::group([
     ], function ($router) {
         Route::get('/get', [CourseController::class, 'get_courses']);
         Route::get('/get_levels_index/{course_slug}', [CourseController::class, 'get_levels']);
+        Route::post('/send_request/{level_id}', [CourseController::class, 'send_request']);
 
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_levels/{course_slug}', [CourseController::class, 'get_levels']);
@@ -300,6 +302,7 @@ Route::group([
         });
 
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);
+        Route::post('/tiptop/check', [PaymentController::class, 'tiptop_check']);
     });
 
     Route::group([

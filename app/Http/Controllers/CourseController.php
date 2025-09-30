@@ -13,6 +13,10 @@ use App\Models\Language;
 use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
+use App\Models\School;
+
+use Mail;
+use App\Mail\CourseRequestMail;
 
 use Illuminate\Http\Request;
 use Validator;
@@ -79,6 +83,7 @@ class CourseController extends Controller
         ->select(
             'course_levels.level_id',
             'course_levels.level_slug',
+            'course_levels.is_available_always',
             'course_levels_lang.level_name',
             'courses.course_name_slug'
         )
@@ -92,7 +97,12 @@ class CourseController extends Controller
 
         if(Auth::check()){
             foreach ($levels as $key => $level) {
-                $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+                if($level->is_available_always === 1){
+                    $level->is_available = true;
+                }
+                else{
+                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+                }
             }
         }
 
@@ -132,6 +142,7 @@ class CourseController extends Controller
         ->select(
             'course_levels.level_id',
             'course_levels.level_slug',
+            'course_levels.is_available_always',
             'course_levels_lang.level_name',
             'courses.course_name_slug'
         )
@@ -176,6 +187,7 @@ class CourseController extends Controller
         ->select(
             'course_levels.level_id',
             'course_levels.level_slug',
+            'course_levels.is_available_always',
             'course_levels_lang.level_name'
         )
         ->first();
@@ -184,7 +196,12 @@ class CourseController extends Controller
             return response()->json(['error' => 'Level not found'], 404);
         }
 
-        $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+        if($level->is_available_always === 1){
+            $level->is_available = true;
+        }
+        else{
+            $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+        }
 
         $data->level = $level;
 
@@ -215,7 +232,7 @@ class CourseController extends Controller
             ->get();
 
             foreach ($lessons as $l => $lesson) {
-                $lesson->is_available = $this->courseService->lessonIsAvailable($lesson);
+                $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
                 
                 $lesson_tasks = Task::where('lesson_id', '=', $lesson->lesson_id)
                 ->where('status_type_id', '=', 1)
@@ -270,6 +287,7 @@ class CourseController extends Controller
         ->select(
             'course_levels.level_id',
             'course_levels.level_slug',
+            'course_levels.is_available_always',
             'course_levels_lang.level_name'
         )
         ->first();
@@ -278,7 +296,12 @@ class CourseController extends Controller
             return response()->json(['error' => 'Level not found'], 404);
         }
 
-        $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+        if($level->is_available_always === 1){
+            $level->is_available = true;
+        }
+        else{
+            $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+        }
 
         $data->level = $level;
 
@@ -298,7 +321,7 @@ class CourseController extends Controller
         )
         ->first();
 
-        $lesson->is_available = $this->courseService->lessonIsAvailable($lesson);
+        $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
         $lesson->is_only_learner = $isOnlyLearner;
 
         $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
@@ -762,5 +785,56 @@ class CourseController extends Controller
         $attributes->courses = $courses;
 
         return response()->json($attributes, 200);
+    }
+
+    public function send_request(Request $request)
+    {
+        $rules = [
+            'first_name' => 'required|string|between:2,100',
+            'phone' => 'required|regex:/^((?!_).)*$/s',
+            'school_id' => 'required|numeric',
+            'lang' => 'required'
+        ];
+
+        if(!isset($request->school_domain)){
+            $rules['location_id'] = 'required|numeric';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        app()->setLocale($request->lang);
+
+        $language = Language::where('lang_tag', '=', $request->lang)->first();
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+        ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        ->select(
+            'course_levels_lang.level_name',
+            'courses_lang.course_name'
+        )
+        ->where('course_levels.level_id', '=', $request->level_id)
+        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+        ->where('courses_lang.lang_id', '=', $language->lang_id)
+        ->first();
+
+        if(isset($level)){
+            $mail_body = new \stdClass();
+            $mail_body->subject = 'Запрос на курс: '.$level->course_name.' ('.$level->level_name.')';
+            $mail_body->course_name = $level->course_name;
+            $mail_body->level_name = $level->level_name;
+            $mail_body->name = $request->first_name;
+            $mail_body->phone = $request->phone;
+            $mail_body->lang = $language->lang_name;
+
+            $school = School::findOrFail($request->school_id);
+
+            Mail::to($school->email)->send(new CourseRequestMail($mail_body));
+            return response()->json('success', 200);
+        }
     }
 }

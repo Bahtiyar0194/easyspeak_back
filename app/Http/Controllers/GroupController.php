@@ -45,6 +45,7 @@ class GroupController extends Controller
 
         foreach ($courses as $c => $course) {
             $levels = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->where('course_levels.is_available_always', '=', 0)
             ->where('course_levels.course_id', '=', $course->course_id)
             ->where('course_levels_lang.lang_id', '=', $language->lang_id)
             ->select(

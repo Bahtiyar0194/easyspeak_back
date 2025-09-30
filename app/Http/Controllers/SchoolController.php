@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\School;
+use App\Models\Language;
 use App\Models\Color;
 use App\Models\Font;
 use App\Models\Theme;
@@ -63,6 +64,20 @@ class SchoolController extends Controller{
         return response()->json($attributes, 200);
     }
 
+    public function get_schools_from_city(Request $request){
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $schools = School::where('location_id', '=', $request->location_id)
+        ->select(
+            'school_id',
+            'school_domain',
+            'full_school_name',
+            'school_name'
+        )
+        ->get();
+
+        return response()->json($schools, 200);
+    }
 
     public function set_school_attributes(Request $request){
         $validator = Validator::make($request->all(), [

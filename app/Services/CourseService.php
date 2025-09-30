@@ -34,7 +34,7 @@ class CourseService
         }
     }
 
-    public function lessonIsAvailable($lesson){
+    public function lessonIsAvailable($lesson, $is_available_always){
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
 
@@ -44,31 +44,37 @@ class CourseService
             return true;
         }
         else{
-            $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-            ->where('lessons.section_id', '=', $lesson->section_id)
-            ->where('lessons.sort_num', '<=', $lesson->sort_num)
-            ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
-            ->orderBy('lessons.sort_num', 'desc')
-            ->first();
-
-            if(isset($conferenceLesson)){
-                $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-                ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-                ->select(
-                    'conferences.conference_id'
-                )
-                ->where('conferences.participated', '>=', 2)
-                ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
-                ->where('group_members.member_id', '=', $auth_user->user_id)
+            if($is_available_always === 1){
+                return true;
+            }
+            else{
+                $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+                ->where('lessons.section_id', '=', $lesson->section_id)
+                ->where('lessons.sort_num', '<=', $lesson->sort_num)
+                ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
+                ->orderBy('lessons.sort_num', 'desc')
                 ->first();
 
-                if(isset($conference)){
-                    return true;
-                }
+                if(isset($conferenceLesson)){
+                    $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
+                    ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+                    ->select(
+                        'conferences.conference_id'
+                    )
+                    ->where('conferences.participated', '>=', 2)
+                    ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
+                    ->where('group_members.member_id', '=', $auth_user->user_id)
+                    ->first();
 
-                return false;
-            }
+                    if(isset($conference)){
+                        return true;
+                    }
+
+                    return false;
+                }
                 return true;
+            }
+
         }
     }
 

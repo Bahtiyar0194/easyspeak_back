@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use App\Models\Language;
 use Mail;
 use App\Mail\DemoMail;
 
@@ -17,6 +17,8 @@ class DemoController extends Controller
 
     public function request(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->lang)->first();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|between:2,100',
             'phone' => 'required|regex:/^((?!_).)*$/s',
@@ -32,7 +34,7 @@ class DemoController extends Controller
         $mail_body->subject = 'Запрос на демонстрацию';
         $mail_body->name = $request->name;
         $mail_body->phone = $request->phone;
-        $mail_body->lang = $request->lang;
+        $mail_body->lang = $language->lang_name;
 
         Mail::to(env('MANAGER_MAIL'))->send(new DemoMail($mail_body));
         return response()->json('success', 200);
