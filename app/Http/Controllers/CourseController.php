@@ -27,15 +27,18 @@ use Storage;
 use Auth;
 
 use App\Services\CourseService;
+use App\Services\TaskService;
 
 class CourseController extends Controller
 {
 
     protected $courseService;
+    protected $taskService;
 
-    public function __construct(Request $request, CourseService $courseService)
+    public function __construct(Request $request, CourseService $courseService, TaskService $taskService)
     {
         $this->courseService = $courseService;
+        $this->taskService = $taskService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -178,7 +181,7 @@ class CourseController extends Controller
             return response()->json(['error' => 'Course not found'], 404);
         }
 
-        $data->course = $course;
+        $levelCompletedPercent = 0;
 
         $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
         ->where('course_levels.level_slug', '=', $request->level_slug)
@@ -203,8 +206,6 @@ class CourseController extends Controller
             $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
         }
 
-        $data->level = $level;
-
         $sections = CourseSection::where('level_id', '=', $level->level_id)
         ->select(
             'section_id',
@@ -214,6 +215,9 @@ class CourseController extends Controller
         ->get();
 
         foreach ($sections as $s => $section) {
+
+            $sectionCompletedPercent = 0;
+
             $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
             ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
             ->where('lessons.section_id', '=', $section->section_id)
@@ -233,12 +237,25 @@ class CourseController extends Controller
 
             foreach ($lessons as $l => $lesson) {
                 $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
-                
-                $lesson_tasks = Task::where('lesson_id', '=', $lesson->lesson_id)
-                ->where('status_type_id', '=', 1)
-                ->get();
+    
+                $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, true);
 
-                $lesson->tasks = $lesson_tasks;
+                $completedTasksCount = 0;
+                $completedTasksPercent = 0;
+
+                foreach ($lesson->tasks as $key => $task) {
+                    if ($task->task_result && $task->task_result->completed === true) {
+                        $completedTasksCount++;
+                        $completedTasksPercent += $task->task_result->percentage;
+                    }
+                }
+
+                $lesson->completed_tasks_count = $completedTasksCount;
+                $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                    ? $completedTasksPercent / count($lesson->tasks)
+                    : 0;
+
+                $sectionCompletedPercent += $lesson->completed_tasks_percent;
 
                 $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
                 ->get();
@@ -247,8 +264,21 @@ class CourseController extends Controller
             }
 
             $section->lessons = $lessons;
+            $section->completed_percent = count($lessons) > 0
+                ? $sectionCompletedPercent / count($lessons)
+                : 0;
+
+            // 👇 добавляем в общий процент уровня
+            $levelCompletedPercent += $section->completed_percent;
         }
 
+        // 👇 итоговый процент по уровню
+        $level->completed_percent = count($sections) > 0
+        ? $levelCompletedPercent / count($sections)
+        : 0;
+
+        $data->course = $course;
+        $data->level = $level;
         $data->sections = $sections;
         
         return response()->json($data, 200);
