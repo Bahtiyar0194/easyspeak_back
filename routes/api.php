@@ -183,6 +183,8 @@ Route::group([
             Route::get('/get_lesson_types', [CourseController::class, 'get_lesson_types']);
             Route::get('/get_structure', [CourseController::class, 'get_courses_structure']);
 
+            Route::get('/get_grade/{user_id}', [CourseController::class, 'get_grade']);
+
             Route::post('/{course_slug}/{level_slug}/add_section', [CourseController::class, 'add_section'])->middleware('check_roles');
             Route::post('/{course_slug}/{level_slug}/{section_id}/add_lesson', [CourseController::class, 'add_lesson'])->middleware('check_roles');
             Route::post('/add_material/{lesson_id}', [CourseController::class, 'add_material'])->middleware('check_roles');

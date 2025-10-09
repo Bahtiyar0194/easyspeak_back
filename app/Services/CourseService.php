@@ -1,19 +1,120 @@
 <?php
 namespace App\Services;
+use App\Models\User;
+use App\Models\Course;
 use App\Models\CourseLevel;
+use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\LessonMaterial;
 use App\Models\Conference;
 use App\Models\ConferenceMember;
+use App\Models\Language;
 
 class CourseService
 {
-    public function levelIsAvailable($level_id){
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
 
-        $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
+    public function getCourses($request){
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        ->where('courses.show_status_id', '=', 1)
+        ->where('courses_lang.lang_id', '=', $language->lang_id)
+        ->select(
+            'courses.course_id',
+            'courses.course_name_slug',
+            'courses_lang.course_name'
+        )
+        ->distinct()
+        ->orderBy('courses.course_id', 'asc')
+        ->get();
+
+        return $courses;
+    }
+
+    public function getCourse($course_slug, $language_id){
+        $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        ->where('courses.course_name_slug', '=', $course_slug)
+        ->where('courses.show_status_id', '=', 1)
+        ->where('courses_lang.lang_id', '=', $language_id)
+        ->select(
+            'courses.course_id',
+            'courses_lang.course_name'
+        )
+        ->first();
+
+        if (!$course) {
+            return response()->json(['error' => 'Course not found'], 404);
+        }
+
+        return $course;
+    }
+
+    public function getCourseLevels($course_id, $language_id){
+        $levels = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+        ->where('course_levels.course_id', '=', $course_id)
+        ->where('course_levels_lang.lang_id', '=', $language_id)
+        ->select(
+            'course_levels.level_id',
+            'course_levels.level_slug',
+            'course_levels.is_available_always',
+            'course_levels_lang.level_name',
+            'courses.course_name_slug'
+        )
+        ->distinct()
+        ->orderBy('course_levels.level_id', 'asc')
+        ->get();
+
+        if (count($levels) == 0) {
+            return response()->json(['error' => 'Levels not found'], 404);
+        }
+
+        return $levels;
+    }
+
+    public function getCourseLevel($course_id, $level_slug, $language_id){
+        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+        ->where('course_levels.course_id', '=', $course_id)
+        ->where('course_levels.level_slug', '=', $level_slug)
+        ->where('course_levels_lang.lang_id', '=', $language_id)
+        ->select(
+            'course_levels.level_id',
+            'course_levels.level_slug',
+            'course_levels.is_available_always',
+            'course_levels_lang.level_name',
+            'courses.course_name_slug'
+        )
+        ->first();
+
+        if (!isset($level)) {
+            return response()->json(['error' => 'Level not found'], 404);
+        }
+
+        return $level;
+    }
+
+    public function getLevelSections($level_id){
+        $sections = CourseSection::where('level_id', '=', $level_id)
+        ->select(
+            'section_id',
+            'section_name'
+        )
+        ->orderBy('sort_num', 'asc')
+        ->get();
+
+        return $sections;
+    }
+
+    public function levelIsAvailable($level_id, $user_id){
+        // получаем пользователя по ID
+        $user = User::find($user_id);
+
+        if (!isset($user)) {
+            return response()->json(['error' => 'User not found'], 404);
+        }
+
+        $isOnlyLearner = $user->hasOnlyRoles(['learner']);
 
         if(!$isOnlyLearner){
             return true;
@@ -22,7 +123,7 @@ class CourseService
             $course_level = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
             ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
             ->where('course_levels.level_id', '=', $level_id)
-            ->where('group_members.member_id', '=', $auth_user->user_id)
+            ->where('group_members.member_id', '=', $user->user_id)
             ->first();
 
             if(isset($course_level)){
@@ -76,6 +177,27 @@ class CourseService
             }
 
         }
+    }
+
+    public function getLessons($section_id, $language_id){
+        $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+        ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
+        ->where('lessons.section_id', '=', $section_id)
+        ->where('types_of_lessons_lang.lang_id', '=', $language_id)
+        ->select(
+            'lessons.lesson_id',
+            'lessons.section_id',
+            'lessons.sort_num',
+            'lessons.lesson_name',
+            'types_of_lessons.lesson_type_id',
+            'types_of_lessons.lesson_type_slug',
+            'types_of_lessons_lang.lesson_type_name'
+        )
+        ->distinct()
+        ->orderBy('lessons.sort_num', 'asc')
+        ->get();
+
+        return $lessons;
     }
 
     public function getLessonMaterials($lesson_id, $language){

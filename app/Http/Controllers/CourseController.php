@@ -44,20 +44,8 @@ class CourseController extends Controller
 
     public function get_courses(Request $request)
     {
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+        $courses = $this->courseService->getCourses($request);
 
-        $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.show_status_id', '=', 1)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses.course_name_slug',
-            'courses_lang.course_name'
-        )
-        ->distinct()
-        ->orderBy('courses.course_id', 'asc')
-        ->get();
-        
         return response()->json($courses, 200);
     }
 
@@ -65,38 +53,9 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.course_name_slug', '=', $request->course_slug)
-        ->where('courses.show_status_id', '=', 1)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses_lang.course_name'
-        )
-        ->first();
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
 
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
-
-        $levels = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-        ->where('course_levels.course_id', '=', $course->course_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'course_levels.level_id',
-            'course_levels.level_slug',
-            'course_levels.is_available_always',
-            'course_levels_lang.level_name',
-            'courses.course_name_slug'
-        )
-        ->distinct()
-        ->orderBy('course_levels.level_id', 'asc')
-        ->get();
-
-        if (count($levels) == 0) {
-            return response()->json(['error' => 'Levels not found'], 404);
-        }
+        $levels = $this->courseService->getCourseLevels($course->course_id, $language->lang_id);
 
         if(Auth::check()){
             foreach ($levels as $key => $level) {
@@ -104,14 +63,59 @@ class CourseController extends Controller
                     $level->is_available = true;
                 }
                 else{
-                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id, auth()->user()->user_id);
                 }
+
+                $sections = $this->courseService->getLevelSections($level->level_id);
+
+                $levelCompletedPercent = 0;
+
+                foreach ($sections as $s => $section) {
+                    $sectionCompletedPercent = 0;
+
+                    $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
+
+                    foreach ($lessons as $l => $lesson) {
+                        $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, true);
+
+                        $completedTasksCount = 0;
+                        $completedTasksPercent = 0;
+
+                        foreach ($lesson->tasks as $key => $task) {
+                            if ($task->task_result && $task->task_result->completed === true) {
+                                $completedTasksCount++;
+                                $completedTasksPercent += $task->task_result->percentage;
+                            }
+                        }
+
+                        $lesson->completed_tasks_count = $completedTasksCount;
+                        $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                            ? $completedTasksPercent / count($lesson->tasks)
+                            : 0;
+
+                        $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                    }
+
+                    $section->lessons = $lessons;
+                    $section->completed_percent = count($lessons) > 0
+                        ? $sectionCompletedPercent / count($lessons)
+                        : 0;
+
+                    // 👇 добавляем в общий процент уровня
+                    $levelCompletedPercent += $section->completed_percent;
+                }
+
+                // 👇 итоговый процент по уровню
+                $level->completed_percent = count($sections) > 0
+                ? $levelCompletedPercent / count($sections)
+                : 0;
             }
         }
 
-        $levels = $levels->sortBy('level_id') // сортировка по level_id ↓
-        ->sortByDesc('is_available') // потом сортировка по is_available ↓
-        ->values(); // сброс ключей
+        $levels = $levels
+        ->sortByDesc('completed_percent') // сначала сортируем по проценту
+        ->sortByDesc('is_available')      // потом по доступности (она будет приоритетнее)
+        ->values();
 
         $data = new \stdClass();
         $data->course = $course;
@@ -124,36 +128,9 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.course_name_slug', '=', $request->course_slug)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses_lang.course_name'
-        )
-        ->first();
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
 
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
-
-        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-        ->where('course_levels.course_id', '=', $course->course_id)
-        ->where('course_levels.level_slug', '=', $request->level_slug)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'course_levels.level_id',
-            'course_levels.level_slug',
-            'course_levels.is_available_always',
-            'course_levels_lang.level_name',
-            'courses.course_name_slug'
-        )
-        ->first();
-
-        if (!isset($level)) {
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
         $data = new \stdClass();
         $data->course = $course;
@@ -165,75 +142,30 @@ class CourseController extends Controller
     public function get_lessons(Request $request){
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        $auth_user = auth()->user();
+
         $data = new \stdClass();
 
-        $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.course_name_slug', '=', $request->course_slug)
-        ->where('courses.show_status_id', '=', 1)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses_lang.course_name'
-        )
-        ->first();
-
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
 
         $levelCompletedPercent = 0;
 
-        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->where('course_levels.level_slug', '=', $request->level_slug)
-        ->where('course_levels.course_id', '=', $course->course_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'course_levels.level_id',
-            'course_levels.level_slug',
-            'course_levels.is_available_always',
-            'course_levels_lang.level_name'
-        )
-        ->first();
-
-        if (!$level) {
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
         if($level->is_available_always === 1){
             $level->is_available = true;
         }
         else{
-            $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+            $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $auth_user->user_id);
         }
 
-        $sections = CourseSection::where('level_id', '=', $level->level_id)
-        ->select(
-            'section_id',
-            'section_name'
-        )
-        ->orderBy('sort_num', 'asc')
-        ->get();
+        $sections = $this->courseService->getLevelSections($level->level_id);
 
         foreach ($sections as $s => $section) {
 
             $sectionCompletedPercent = 0;
 
-            $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-            ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
-            ->where('lessons.section_id', '=', $section->section_id)
-            ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
-            ->select(
-                'lessons.lesson_id',
-                'lessons.section_id',
-                'lessons.sort_num',
-                'lessons.lesson_name',
-                'types_of_lessons.lesson_type_id',
-                'types_of_lessons.lesson_type_slug',
-                'types_of_lessons_lang.lesson_type_name'
-            )
-            ->distinct()
-            ->orderBy('lessons.sort_num', 'asc')
-            ->get();
+            $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
             foreach ($lessons as $l => $lesson) {
                 $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
@@ -294,43 +226,17 @@ class CourseController extends Controller
 
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
-        $course = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.course_name_slug', '=', $request->course_slug)
-        ->where('courses.show_status_id', '=', 1)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses_lang.course_name'
-        )
-        ->first();
-
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
 
         $data->course = $course;
 
-        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->where('course_levels.level_slug', '=', $request->level_slug)
-        ->where('course_levels.course_id', '=', $course->course_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'course_levels.level_id',
-            'course_levels.level_slug',
-            'course_levels.is_available_always',
-            'course_levels_lang.level_name'
-        )
-        ->first();
-
-        if (!$level) {
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
         if($level->is_available_always === 1){
             $level->is_available = true;
         }
         else{
-            $level->is_available = $this->courseService->levelIsAvailable($level->level_id);
+            $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $auth_user->user_id);
         }
 
         $data->level = $level;
@@ -403,27 +309,16 @@ class CourseController extends Controller
 
     public function add_section(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
         // Валидация входных данных
         $validator = Validator::make($request->all(), [
             'section_name' => 'required|string|between:2,100'
         ]);
     
-        $course = Course::where('course_name_slug', '=', $request->course_slug)
-            ->select('course_id')
-            ->first();
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
     
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
-    
-        $level = CourseLevel::where('level_slug', '=', $request->level_slug)
-            ->where('course_id', $course->course_id)
-            ->select('level_id')
-            ->first();
-    
-        if (!$level) {
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
     
         $validator->after(function ($validator) use ($request, $level) {
             $existingSection = CourseSection::where('section_name', '=', $request->section_name)
@@ -450,6 +345,8 @@ class CourseController extends Controller
 
     public function add_lesson(Request $request)
     {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+        
         // Валидация входных данных
         $validator = Validator::make($request->all(), [
             'lesson_name' => 'required|string|between:2,100',
@@ -461,22 +358,9 @@ class CourseController extends Controller
             return response()->json($validator->errors(), 422);
         }
     
-        $course = Course::where('course_name_slug', '=', $request->course_slug)
-            ->select('course_id')
-            ->first();
+        $course = $this->courseService->getCourse($request->course_slug, $language->lang_id);
     
-        if (!$course) {
-            return response()->json(['error' => 'Course not found'], 404);
-        }
-    
-        $level = CourseLevel::where('level_slug', '=', $request->level_slug)
-            ->where('course_id', $course->course_id)
-            ->select('level_id')
-            ->first();
-    
-        if (!$level) {
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
         $section = CourseSection::where('section_id', '=', $request->section_id)
         ->where('level_id', '=', $level->level_id)
@@ -753,57 +637,20 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->where('courses.show_status_id', '=', 1)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->select(
-            'courses.course_id',
-            'courses_lang.course_name'
-        )
-        ->distinct()
-        ->orderBy('courses.course_id', 'asc')
-        ->get();
-
+        $courses = $this->courseService->getCourses($request);
 
         foreach ($courses as $c => $course) {
-            $levels = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-            ->where('course_levels.course_id', '=', $course->course_id)
-            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-            ->select(
-                'course_levels.level_id',
-                'course_levels_lang.level_name'
-            )
-            ->distinct()
-            ->orderBy('course_levels.level_id', 'asc')
-            ->get();
+            $levels = $this->courseService->getCourseLevels($course->course_id, $language->lang_id);
 
             $course->levels = $levels;
 
             foreach ($levels as $l => $level) {
-                $sections = CourseSection::where('level_id', '=', $level->level_id)
-                ->select(
-                    'section_id',
-                    'section_name'
-                )
-                ->orderBy('sort_num', 'asc')
-                ->get();
+                $sections = $this->courseService->getLevelSections($level->level_id);
 
                 $level->sections = $sections;
 
                 foreach ($sections as $s => $section) {
-                    $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-                    ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
-                    ->where('lessons.section_id', '=', $section->section_id)
-                    ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
-                    ->select(
-                        'lessons.lesson_id',
-                        'lessons.sort_num',
-                        'lessons.lesson_name',
-                        'types_of_lessons_lang.lesson_type_name'
-                    )
-                    ->distinct()
-                    ->orderBy('lessons.sort_num', 'asc')
-                    ->get();
+                    $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
                     $section->lessons = $lessons;
                 }
@@ -815,6 +662,83 @@ class CourseController extends Controller
         $attributes->courses = $courses;
 
         return response()->json($attributes, 200);
+    }
+
+    public function get_grade(Request $request)
+    {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $courses = $this->courseService->getCourses($request);
+
+        foreach ($courses as $courseKey => $course) {
+            $levels = $this->courseService->getCourseLevels($course->course_id, $language->lang_id);
+
+            foreach ($levels as $levelKey => $level) {
+                $levelCompletedPercent = 0;
+                $sections = $this->courseService->getLevelSections($level->level_id);
+
+                foreach ($sections as $sectionKey => $section) {
+                    $sectionCompletedPercent = 0;
+
+                    $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
+
+                    foreach ($lessons as $lessonKey => $lesson) {
+                        $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
+
+                        $completedTasksCount = 0;
+                        $completedTasksPercent = 0;
+
+                        foreach ($lesson->tasks as $key => $task) {
+                            $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+
+                            if ($task->task_result && $task->task_result->completed === true) {
+                                $completedTasksCount++;
+                                $completedTasksPercent += $task->task_result->percentage;
+                            }
+                        }
+
+                        $lesson->completed_tasks_count = $completedTasksCount;
+                        $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                            ? $completedTasksPercent / count($lesson->tasks)
+                            : 0;
+
+                        $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                    }
+
+                    $section->lessons = $lessons;
+                    $section->completed_percent = count($lessons) > 0
+                    ? $sectionCompletedPercent / count($lessons)
+                    : 0;
+
+                    
+                    // 👇 добавляем в общий процент уровня
+                    $levelCompletedPercent += $section->completed_percent;
+                }
+
+                if($level->is_available_always === 1){
+                    $level->is_available = true;
+                }
+                else{
+                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $request->user_id);
+                }
+                                
+                // 👇 итоговый процент по уровню
+                $level->completed_percent = count($sections) > 0
+                ? $levelCompletedPercent / count($sections)
+                : 0;
+
+                $level->sections = $sections;
+            }
+
+            $levels = $levels
+            ->sortByDesc('completed_percent') // сначала сортируем по проценту
+            ->sortByDesc('is_available')      // потом по доступности (она будет приоритетнее)
+            ->values();
+
+            $course->levels = $levels;
+        }
+
+        return response()->json(['courses' => $courses], 200);
     }
 
     public function send_request(Request $request)
