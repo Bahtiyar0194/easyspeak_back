@@ -677,49 +677,51 @@ class CourseController extends Controller
                 $levelCompletedPercent = 0;
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
-                foreach ($sections as $sectionKey => $section) {
-                    $sectionCompletedPercent = 0;
-
-                    $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
-
-                    foreach ($lessons as $lessonKey => $lesson) {
-                        $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
-
-                        $completedTasksCount = 0;
-                        $completedTasksPercent = 0;
-
-                        foreach ($lesson->tasks as $key => $task) {
-                            $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
-
-                            if ($task->task_result && $task->task_result->completed === true) {
-                                $completedTasksCount++;
-                                $completedTasksPercent += $task->task_result->percentage;
-                            }
-                        }
-
-                        $lesson->completed_tasks_count = $completedTasksCount;
-                        $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                            ? $completedTasksPercent / count($lesson->tasks)
-                            : 0;
-
-                        $sectionCompletedPercent += $lesson->completed_tasks_percent;
-                    }
-
-                    $section->lessons = $lessons;
-                    $section->completed_percent = count($lessons) > 0
-                    ? $sectionCompletedPercent / count($lessons)
-                    : 0;
-
-                    
-                    // 👇 добавляем в общий процент уровня
-                    $levelCompletedPercent += $section->completed_percent;
-                }
-
                 if($level->is_available_always === 1){
                     $level->is_available = true;
                 }
                 else{
                     $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $request->user_id);
+                }
+
+                if($level->is_available === true){
+                    foreach ($sections as $sectionKey => $section) {
+                        $sectionCompletedPercent = 0;
+
+                        $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
+
+                        foreach ($lessons as $lessonKey => $lesson) {
+                            $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
+
+                            $completedTasksCount = 0;
+                            $completedTasksPercent = 0;
+
+                            foreach ($lesson->tasks as $key => $task) {
+                                $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+
+                                if ($task->task_result && $task->task_result->completed === true) {
+                                    $completedTasksCount++;
+                                    $completedTasksPercent += $task->task_result->percentage;
+                                }
+                            }
+
+                            $lesson->completed_tasks_count = $completedTasksCount;
+                            $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                                ? $completedTasksPercent / count($lesson->tasks)
+                                : 0;
+
+                            $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                        }
+
+                        $section->lessons = $lessons;
+                        $section->completed_percent = count($lessons) > 0
+                        ? $sectionCompletedPercent / count($lessons)
+                        : 0;
+
+                        
+                        // 👇 добавляем в общий процент уровня
+                        $levelCompletedPercent += $section->completed_percent;
+                    }
                 }
                                 
                 // 👇 итоговый процент по уровню
