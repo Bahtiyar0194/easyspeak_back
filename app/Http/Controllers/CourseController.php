@@ -25,6 +25,7 @@ use File;
 use Image;
 use Storage;
 use Auth;
+use Log;
 
 use App\Services\CourseService;
 use App\Services\TaskService;
