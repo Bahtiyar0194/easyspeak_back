@@ -10,4 +10,14 @@ class CourseLevel extends Model
     use HasFactory;
     protected $table = 'course_levels';
     protected $primaryKey = 'level_id';
+
+    public function sections()
+    {
+        return $this->hasMany(CourseSection::class, 'level_id');
+    }
+
+    public function translation()
+    {
+        return $this->hasOne(CourseLevelLang::class, 'level_id');
+    }
 }

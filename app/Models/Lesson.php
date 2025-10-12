@@ -10,4 +10,9 @@ class Lesson extends Model
     use HasFactory;
     protected $table = 'lessons';
     protected $primaryKey = 'lesson_id';
+
+    public function tasks()
+    {
+        return $this->hasMany(Task::class, 'lesson_id');
+    }
 }

@@ -10,4 +10,9 @@ class CompletedTask extends Model
     use HasFactory;
     protected $table = 'completed_tasks';
     protected $primaryKey = 'completed_task_id';
+
+    public function taskAnswer()
+    {
+        return $this->hasMany(TaskAnswer::class, 'completed_task_id');
+    }
 }

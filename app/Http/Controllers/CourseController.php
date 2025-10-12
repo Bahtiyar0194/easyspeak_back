@@ -668,6 +668,69 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        // $courses = Course::with([
+        //     'levels.translation' => function ($q) use ($language) {
+        //         $q->where('lang_id', $language->lang_id);
+        //     }, 
+        //     'levels.sections.lessons.tasks.completedTask' => function ($q) use ($request) {
+        //         $q->where('learner_id', $request->user_id)
+        //             ->with('taskAnswer');
+        //     }
+        // ])
+        // ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // ->where('courses.show_status_id', 1)
+        // ->where('courses_lang.lang_id', $language->lang_id)
+        // ->select('courses.course_id', 'courses.course_name_slug', 'courses_lang.course_name')
+        // ->get();
+
+        // foreach ($courses as $courseKey => $course) {
+        //     if(count($course[$courseKey]->levels) > 0){
+        //         foreach ($course[$courseKey]->levels as $levelKey => $level) {
+        //             $levelCompletedPercent = 0;
+
+        //             if($level->is_available_always === 1){
+        //                 $level->is_available = true;
+        //             }
+        //             else{
+        //                 $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $request->user_id);
+        //             }
+
+        //             if($level->is_available === true){
+        //                 if(count($levels[$levelKey]->sections) > 0){
+        //                     foreach ($levels[$levelKey]->sections as $sectionKey => $section) {
+        //                         $sectionCompletedPercent = 0;
+
+        //                         if(count($sections[$sectionKey]->lessons) > 0){
+        //                             foreach ($sections[$sectionKey]->lessons as $lessonKey => $lesson) {
+        //                                 $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
+
+        //                                 $completedTasksCount = 0;
+        //                                 $completedTasksPercent = 0;
+
+        //                                 foreach ($lesson->tasks as $key => $task) {
+        //                                     $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+
+        //                                     if ($task->task_result && $task->task_result->completed === true) {
+        //                                         $completedTasksCount++;
+        //                                         $completedTasksPercent += $task->task_result->percentage;
+        //                                     }
+        //                                 }
+
+        //                                 $lesson->completed_tasks_count = $completedTasksCount;
+        //                                 $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+        //                                     ? $completedTasksPercent / count($lesson->tasks)
+        //                                     : 0;
+
+        //                                 $sectionCompletedPercent += $lesson->completed_tasks_percent;
+        //                             }
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+
         $courses = $this->courseService->getCourses($request);
 
         foreach ($courses as $courseKey => $course) {
@@ -789,8 +852,18 @@ class CourseController extends Controller
 
             $school = School::findOrFail($request->school_id);
 
-            Mail::to($school->email)->send(new CourseRequestMail($mail_body));
+            try {
+                Mail::to($school->email)->send(new CourseRequestMail($mail_body));
+                Log::info("Письмо успешно отправлено на {$school->email}");
+            } catch (\Exception $e) {
+                Log::error("Ошибка при отправке письма: " . $e->getMessage());
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
             return response()->json('success', 200);
+        }
+        else{
+            return response()->json(['error' => 'Level not found'], 404);
         }
     }
 }

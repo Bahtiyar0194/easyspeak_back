@@ -10,4 +10,8 @@ class Course extends Model
     use HasFactory;
     protected $table = 'courses';
     protected $primaryKey = 'course_id';
+
+    public function levels() {
+        return $this->hasMany(CourseLevel::class, 'course_id');
+    }
 }
