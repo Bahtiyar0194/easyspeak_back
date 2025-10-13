@@ -4213,6 +4213,7 @@ class TaskController extends Controller
     
             return response()->json($task, 200);
         }
+        
         // Если пользователь не является участником группы, возвращаем ошибку
         return response()->json([trans('auth.you_are_not_a_member_of_group')], 422);
     }

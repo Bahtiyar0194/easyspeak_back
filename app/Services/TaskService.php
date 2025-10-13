@@ -211,24 +211,37 @@ class TaskService
                 $mentor_id = $auth_user->user_id;
             }
             else{
-                $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+
+                $level = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
                 ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
                 ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
-                ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-                ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-                ->where('tasks.task_id', '=', $task_id)
-                ->where('group_members.member_id', '=', $auth_user->user_id)
                 ->select(
-                    'groups.mentor_id',
-                )
-                ->first();
-        
-                if(!isset($is_member)){
-                    // Если пользователь не является участником группы, возвращаем ошибку
-                    return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
-                }
+                    'course_levels.is_available_always'
+                );
 
-                $mentor_id = $is_member->mentor_id;
+                if($level->is_available_always === 1){
+                    $mentor_id = null;
+                }
+                else{
+                    $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+                    ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+                    ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+                    ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+                    ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+                    ->where('tasks.task_id', '=', $task_id)
+                    ->where('group_members.member_id', '=', $auth_user->user_id)
+                    ->select(
+                        'groups.mentor_id',
+                    )
+                    ->first();
+            
+                    if(!isset($is_member)){
+                        // Если пользователь не является участником группы, возвращаем ошибку
+                        return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
+                    }
+
+                    $mentor_id = $is_member->mentor_id;
+                }
             } 
 
             foreach ($task_result as $key => $result) {
