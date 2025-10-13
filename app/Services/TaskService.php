@@ -217,7 +217,8 @@ class TaskService
                 ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
                 ->select(
                     'course_levels.is_available_always'
-                );
+                )
+                ->first();
 
                 if($level->is_available_always === 1){
                     $mentor_id = null;
