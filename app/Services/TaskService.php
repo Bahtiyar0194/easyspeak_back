@@ -220,7 +220,7 @@ class TaskService
                 )
                 ->first();
 
-                if($level->is_available_always === 1){
+                if($level->is_available_always == 1){
                     $mentor_id = null;
                 }
                 else{
