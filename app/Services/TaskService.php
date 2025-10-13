@@ -220,7 +220,7 @@ class TaskService
                 )
                 ->first();
 
-                dd($level);
+             return response()->json($level, 422);
 
                 if($level->is_available_always == 1){
                     $mentor_id = null;
