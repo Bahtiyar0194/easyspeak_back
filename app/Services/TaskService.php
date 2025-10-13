@@ -218,11 +218,10 @@ class TaskService
                 ->select(
                     'course_levels.is_available_always'
                 )
+                ->where('tasks.task_id', '=', $task_id)
                 ->first();
 
-             return response()->json($level, 422);
-
-                if($level->is_available_always == 1){
+                if($level->is_available_always === 1){
                     $mentor_id = null;
                 }
                 else{
