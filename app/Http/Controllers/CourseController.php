@@ -810,15 +810,10 @@ class CourseController extends Controller
     public function send_request(Request $request)
     {
         $rules = [
-            'first_name' => 'required|string|between:2,100',
-            'phone' => 'required|regex:/^((?!_).)*$/s',
+            'location_id' => 'required|numeric',
             'school_id' => 'required|numeric',
             'lang' => 'required'
         ];
-
-        if(!isset($request->school_domain)){
-            $rules['location_id'] = 'required|numeric';
-        }
 
         $validator = Validator::make($request->all(), $rules);
 
@@ -830,41 +825,45 @@ class CourseController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-        ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->select(
-            'course_levels_lang.level_name',
-            'courses_lang.course_name'
-        )
-        ->where('course_levels.level_id', '=', $request->level_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->first();
+        $school = School::findOrFail($request->school_id);
 
-        if(isset($level)){
-            $mail_body = new \stdClass();
-            $mail_body->subject = 'Запрос на курс: '.$level->course_name.' ('.$level->level_name.')';
-            $mail_body->course_name = $level->course_name;
-            $mail_body->level_name = $level->level_name;
-            $mail_body->name = $request->first_name;
-            $mail_body->phone = $request->phone;
-            $mail_body->lang = $language->lang_name;
+        return response()->json($school->school_domain, 200);
 
-            $school = School::findOrFail($request->school_id);
+        // $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        // ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+        // ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // ->select(
+        //     'course_levels_lang.level_name',
+        //     'courses_lang.course_name'
+        // )
+        // ->where('course_levels.level_id', '=', $request->level_id)
+        // ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+        // ->where('courses_lang.lang_id', '=', $language->lang_id)
+        // ->first();
 
-            try {
-                Mail::to($school->email)->send(new CourseRequestMail($mail_body));
-                Log::info("Письмо успешно отправлено на {$school->email}");
-            } catch (\Exception $e) {
-                Log::error("Ошибка при отправке письма: " . $e->getMessage());
-                return response()->json(['error' => $e->getMessage()], 500);
-            }
+        // if(isset($level)){
+        //     $mail_body = new \stdClass();
+        //     $mail_body->subject = 'Запрос на курс: '.$level->course_name.' ('.$level->level_name.')';
+        //     $mail_body->course_name = $level->course_name;
+        //     $mail_body->level_name = $level->level_name;
+        //     $mail_body->name = $request->first_name;
+        //     $mail_body->phone = $request->phone;
+        //     $mail_body->lang = $language->lang_name;
 
-            return response()->json('success', 200);
-        }
-        else{
-            return response()->json(['error' => 'Level not found'], 404);
-        }
+        //     $school = School::findOrFail($request->school_id);
+
+        //     try {
+        //         Mail::to($school->email)->send(new CourseRequestMail($mail_body));
+        //         Log::info("Письмо успешно отправлено на {$school->email}");
+        //     } catch (\Exception $e) {
+        //         Log::error("Ошибка при отправке письма: " . $e->getMessage());
+        //         return response()->json(['error' => $e->getMessage()], 500);
+        //     }
+
+        //     return response()->json('success', 200);
+        // }
+        // else{
+        //     return response()->json(['error' => 'Level not found'], 404);
+        // }
     }
 }

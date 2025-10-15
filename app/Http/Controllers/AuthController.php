@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\UserRole;
 use App\Models\Language;
 use App\Models\School;
+use App\Models\Course;
 
 use Mail;
 use App\Mail\PasswordRecoveryMail;
@@ -142,6 +143,21 @@ class AuthController extends Controller
         $new_user_role->user_id = $new_user->user_id;
         $new_user_role->role_type_id = 5;
         $new_user_role->save();
+
+        if(isset($request->course)){
+            $course = Course::leftJoin('course_levels', 'courses.course_id', '=', 'course_levels.course_id')
+            ->select('course_levels.level_slug')
+            ->where('courses.course_name_slug', '=', $request->course)
+            ->where('course_levels.is_available_always', '=', 1)
+            ->first();
+
+            if(isset($course)){
+                $school->level = $course;
+            }
+            else{
+                return response()->json('Course level not found', 404);
+            }
+        }
 
         return response()->json($school, 200);
     }
