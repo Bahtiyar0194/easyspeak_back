@@ -177,8 +177,8 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_levels/{course_slug}', [CourseController::class, 'get_levels']);
             Route::get('/get_level/{course_slug}/{level_slug}', [CourseController::class, 'get_level']);
-            Route::get('/{course_slug}/{level_slug}/get_lessons', [CourseController::class, 'get_lessons']);
-            Route::get('/{course_slug}/{level_slug}/get_lesson/{lesson_id}', [CourseController::class, 'get_lesson']);
+            Route::get('/{course_slug}/{level_slug}/{section_id}', [CourseController::class, 'get_section']);
+            Route::get('/{course_slug}/{level_slug}/{section_id}/get_lesson/{lesson_id}', [CourseController::class, 'get_lesson']);
             Route::get('/get_material_types', [CourseController::class, 'get_material_types']);
             Route::get('/get_lesson_types', [CourseController::class, 'get_lesson_types']);
             Route::get('/get_structure', [CourseController::class, 'get_courses_structure']);
