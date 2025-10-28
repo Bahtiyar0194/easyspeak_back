@@ -265,7 +265,7 @@ class ConferenceController extends Controller
         }
     
         // Если конференция ещё не началась
-        if (now()->lessThan(Carbon::parse($conference->start_time))) {
+        if (now()->lessThan(Carbon::parse($conference->start_time)->subMinutes(5))) {
             return response()->json(['type' => 'pending', 'message' => trans('auth.conference_has_not_started_yet'), 'conference' => $conference], 200);
         }
 
