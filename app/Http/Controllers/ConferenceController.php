@@ -141,7 +141,8 @@ class ConferenceController extends Controller
         )
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        ->where('conferences.start_time', '<=', now())
+        // Доступ за 10 минут до начала
+        ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(5))
         ->where('conferences.end_time', '>=', now())
         ->distinct();
 
