@@ -45,9 +45,9 @@ class ProcessVideoJob implements ShouldQueue
 
             // --- 2. Разрешения ---
             $resolutions = [
-                // ['width' => 640,  'height' => 360,  'bitrate' => 500],
+                ['width' => 640,  'height' => 360,  'bitrate' => 500],
                 ['width' => 854,  'height' => 480,  'bitrate' => 1000],
-                ['width' => 1280, 'height' => 720,  'bitrate' => 2500],
+                // ['width' => 1280, 'height' => 720,  'bitrate' => 2500],
                 // ['width' => 1920, 'height' => 1080, 'bitrate' => 5000],
             ];
 
