@@ -3,6 +3,7 @@
 return [
     'ffmpeg' => [
         'binaries' => env('FFMPEG_PATH', 'C:\ffmpeg\bin\ffmpeg.exe'),
+        'threads' => 4,
     ],
 
     'ffprobe' => [

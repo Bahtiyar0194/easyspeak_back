@@ -77,8 +77,11 @@ class ProcessVideoJob implements ShouldQueue
             // --- 3. Конвертация ---
             $media = FFMpeg::fromDisk('local')->open($videoPath);
 
-            $export = $media->exportForHLS()->onProgress(function ($p) {
-                info("Обработка: {$p}%");
+            $export = $media->exportForHLS()
+                    ->setTimeout(3600)
+                    ->setIdleTimeout(300)
+                    ->onProgress(function ($p) {
+                    info("Обработка: {$p}%");
             });
 
             foreach ($allowedResolutions as $res) {
