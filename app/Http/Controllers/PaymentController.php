@@ -217,7 +217,7 @@ class PaymentController extends Controller
             ->select(
                 'types_of_subscription_plans.subscription_plan_id',
                 'types_of_subscription_plans.price',
-                'types_of_subscription_plans.months_count',
+                'types_of_subscription_plans.users_count',
                 'types_of_subscription_plans_lang.subscription_plan_name'
             )
             ->where('types_of_subscription_plans.subscription_plan_id', '=', $request->subscription_plan_id)
@@ -249,7 +249,7 @@ class PaymentController extends Controller
                 : Carbon::parse($school->subscription_expiration_at);
 
             // Добавляем нужное количество месяцев
-            $end_date = $start_date->copy()->addMonths($selectedPlan->months_count);
+            $end_date = $start_date->copy()->addMonths(1);
 
             $invoices = Payment::where('payments.school_id', '=', $school->school_id)
             ->where('payments.is_paid', '=', 0)

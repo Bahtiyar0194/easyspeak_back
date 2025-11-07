@@ -333,6 +333,32 @@ class GroupController extends Controller
                 return response()->json(['error' => 'Mentor or level not found.'], 404);
             }
 
+            $group_members = json_decode($request->members);
+            $already_members = [];
+
+            foreach ($group_members as $member) {
+                $searchLevelGroup = GroupMember::leftJoin('groups', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('group_members.member_id', '=', $member->user_id)
+                ->where('groups.level_id', '=', $level->level_id)
+                ->select(
+                    'groups.group_name'
+                )
+                ->first();
+
+                if(isset($searchLevelGroup)){
+                    array_push($already_members, [
+                            'user_id' => $member->user_id,
+                            'first_name' => $member->first_name,
+                            'last_name' => $member->last_name,
+                            'group_name' => $searchLevelGroup->group_name
+                    ]);
+                }
+            }
+
+            if(count($already_members) > 0){
+                return response()->json(['error' => 'already_members', 'members' => $already_members], 422);
+            }
+
             return response()->json([
                 'step' => 2,
                 'data' => [
@@ -346,6 +372,7 @@ class GroupController extends Controller
         } elseif ($request->step == 3) {
 
             $mentor = User::find($request->mentor_id);
+
             $level = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
             ->where('course_levels.level_id', '=', $request->level_id)
             ->where('course_levels_lang.lang_id', '=', $language->lang_id)
@@ -360,19 +387,20 @@ class GroupController extends Controller
                 return response()->json(['error' => 'Mentor or level not found.'], 404);
             }
 
-            $new_group = new Group();
-            $new_group->operator_id = auth()->user()->user_id;
-            $new_group->mentor_id = $request->mentor_id;
-            $new_group->group_name = $request->group_name;
-            $new_group->group_description = $request->group_description;
-            $new_group->level_id = $request->level_id;
-            $new_group->started_at = $request->start_date.' '.$request->start_time;
-            $new_group->save();
-
             $group_members = json_decode($request->members);
             $member_names = [];
 
             if (count($group_members) > 0) {
+
+                $new_group = new Group();
+                $new_group->operator_id = auth()->user()->user_id;
+                $new_group->mentor_id = $request->mentor_id;
+                $new_group->group_name = $request->group_name;
+                $new_group->group_description = $request->group_description;
+                $new_group->level_id = $level->level_id;
+                $new_group->started_at = $request->start_date.' '.$request->start_time;
+                $new_group->save();
+
                 foreach ($group_members as $member) {
                     $new_member = new GroupMember();
                     $new_member->group_id = $new_group->group_id;
@@ -382,24 +410,22 @@ class GroupController extends Controller
                     // Сохранение имен участников
                     $member_names[] = $member->last_name . ' ' . $member->first_name;
                 }
+
+                $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at);
+
+                $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+                <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+                <p><span>Категория группы:</span> <b>{$level->level_name}</b></p>
+                <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+                $user_operation = new UserOperation();
+                $user_operation->operator_id = auth()->user()->user_id;
+                $user_operation->operation_type_id = 3;
+                $user_operation->description = $description;
+                $user_operation->save();
+
+                return response()->json('success', 200);
             }
-
-            $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at);
-
-            $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
-            <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
-            <p><span>Категория группы:</span> <b>{$level->level_name}</b></p>
-            <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
-
-            $user_operation = new UserOperation();
-            $user_operation->operator_id = auth()->user()->user_id;
-            $user_operation->operation_type_id = 3;
-            $user_operation->description = $description;
-            $user_operation->save();
-
-            
-
-            return response()->json('success', 200);
         }
     }
 
@@ -453,6 +479,34 @@ class GroupController extends Controller
 
             if (!$mentor || !$level) {
                 return response()->json(['error' => 'Mentor or level not found.'], 404);
+            }
+
+            
+            $group_members = json_decode($request->members);
+            $already_members = [];
+
+            foreach ($group_members as $member) {
+                $searchLevelGroup = GroupMember::leftJoin('groups', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('group_members.member_id', '=', $member->user_id)
+                ->where('groups.level_id', '=', $level->level_id)
+                ->where('groups.group_id', '!=', $request->group_id)
+                ->select(
+                    'groups.group_name'
+                )
+                ->first();
+
+                if(isset($searchLevelGroup)){
+                    array_push($already_members, [
+                            'user_id' => $member->user_id,
+                            'first_name' => $member->first_name,
+                            'last_name' => $member->last_name,
+                            'group_name' => $searchLevelGroup->group_name
+                    ]);
+                }
+            }
+
+            if(count($already_members) > 0){
+                return response()->json(['error' => 'already_members', 'members' => $already_members], 422);
             }
 
             return response()->json([

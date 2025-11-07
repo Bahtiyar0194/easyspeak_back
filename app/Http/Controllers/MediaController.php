@@ -14,6 +14,8 @@ use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
+use App\Jobs\ProcessVideoJob;
+
 class MediaController extends Controller
 {
     public function __construct(Request $request)
@@ -115,26 +117,37 @@ class MediaController extends Controller
         return response()->json($files->paginate($per_page)->onEachSide(1), 200);
     }
 
-    public function get_file(Request $request){    
-        $path = storage_path('/app/public/'.$request->file_name);
-    
+    public function get_file(Request $request)
+    {
+        $fileName = $request->file_name;
+
+        $path = storage_path('app/public/' . $fileName);
+        
         if (!File::exists($path)) {
-            return response()->json('File not found', 404);
+            return response()->json(['status' => 'error', 'message' => 'File not found'], 404);
         }
-    
-        $file = File::get($path);
+
+        if (pathinfo($fileName, PATHINFO_EXTENSION) === 'm3u8') {
+            // Если HLS готов — возвращаем сам master.m3u8
+            return response()->file($path, [
+                'Content-Type' => 'application/vnd.apple.mpegurl',
+            ]);
+        }
+
         $type = File::mimeType($path);
+        $typeParts = explode('/', $type);
 
-        $type_parts = explode('/', $type);
-
-        if (isset($type_parts[0]) && $type_parts[0] === 'video') {
+        // Если видео
+        if (isset($typeParts[0]) && $typeParts[0] === 'video') {
             $response = VideoStreamer::streamFile($path);
-        } else {
+        } 
+        else {
+            // Любой другой тип файла (например, изображение)
+            $file = File::get($path);
             $response = Response::make($file, 200);
         }
 
         $response->header("Content-Type", $type);
-    
         return $response;
     }
 
@@ -185,8 +198,13 @@ class MediaController extends Controller
                 })->stream('png', 80);
                 Storage::disk('local')->put('/public/'.$file_name, $resized_image);
             }
-            else{
-                $file->storeAs('/public/', $file_name);
+            else {
+                // ✅ Сохраняем файл в public-диск
+                $path = $file->storeAs('', $file_name, 'public');
+
+                if ($material_type->material_type_slug == 'video') {
+                    ProcessVideoJob::dispatch($file_name);
+                }
             }
 
             $new_file = new MediaFile();
@@ -198,6 +216,8 @@ class MediaController extends Controller
 
             return response()->json('success', 200);
         }
+
+        return response()->json('no_file', 400);
     }
 
     public function replace_file(Request $request){
@@ -249,10 +269,20 @@ class MediaController extends Controller
             }
             else{
                 $file->storeAs('/public/', $file_name);
+
+                if ($material_type->material_type_slug == 'video') {
+                    ProcessVideoJob::dispatch($file_name);
+                }
             }
 
-            if (Storage::exists('/public/' . $findFile->target)) {
-                Storage::delete('/public/' . $findFile->target);
+            $fileBaseName = pathinfo($findFile->target, PATHINFO_FILENAME);
+
+            $files = Storage::allFiles('public'); // включает подпапки
+
+            foreach ($files as $f) {
+                if (str_starts_with(basename($f), $fileBaseName)) {
+                    Storage::delete($f);
+                }
             }
 
             $findFile->target = $file_name;

@@ -25,6 +25,8 @@ use Intervention\Image\ImageManagerStatic as Image;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
+use App\Jobs\ProcessVideoJob;
+
 class TaskService
 {
     //Добавить задание
@@ -615,6 +617,10 @@ class TaskService
                                     }
                                     else{
                                         $file->storeAs('/public/', $file_name);
+
+                                        if ($material_type->material_type_slug == 'video') {
+                                            ProcessVideoJob::dispatch($file_name);
+                                        }
                                     }
         
                                     $new_file = new MediaFile();
@@ -748,6 +754,10 @@ class TaskService
                 }
                 else{
                     $file->storeAs('/public/', $file_name);
+
+                    if ($material_type->material_type_slug == 'video') {
+                        ProcessVideoJob::dispatch($file_name);
+                    }
                 }
 
                 $new_file = new MediaFile();

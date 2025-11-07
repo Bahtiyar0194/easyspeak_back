@@ -22,15 +22,11 @@ use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
-use App\Models\UploadConfiguration;
 
 use App\Services\TaskService;
 
 use Validator;
 use DB;
-use File;
-use Image;
-use Storage;
 use Http;
 
 use Illuminate\Http\Request;

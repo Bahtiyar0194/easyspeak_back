@@ -15,6 +15,7 @@
         "laravel/sanctum": "^2.11",
         "laravel/socialite": "^5.15",
         "laravel/tinker": "^2.5",
+        "pbmedia/laravel-ffmpeg": "^7.8",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "twilio/sdk": "^8.3"
     },

@@ -26,7 +26,7 @@ class PaymentService
             : Carbon::parse($school->subscription_expiration_at);
 
         // Добавляем нужное количество месяцев
-        $end_date = $start_date->copy()->addMonths($selectedPlan->months_count);
+        $end_date = $start_date->copy()->addMonths(1);
 
         $school->subscription_plan_id = $selectedPlan->subscription_plan_id;
         $school->subscription_expiration_at = $end_date;
