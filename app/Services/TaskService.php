@@ -25,10 +25,18 @@ use Intervention\Image\ImageManagerStatic as Image;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
+use App\Services\UploadFileService;
 use App\Jobs\ProcessVideoJob;
 
 class TaskService
 {
+    protected $uploadFileService;
+
+    public function __construct(UploadFileService $uploadFileService)
+    {
+        $this->uploadFileService = $uploadFileService;
+    }
+
     //Добавить задание
     public function newTask($request, $task_type_id){
         // Проверяем, существует ли тип задания
@@ -609,19 +617,7 @@ class TaskService
                                 if($file){
                                     $file_name = $file->hashName();
         
-                                    if($material->material_type_slug == 'image'){
-                                        $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                                            $constraint->aspectRatio();
-                                        })->stream('png', 80);
-                                        Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                                    }
-                                    else{
-                                        $file->storeAs('/public/', $file_name);
-
-                                        if ($material_type->material_type_slug == 'video') {
-                                            ProcessVideoJob::dispatch($file_name);
-                                        }
-                                    }
+                                    $this->uploadFileService->uploadFile($file, $file_name, $material->material_type_slug);
         
                                     $new_file = new MediaFile();
                                     $new_file->file_name = $request['file_name_'.$key];
@@ -746,19 +742,7 @@ class TaskService
                     return response()->json(['error' => 'Material type is not found'], 404);
                 }
 
-                if($material_type->material_type_slug == 'image'){
-                    $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                        $constraint->aspectRatio();
-                    })->stream('png', 80);
-                    Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                }
-                else{
-                    $file->storeAs('/public/', $file_name);
-
-                    if ($material_type->material_type_slug == 'video') {
-                        ProcessVideoJob::dispatch($file_name);
-                    }
-                }
+                $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
                 $new_file = new MediaFile();
                 $new_file->file_name = $request['file_name_'.$sentenceIndex];

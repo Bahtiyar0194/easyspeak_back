@@ -86,7 +86,9 @@ Route::group([
             Route::post('/replace/{file_id}', [MediaController::class, 'replace_file'])->middleware('check_roles');
         });
 
-        Route::get('get/{file_name}', [MediaController::class, 'get_file']);
+        Route::get('/get/{file_name}', [MediaController::class, 'get_file']);
+        Route::get('/check_video/{file_name}', [MediaController::class, 'check_video']);
+        Route::get('/get_hls_video/{file_name}', [MediaController::class, 'get_hls_video']);
     });
 
     Route::group([

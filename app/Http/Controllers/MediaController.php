@@ -14,12 +14,15 @@ use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-use App\Jobs\ProcessVideoJob;
+use App\Services\UploadFileService;
 
 class MediaController extends Controller
 {
-    public function __construct(Request $request)
+    protected $uploadFileService;
+
+    public function __construct(Request $request, UploadFileService $uploadFileService)
     {
+        $this->uploadFileService = $uploadFileService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -192,20 +195,7 @@ class MediaController extends Controller
         if($file){
             $file_name = $file->hashName();
 
-            if($material_type->material_type_slug == 'image'){
-                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                    $constraint->aspectRatio();
-                })->stream('png', 80);
-                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-            }
-            else {
-                // ✅ Сохраняем файл в public-диск
-                $path = $file->storeAs('', $file_name, 'public');
-
-                if ($material_type->material_type_slug == 'video') {
-                    ProcessVideoJob::dispatch($file_name);
-                }
-            }
+            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
             $new_file = new MediaFile();
             $new_file->file_name = $request->file_name;
@@ -261,19 +251,7 @@ class MediaController extends Controller
         if($file){
             $file_name = $file->hashName();
 
-            if($material_type->material_type_slug == 'image'){
-                $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                    $constraint->aspectRatio();
-                })->stream('png', 80);
-                Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-            }
-            else{
-                $file->storeAs('/public/', $file_name);
-
-                if ($material_type->material_type_slug == 'video') {
-                    ProcessVideoJob::dispatch($file_name);
-                }
-            }
+            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
             $fileBaseName = pathinfo($findFile->target, PATHINFO_FILENAME);
 
@@ -291,5 +269,28 @@ class MediaController extends Controller
 
             return response()->json($findFile, 200);
         }
+    }
+
+    public function check_video(Request $request){
+        $video = MediaFile::where('target', 'LIKE', $request->file_name . '%')
+        ->select(
+            'processing',
+            'target'
+        )
+        ->first();
+
+        if (!isset($video)) {
+            return response()->json(['status' => 'error', 'message' => 'File not found in DB'], 404);
+        }
+
+        $fileName = $request->file_name;
+
+        $path = storage_path('app/public/' . $fileName);
+
+        if (!File::exists($path)) {
+            return response()->json(['status' => 'error', 'message' => 'File not found in public folder'], 404);
+        }
+
+        return response()->json($video, 200);
     }
 }

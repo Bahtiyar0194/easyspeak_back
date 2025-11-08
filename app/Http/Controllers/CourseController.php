@@ -29,17 +29,19 @@ use Log;
 
 use App\Services\CourseService;
 use App\Services\TaskService;
+use App\Services\UploadFileService;
 
 class CourseController extends Controller
 {
-
     protected $courseService;
     protected $taskService;
+    protected $uploadFileService;
 
-    public function __construct(Request $request, CourseService $courseService, TaskService $taskService)
+    public function __construct(Request $request, CourseService $courseService, TaskService $taskService, UploadFileService $uploadFileService)
     {
         $this->courseService = $courseService;
         $this->taskService = $taskService;
+        $this->uploadFileService = $uploadFileService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -516,15 +518,7 @@ class CourseController extends Controller
                 if($file){
                     $file_name = $file->hashName();
 
-                    if($material_type->material_type_slug == 'image'){
-                        $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                            $constraint->aspectRatio();
-                        })->stream('png', 80);
-                        Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                    }
-                    else{
-                        $file->storeAs('/public/', $file_name);
-                    }
+                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
                     $new_file = new MediaFile();
                     $new_file->file_name = $request['lesson_file_name_create'];
@@ -628,15 +622,7 @@ class CourseController extends Controller
                 if($file){
                     $file_name = $file->hashName();
 
-                    if($material_type->material_type_slug == 'image'){
-                        $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
-                            $constraint->aspectRatio();
-                        })->stream('png', 80);
-                        Storage::disk('local')->put('/public/'.$file_name, $resized_image);
-                    }
-                    else{
-                        $file->storeAs('/public/', $file_name);
-                    }
+                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
                     $new_file = new MediaFile();
                     $new_file->file_name = $request['lesson_file_name_edit'];

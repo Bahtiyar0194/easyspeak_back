@@ -3,16 +3,16 @@
 namespace App\Jobs;
 
 use App\Models\MediaFile;
+use App\Models\VideoResolutionType;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use FFMpeg\Format\Video\X264;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use FFMpeg\Format\Video\X264;
 use Storage;
 use Exception;
-use Log;
 
 class ProcessVideoJob implements ShouldQueue
 {
@@ -27,13 +27,14 @@ class ProcessVideoJob implements ShouldQueue
 
     public function handle(): void
     {
-        try {
-            $videoPath = 'public/' . $this->fileName;
+        $basename = pathinfo($this->fileName, PATHINFO_FILENAME);
+        $videoPath = 'public/' . $this->fileName;
 
-            // --- 1. Получаем исходное разрешение ---
+        try {
+            // --- Получаем исходное разрешение ---
             $ffprobe = \FFMpeg\FFProbe::create([
-                'ffmpeg.binaries'  => env('FFMPEG_PATH', 'C:\ffmpeg\bin\ffmpeg.exe'),
-                'ffprobe.binaries' => env('FFPROBE_PATH', 'C:\ffmpeg\bin\ffprobe.exe'),
+                'ffmpeg.binaries'  => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
+                'ffprobe.binaries' => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
             ]);
 
             $videoFullPath = storage_path('app/' . $videoPath);
@@ -41,77 +42,113 @@ class ProcessVideoJob implements ShouldQueue
 
             $width = $stream->get('width');
             $height = $stream->get('height');
-            info("Исходное разрешение видео: {$width}x{$height}");
 
-            // --- 2. Разрешения ---
-            $resolutions = [
-                ['width' => 640,  'height' => 360,  'bitrate' => 500],
-                // ['width' => 854,  'height' => 480,  'bitrate' => 1000],
-                // ['width' => 1280, 'height' => 720,  'bitrate' => 2500],
-                // ['width' => 1920, 'height' => 1080, 'bitrate' => 5000],
-            ];
+            info("Исходное видео: {$width}x{$height}");
 
-            $allowedResolutions = array_filter($resolutions, function ($r) use ($height) {
-                return $r['height'] <= $height;
-            });
+            // --- Получаем список разрешений из БД ---
+            $resolutions = \App\Models\VideoResolutionType::where('is_active', 1)->get();
 
-            info('Выбранные разрешения: ' . json_encode($allowedResolutions));
+            // --- Фильтруем только те, что не превышают исходное разрешение ---
+            $allowed = $resolutions->filter(function ($r) use ($height) {
+                return $r->height <= $height;
+            })->values();
 
-            $findFile = MediaFile::where('target', $this->fileName)->first();
-
-            if (!$findFile) {
-                info("Файл {$this->fileName} не найден в БД.");
+            if ($allowed->isEmpty()) {
+                info('Видео слишком маленькое — HLS не требуется.');
                 return;
             }
 
-            if (empty($allowedResolutions)) {
-                $findFile->processing = 0;
-                $findFile->save();
-                info('Видео слишком маленькое, HLS не требуется.');
+            $findFile = MediaFile::where('target', $this->fileName)->first();
+            if (!$findFile) {
+                info("Файл {$this->fileName} не найден в БД.");
                 return;
             }
 
             $findFile->processing = 1;
             $findFile->save();
 
-            // --- 3. Конвертация ---
-            $media = FFMpeg::fromDisk('local')->open($videoPath);
+            $variants = [];
 
-            $export = $media->exportForHLS()->onProgress(function ($p) {
-                info("Обработка: {$p}%");
-            });
+            // --- Обрабатываем каждое качество поочередно ---
+            foreach ($allowed as $r) {
+                $label = "{$r->height}p";
+                $playlistName = "{$basename}_{$label}";
+                $playlistNameFile = "{$playlistName}.m3u8";
+                $playlistNameFinal = "{$playlistName}_0_{$r->bitrate}.m3u8";
 
-            foreach ($allowedResolutions as $res) {
-                $export->addFormat(
-                    (new X264('aac', 'libx264'))
-                        ->setKiloBitrate($res['bitrate'])
-                        ->setAudioKiloBitrate(128),
-                    function ($media) use ($res) {
-                        $media->addFilter("scale={$res['width']}:{$res['height']}");
-                    }
-                );
+                info("Начало конвертации {$label}...");
+
+                $media = FFMpeg::fromDisk('local')->open($videoPath);
+
+                $format = (new X264('aac', 'libx264'))
+                    ->setKiloBitrate($r->bitrate)
+                    ->setAudioKiloBitrate(128)
+                    ->setAdditionalParameters(['-threads', '1', '-preset', 'veryfast']);
+
+                // Экспорт HLS для одного качества
+                $media->exportForHLS()
+                     ->onProgress(function($p) use ($label) {
+                        info("{$label}: {$p}%");
+                    })
+                    ->addFormat($format, function($v) use ($r) {
+                        $v->addFilter("scale={$r->width}:{$r->height}");
+                    })
+                    ->toDisk('public')
+                    ->save($playlistNameFile);
+
+                // Удаляем старый плейлист (если есть)
+                if (Storage::disk('public')->exists($playlistNameFile)) {
+                    Storage::disk('public')->delete($playlistNameFile);
+                }
+
+                // Переименовываем в желаемый
+                if (Storage::disk('public')->exists($playlistNameFinal)) {
+                    Storage::disk('public')->move($playlistNameFinal, $playlistNameFile);
+                    info("Плейлист переименован: {$playlistNameFinal} → {$playlistNameFile}");
+                }
+
+                $bandwidth = ($r->bitrate * 1000) + 128000;
+                $average = intval($bandwidth * 0.9);
+
+                $variants[] = [
+                    'uri' => $playlistNameFile,
+                    'bandwidth' => $bandwidth,
+                    'average' => $average,
+                    'resolution' => "{$r->width}x{$r->height}",
+                    'codecs' => "avc1.640029,mp4a.40.2",
+                    'name' => $label
+                ];
+
+                info("Готово: {$label}");
             }
 
-            $outputName = pathinfo($this->fileName, PATHINFO_FILENAME) . ".m3u8";
-            $export->toDisk('public')->save($outputName);
+            // --- Создаём мастер-файл ---
+            $masterContent = ["#EXTM3U", "#EXT-X-VERSION:3"];
+            foreach ($variants as $v) {
+                $masterContent[] = "#EXT-X-STREAM-INF:BANDWIDTH={$v['bandwidth']},AVERAGE-BANDWIDTH={$v['average']},RESOLUTION={$v['resolution']},CODECS=\"{$v['codecs']}\"";
+                $masterContent[] = $v['uri'];
+            }
 
-            // --- 4. Удаляем исходное видео ---
+            $masterPath = "{$basename}.m3u8";
+            Storage::disk('public')->put($masterPath, implode("\n", $masterContent) . "\n");
 
-            // if (Storage::disk('public')->exists($this->fileName)) {
-            //     Storage::disk('public')->delete($this->fileName);
-            //     info("Исходный файл {$this->fileName} успешно удалён после HLS-конвертации.");
-            // } else {
-            //     info("Исходный файл {$this->fileName} не найден для удаления.");
-            // }
+            info("Создан мастер-файл: {$masterPath}");
 
-            // --- 5. Обновляем запись в БД ---
-            $findFile->target = $outputName;
+            // --- Удаляем исходный файл, если нужно ---
+            // Storage::disk('public')->delete($this->fileName);
+
+            $findFile->target = $masterPath;
             $findFile->processing = 0;
             $findFile->save();
 
-            info("Видео успешно обработано: {$outputName}");
+            info("✅ Видео успешно обработано: {$findFile->target}");
+
         } catch (Exception $e) {
-            info('Ошибка при обработке видео: ' . $e->getMessage());
+            info('❌ Ошибка при обработке видео: ' . $e->getMessage());
+            if (isset($findFile)) {
+                $findFile->processing = 0;
+                $findFile->save();
+            }
         }
     }
 }
