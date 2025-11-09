@@ -83,7 +83,7 @@ class ProcessVideoJob implements ShouldQueue
                 $format = (new X264('aac', 'libx264'))
                     ->setKiloBitrate($r->bitrate)
                     ->setAudioKiloBitrate(128)
-                    ->setAdditionalParameters(['-threads', '1', '-preset', 'veryfast']);
+                    ->setAdditionalParameters(['-threads', '2', '-preset', 'veryfast']);
 
                 // Экспорт HLS для одного качества
                 $media->exportForHLS()

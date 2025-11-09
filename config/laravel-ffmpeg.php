@@ -3,7 +3,7 @@
 return [
     'ffmpeg' => [
         'binaries' => env('FFMPEG_PATH', 'C:\ffmpeg\bin\ffmpeg.exe'),
-        'threads' => 1,
+        'threads' => 2,
         'timeout' => 3600, // 1 час
     ],
 
