@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 use App\Services\UploadFileService;
+use App\Jobs\ProcessVideoJob; // не удаляй
 
 class MediaController extends Controller
 {
@@ -75,6 +76,7 @@ class MediaController extends Controller
             'files.file_name',
             'files.target',
             'files.size',
+            'files.processing',
             'files.material_type_id',
             'files.created_at',
             'types_of_materials.icon',
@@ -269,6 +271,34 @@ class MediaController extends Controller
 
             return response()->json($findFile, 200);
         }
+    }
+
+    public function convert_file(Request $request){
+
+        $file = MediaFile::leftJoin('types_of_materials', 'files.material_type_id', '=', 'types_of_materials.material_type_id')
+        ->select(
+            'files.processing',
+            'files.target',
+            'types_of_materials.material_type_slug'
+        )
+        ->where('files.file_id', '=', $request->file_id)
+        ->first();
+
+        if (!isset($file)) {
+            return response()->json(['status' => 'error', 'message' => 'File not found in DB'], 404);
+        }
+
+        $path = storage_path('app/public/' . $file->target);
+
+        if (!File::exists($path)) {
+            return response()->json(['status' => 'error', 'message' => 'File not found in public folder'], 404);
+        }
+
+        if ($file->material_type_slug == 'video' && $file->processing === 0 && pathinfo($file->target, PATHINFO_EXTENSION) === 'mp4') {
+            ProcessVideoJob::dispatch($file->target);
+        }
+
+        return response()->json('success', 200);
     }
 
     public function check_video(Request $request){
