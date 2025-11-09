@@ -27,7 +27,12 @@ class CheckSubdomain
         $host = str_replace('www.', '', $origin['host']);
         $parts = explode('.', $host);
 
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+        if($request->header('Accept-Language')){
+            $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+        }
+        else{
+            $language = Language::where('lang_tag', '=', 'ru')->first();
+        }
 
         if (((count($parts) == 1 && $parts[0] == 'localhost') || (count($parts) == 2 && $parts[1] != 'localhost')) && $request->subdomain === null) {
             return response()->json('main', 200);
