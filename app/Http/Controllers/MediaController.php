@@ -316,6 +316,7 @@ class MediaController extends Controller
 
         $file = MediaFile::leftJoin('types_of_materials', 'files.material_type_id', '=', 'types_of_materials.material_type_id')
         ->select(
+            'files.file_id',
             'files.processing',
             'files.target',
             'types_of_materials.material_type_slug'
@@ -334,8 +335,10 @@ class MediaController extends Controller
         }
 
         if ($file->material_type_slug == 'video' && $file->processing === 0 && pathinfo($file->target, PATHINFO_EXTENSION) === 'mp4') {
-            $file->processing = 1;
-            $file->save();
+
+            $saveFile = MediaFile::find($file->file_id);
+            $saveFile->processing = 1;
+            $saveFile->save();
             ProcessVideoJob::dispatch($file->target);
         }
 
