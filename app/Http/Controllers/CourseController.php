@@ -518,14 +518,19 @@ class CourseController extends Controller
                 if($file){
                     $file_name = $file->hashName();
 
-                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
-
                     $new_file = new MediaFile();
                     $new_file->file_name = $request['lesson_file_name_create'];
                     $new_file->target = $file_name;
+
+                    if($material_type->material_type_slug === 'video'){
+                        $new_file->processing = 1;
+                    }
+
                     $new_file->size = $file->getSize() / 1048576;
                     $new_file->material_type_id = $material_type->material_type_id;
                     $new_file->save();
+
+                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
                 }
             }
             else{
@@ -622,14 +627,19 @@ class CourseController extends Controller
                 if($file){
                     $file_name = $file->hashName();
 
-                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
-
                     $new_file = new MediaFile();
                     $new_file->file_name = $request['lesson_file_name_edit'];
                     $new_file->target = $file_name;
+
+                    if($material_type->material_type_slug === 'video'){
+                        $new_file->processing = 1;
+                    }
+
                     $new_file->size = $file->getSize() / 1048576;
                     $new_file->material_type_id = $material_type->material_type_id;
                     $new_file->save();
+
+                    $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
                 }
             }
             else{

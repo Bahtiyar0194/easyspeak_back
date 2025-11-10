@@ -122,6 +122,35 @@ class MediaController extends Controller
         return response()->json($files->paginate($per_page)->onEachSide(1), 200);
     }
 
+    public function get_file_info(Request $request)
+    {
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $file = MediaFile::leftJoin('types_of_materials', 'files.material_type_id', '=', 'types_of_materials.material_type_id')
+        ->leftJoin('types_of_materials_lang', 'types_of_materials.material_type_id', '=', 'types_of_materials_lang.material_type_id')
+        ->select(
+            'files.file_id',
+            'files.file_name',
+            'files.target',
+            'files.size',
+            'files.processing',
+            'files.material_type_id',
+            'files.created_at',
+            'types_of_materials.icon',
+            'types_of_materials.material_type_slug',
+            'types_of_materials_lang.material_type_name'
+        )
+        ->where('types_of_materials_lang.lang_id', '=', $language->lang_id)
+        ->where('files.file_id', '=', $request->file_id)
+        ->first();
+
+        if (!isset($file)) {
+            return response()->json(['status' => 'error', 'message' => 'File not found in DB'], 404);
+        }
+
+        return response()->json($file, 200);
+    }
+
     public function get_file(Request $request)
     {
         $fileName = $request->file_name;
@@ -197,16 +226,21 @@ class MediaController extends Controller
         if($file){
             $file_name = $file->hashName();
 
-            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
-
             $new_file = new MediaFile();
             $new_file->file_name = $request->file_name;
             $new_file->target = $file_name;
+            
+            if($material_type->material_type_slug === 'video'){
+                $new_file->processing = 1;
+            }
+
             $new_file->size = $file->getSize() / 1048576;
             $new_file->material_type_id = $material_type->material_type_id;
             $new_file->save();
 
-            return response()->json('success', 200);
+            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
+
+            return response()->json($new_file, 200);
         }
 
         return response()->json('no_file', 400);
@@ -253,8 +287,6 @@ class MediaController extends Controller
         if($file){
             $file_name = $file->hashName();
 
-            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
-
             $fileBaseName = pathinfo($findFile->target, PATHINFO_FILENAME);
 
             $files = Storage::allFiles('public'); // включает подпапки
@@ -266,8 +298,15 @@ class MediaController extends Controller
             }
 
             $findFile->target = $file_name;
+
+            if($material_type->material_type_slug === 'video'){
+                $findFile->processing = 1;
+            }
+
             $findFile->size = $file->getSize() / 1048576;
             $findFile->save();
+
+            $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
             return response()->json($findFile, 200);
         }
@@ -295,6 +334,8 @@ class MediaController extends Controller
         }
 
         if ($file->material_type_slug == 'video' && $file->processing === 0 && pathinfo($file->target, PATHINFO_EXTENSION) === 'mp4') {
+            $file->processing = 1;
+            $file->save();
             ProcessVideoJob::dispatch($file->target);
         }
 

@@ -616,15 +616,20 @@ class TaskService
         
                                 if($file){
                                     $file_name = $file->hashName();
-        
-                                    $this->uploadFileService->uploadFile($file, $file_name, $material->material_type_slug);
-        
+       
                                     $new_file = new MediaFile();
                                     $new_file->file_name = $request['file_name_'.$key];
                                     $new_file->target = $file_name;
+
+                                    if($material_type->material_type_slug === 'video'){
+                                        $new_file->processing = 1;
+                                    }
+
                                     $new_file->size = $file->getSize() / 1048576;
                                     $new_file->material_type_id = $material->material_type_id;
                                     $new_file->save();
+
+                                    $this->uploadFileService->uploadFile($file, $file_name, $material->material_type_slug);
     
                                     $new_task_material->file_id = $new_file->file_id;
                                 }
@@ -742,14 +747,19 @@ class TaskService
                     return response()->json(['error' => 'Material type is not found'], 404);
                 }
 
-                $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
-
                 $new_file = new MediaFile();
                 $new_file->file_name = $request['file_name_'.$sentenceIndex];
                 $new_file->target = $file_name;
+                
+                if($material_type->material_type_slug === 'video'){
+                    $new_file->processing = 1;
+                }
+
                 $new_file->size = $file->getSize() / 1048576;
                 $new_file->material_type_id = $material_type->material_type_id;
                 $new_file->save();
+
+                $this->uploadFileService->uploadFile($file, $file_name, $material_type->material_type_slug);
 
                 $new_task_sentence_material->file_id = $new_file->file_id;
             }

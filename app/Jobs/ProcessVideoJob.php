@@ -31,6 +31,13 @@ class ProcessVideoJob implements ShouldQueue
         $videoPath = 'public/' . $this->fileName;
 
         try {
+            $findFile = MediaFile::where('target', $this->fileName)->first();
+
+            if (!$findFile) {
+                info("Файл {$this->fileName} не найден в БД.");
+                return;
+            }
+
             // --- Получаем исходное разрешение ---
             $ffprobe = \FFMpeg\FFProbe::create([
                 'ffmpeg.binaries'  => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
@@ -55,17 +62,10 @@ class ProcessVideoJob implements ShouldQueue
 
             if ($allowed->isEmpty()) {
                 info('Видео слишком маленькое — HLS не требуется.');
+                $findFile->processing = 0;
+                $findFile->save();
                 return;
             }
-
-            $findFile = MediaFile::where('target', $this->fileName)->first();
-            if (!$findFile) {
-                info("Файл {$this->fileName} не найден в БД.");
-                return;
-            }
-
-            $findFile->processing = 1;
-            $findFile->save();
 
             $variants = [];
 
@@ -88,7 +88,7 @@ class ProcessVideoJob implements ShouldQueue
                 // Экспорт HLS для одного качества
                 $media->exportForHLS()
                      ->onProgress(function($p) use ($label) {
-                        info("{$label}: {$p}%");
+                        //info("{$label}: {$p}%");
                     })
                     ->addFormat($format, function($v) use ($r) {
                         $v->addFilter("scale={$r->width}:{$r->height}");
