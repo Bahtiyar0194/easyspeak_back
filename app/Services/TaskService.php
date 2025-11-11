@@ -621,7 +621,7 @@ class TaskService
                                     $new_file->file_name = $request['file_name_'.$key];
                                     $new_file->target = $file_name;
 
-                                    if($material_type->material_type_slug === 'video'){
+                                    if($material->material_type_slug === 'video'){
                                         $new_file->processing = 1;
                                     }
 
