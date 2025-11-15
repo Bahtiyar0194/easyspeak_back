@@ -381,7 +381,6 @@ class MediaController extends Controller
     public function create_thumbnails(Request $request){
 
         $videos = MediaFile::where('material_type_id', '=', 1)
-        ->limit(5)
         ->get();
 
         foreach ($videos as $key => $video) {
