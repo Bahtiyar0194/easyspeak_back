@@ -133,6 +133,38 @@ class CourseService
                 return false;
             }
         }
+
+//Для сплитования
+            //         $course_level = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+            // ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+            // ->where('course_levels.level_id', '=', $level_id)
+            // ->where('group_members.member_id', '=', $user->user_id)
+            // ->where('groups.status_type_id', '=', 1)
+            // ->select(
+            //     'group_members.subscription_expiration_at'
+            // )
+            // ->first();
+
+            // if(isset($course_level)){
+            //     //Когда истек срок подписки
+            //     if (time() >= strtotime($course_level->subscription_expiration_at)) {
+            //         $course_level->subscription_expires = true;
+            //     } else {
+            //         $course_level->subscription_expires = false;
+            //     }
+
+            //     //Даем еще 7 дней на оплату (при окончательном истечении подписки доступ к курсу закрыт) 
+            //     if (time() >= strtotime("+7 day", strtotime($course_level->subscription_expiration_at))) {
+            //         $course_level->subscription_expired = true;
+            //     } else {
+            //         $course_level->subscription_expired = false;
+            //     }
+
+            //     return $course_level;
+            // }
+            // else{
+            //     return false;
+            // }
     }
 
     public function lessonIsAvailable($lesson, $is_available_always){

@@ -14,6 +14,8 @@ use FFMpeg\Format\Video\X264;
 use Storage;
 use Exception;
 
+use App\Services\VideoThumbnailService;
+
 class ProcessVideoJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -27,6 +29,7 @@ class ProcessVideoJob implements ShouldQueue
 
     public function handle(): void
     {
+        $videoThumbnailService = app(VideoThumbnailService::class);
         $basename = pathinfo($this->fileName, PATHINFO_FILENAME);
         $videoPath = 'public/' . $this->fileName;
 
@@ -138,6 +141,12 @@ class ProcessVideoJob implements ShouldQueue
             // Storage::disk('public')->delete($this->fileName);
 
             $findFile->target = $masterPath;
+
+            //---------------------------------------------
+            // Генерация thumbnail sprite и VTT
+            //---------------------------------------------
+            $videoThumbnailService->generateThumbnails($this->fileName, $videoFullPath);
+
             $findFile->processing = 0;
             $findFile->save();
 

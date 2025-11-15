@@ -217,7 +217,7 @@ class TaskService
             $new_completed_task->task_id = $task_id;
             $new_completed_task->learner_id = $auth_user->user_id;
 
-            if($auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
+            if($auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])){
                 $mentor_id = $auth_user->user_id;
             }
             else{

@@ -15,15 +15,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 use App\Services\UploadFileService;
+use App\Services\VideoThumbnailService;
 use App\Jobs\ProcessVideoJob; // не удаляй
 
 class MediaController extends Controller
 {
     protected $uploadFileService;
+    protected $videoThumbnailService;
 
-    public function __construct(Request $request, UploadFileService $uploadFileService)
+    public function __construct(Request $request, UploadFileService $uploadFileService, VideoThumbnailService $videoThumbnailService)
     {
         $this->uploadFileService = $uploadFileService;
+        $this->videoThumbnailService = $videoThumbnailService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -346,7 +349,10 @@ class MediaController extends Controller
     }
 
     public function check_video(Request $request){
-        $video = MediaFile::where('target', 'LIKE', $request->file_name . '%')
+
+        $fileBaseName = pathinfo($request->file_name, PATHINFO_FILENAME);
+
+        $video = MediaFile::where('target', 'LIKE', '%'. $fileBaseName . '%')
         ->select(
             'processing',
             'target'
@@ -357,14 +363,40 @@ class MediaController extends Controller
             return response()->json(['status' => 'error', 'message' => 'File not found in DB'], 404);
         }
 
-        $fileName = $request->file_name;
-
-        $path = storage_path('app/public/' . $fileName);
+        $path = storage_path('app/public/' . $video->target);
 
         if (!File::exists($path)) {
             return response()->json(['status' => 'error', 'message' => 'File not found in public folder'], 404);
         }
 
+        $vttFile = storage_path('app/public/' . $fileBaseName. '_thumbs.vtt');
+
+        if (File::exists($vttFile)) {
+            $video->vtt = $fileBaseName. '_thumbs.vtt';
+        }
+
         return response()->json($video, 200);
+    }
+
+    public function create_thumbnails(Request $request){
+
+        $videos = MediaFile::where('material_type_id', '=', 1)
+        ->limit(5)
+        ->get();
+
+        foreach ($videos as $key => $video) {
+            $fileBaseName = pathinfo($video->target, PATHINFO_FILENAME);
+            $vttFile = storage_path('app/public/' . $fileBaseName. '_thumbs.vtt');
+
+            if (!File::exists($vttFile)) {
+                $videoFullPath = storage_path('app/public/' . $fileBaseName.'.mp4');
+
+                if (File::exists($videoFullPath)) {
+                    $this->videoThumbnailService->generateThumbnails($fileBaseName.'.mp4', $videoFullPath);
+                }
+            }
+        }
+
+        echo 123;
     }
 }

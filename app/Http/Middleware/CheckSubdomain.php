@@ -11,6 +11,8 @@ use App\Models\Font;
 use App\Models\FaviconType;
 use App\Models\Payment;
 use App\Models\Language;
+use App\Models\User;
+use App\Models\GroupMember;
 
 class CheckSubdomain
 {
@@ -79,25 +81,6 @@ class CheckSubdomain
             }
 
             if (isset($school)) {
-                $location = Location::with(['locations_lang' => function ($q) use ($language) {
-                    $q->where('locations_lang.lang_id', $language->lang_id);
-                }])->find($school->location_id);
-
-                $names = [];
-                $loc = $location;
-
-                while ($loc) {
-                    $name = $loc->locations_lang()
-                        ->where('lang_id', $language->lang_id)
-                        ->value('location_name');
-
-                    if ($name) {
-                        $names[] = $name;
-                    }
-
-                    $loc = $loc->parent;
-                }
-
                 $auth_user = auth('sanctum')->user();
 
                 if($auth_user){
@@ -122,10 +105,44 @@ class CheckSubdomain
                         if(isset($invoice)){
                             $school->invoice = $invoice;
                         }
+
+                        $all_users = User::where('school_id', '=', $school->school_id)
+                        ->count();
+
+                        $school->all_users_count = $all_users;
+
+                        $active_users = GroupMember::leftJoin('groups', 'group_members.group_id', '=', 'groups.group_id')
+                        ->leftJoin('users', 'groups.mentor_id', '=', 'users.user_id')
+                        ->where('users.school_id', $school->school_id)
+                        ->where('groups.status_type_id', 1)
+                        ->where('group_members.status_type_id', 1)
+                        ->distinct('group_members.member_id') // уникальные пользователи
+                        ->count('group_members.member_id');
+
+                        $school->active_users_count = $active_users;
+
+                        $location = Location::with(['locations_lang' => function ($q) use ($language) {
+                            $q->where('locations_lang.lang_id', $language->lang_id);
+                        }])->find($school->location_id);
+
+                        $names = [];
+                        $loc = $location;
+
+                        while ($loc) {
+                            $name = $loc->locations_lang()
+                                ->where('lang_id', $language->lang_id)
+                                ->value('location_name');
+
+                            if ($name) {
+                                $names[] = $name;
+                            }
+
+                            $loc = $loc->parent;
+                        }
+
+                        $school->location_full = implode(', ', array_reverse(array_filter($names)));
                     }
                 }
-
-                $school->location_full = implode(', ', array_reverse(array_filter($names)));
 
                 $school->title_font_class = Font::where('font_id', '=', $school->title_font_id)->first()->font_class . '_title';
                 $school->body_font_class = Font::where('font_id', '=', $school->body_font_id)->first()->font_class . '_body';
@@ -133,6 +150,15 @@ class CheckSubdomain
                 $school->favicons = FaviconType::get();
                 $school->manifest_icons = $manifest_icons;
 
+
+                //Когда истек срок тарифа
+                if (time() >= strtotime($school->subscription_expiration_at)) {
+                    $school->subscription_expires = true;
+                } else {
+                    $school->subscription_expires = false;
+                }
+
+                //Даем еще 7 дней на оплату (при окончательном истечении тарифа создание пользователя и новой группы недоступно) 
                 if (time() >= strtotime("+7 day", strtotime($school->subscription_expiration_at))) {
                     $school->subscription_expired = true;
                 } else {

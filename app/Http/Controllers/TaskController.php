@@ -4195,7 +4195,7 @@ class TaskController extends Controller
         ->exists();
 
         // Проверяем, является ли пользователь участником группы
-        if($is_member || $auth_user->hasRole(['school_owner', 'school_admin', 'mentor'])){
+        if($is_member || $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])){
             $task_questions = $this->taskService->getTaskQuestions($find_task->task_id, $language, $task_options);
 
             $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);

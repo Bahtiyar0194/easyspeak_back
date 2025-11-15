@@ -92,6 +92,8 @@ Route::group([
         });
 
         Route::get('/get/{file_name}', [MediaController::class, 'get_file']);
+
+        Route::get('/create_thumbnails', [MediaController::class, 'create_thumbnails']);
     });
 
     Route::group([

@@ -32,6 +32,7 @@ class PaymentController extends Controller
         $plans = SubscriptionPlanType::leftJoin('types_of_subscription_plans_lang', 'types_of_subscription_plans.subscription_plan_id', '=', 'types_of_subscription_plans_lang.subscription_plan_id')
         ->select(
             'types_of_subscription_plans.subscription_plan_id',
+            'types_of_subscription_plans.users_count',
             'types_of_subscription_plans.price',
             'types_of_subscription_plans_lang.subscription_plan_name'
         )
