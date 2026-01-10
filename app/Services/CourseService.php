@@ -6,8 +6,8 @@ use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\LessonMaterial;
+use App\Models\BoughtLesson;
 use App\Models\Conference;
-use App\Models\ConferenceMember;
 use App\Models\Language;
 
 class CourseService
@@ -106,79 +106,90 @@ class CourseService
         return $sections;
     }
 
-    public function levelIsAvailable($level_id, $user_id){
-        // получаем пользователя по ID
-        $user = User::find($user_id);
+    public function levelAvailableStatus($level, $user_id){
+        
+        $available_status = new \stdClass();
 
-        if (!isset($user)) {
-            return response()->json(['error' => 'User not found'], 404);
-        }
-
-        $isOnlyLearner = $user->hasOnlyRoles(['learner']);
-
-        if(!$isOnlyLearner){
-            return true;
+        if($level->is_available_always === 1){
+            $available_status->is_available = true;
+            $available_status->is_available_always = true;
         }
         else{
-            $course_level = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-            ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-            ->where('course_levels.level_id', '=', $level_id)
-            ->where('group_members.member_id', '=', $user->user_id)
-            ->first();
+            // получаем пользователя по ID
+            $user = User::find($user_id);
 
-            if(isset($course_level)){
-                return true;
+            if (!isset($user)) {
+                return response()->json(['error' => 'User not found'], 404);
+            }
+
+            $isOnlyLearner = $user->hasOnlyRoles(['learner']);
+
+            if(!$isOnlyLearner){
+                $available_status->is_learner = false;
+                $available_status->is_available = true;
             }
             else{
-                return false;
+                $group_member = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+                ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('course_levels.level_id', '=', $level->level_id)
+                ->where('group_members.member_id', '=', $user->user_id)
+                ->where('group_members.status_type_id', '=', 1)
+                ->first();
+
+                $available_status->is_learner = true;
+
+                if(isset($group_member)){
+                    $available_status->is_available = true;
+                }
+                else{
+                    $available_status->is_available = false;
+                }
             }
         }
 
-//Для сплитования
-            //         $course_level = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-            // ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-            // ->where('course_levels.level_id', '=', $level_id)
-            // ->where('group_members.member_id', '=', $user->user_id)
-            // ->where('groups.status_type_id', '=', 1)
-            // ->select(
-            //     'group_members.subscription_expiration_at'
-            // )
-            // ->first();
-
-            // if(isset($course_level)){
-            //     //Когда истек срок подписки
-            //     if (time() >= strtotime($course_level->subscription_expiration_at)) {
-            //         $course_level->subscription_expires = true;
-            //     } else {
-            //         $course_level->subscription_expires = false;
-            //     }
-
-            //     //Даем еще 7 дней на оплату (при окончательном истечении подписки доступ к курсу закрыт) 
-            //     if (time() >= strtotime("+7 day", strtotime($course_level->subscription_expiration_at))) {
-            //         $course_level->subscription_expired = true;
-            //     } else {
-            //         $course_level->subscription_expired = false;
-            //     }
-
-            //     return $course_level;
-            // }
-            // else{
-            //     return false;
-            // }
+        return $available_status;
     }
 
-    public function lessonIsAvailable($lesson, $is_available_always){
+    public function lessonIsBoughtStatus($lesson_id, $learner_id){
+        
+        $status = new \stdClass();
+
+        $bought_lesson = BoughtLesson::where('lesson_id', '=', $lesson_id)
+        ->where('learner_id', '=', $learner_id)
+        ->first();
+
+        if(isset($bought_lesson)){
+            if($bought_lesson->is_free === 1){
+                $status->is_free = true;  
+            }
+            else{
+                $status->is_free = false;  
+            }
+
+            $status->is_bought = true;
+        }
+        else{
+            $status->is_bought = false;
+        }
+
+        return $status;
+    }
+
+    public function lessonAvailableStatus($lesson, $is_available_always){
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
+
+        $available_status = new \stdClass();
 
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         if(!$isOnlyLearner){
-            return true;
+            $available_status->is_available = true;
         }
         else{
             if($is_available_always === 1){
-                return true;
+                $available_status->is_available = true;
+                $available_status->is_available_always = true;
             }
             else{
                 $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
@@ -197,18 +208,29 @@ class CourseService
                     ->where('conferences.participated', '>=', 2)
                     ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
                     ->where('group_members.member_id', '=', $auth_user->user_id)
+                    ->where('group_members.status_type_id', '=', 1)
                     ->first();
 
                     if(isset($conference)){
-                        return true;
+                        $available_status->is_available = true;
+                    }
+                    else{
+                        $available_status->is_available = false;
                     }
 
-                    return false;
+                    if($lesson->lesson_type_slug === 'conference' || $lesson->lesson_type_slug === 'file_test'){
+                        $available_status->is_bought_status = $this->lessonIsBoughtStatus($lesson->lesson_id, $auth_user->user_id);
+                    }
                 }
-                return true;
+                else{
+                    $available_status->is_available = true;
+                }
             }
-
         }
+
+        $available_status->is_only_learner = $isOnlyLearner;
+
+        return $available_status;
     }
 
     public function getLessons($section_id, $language_id){

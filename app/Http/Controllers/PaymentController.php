@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\School;
 use App\Models\SubscriptionPlanType;
 use App\Models\Payment;
+use App\Models\LearnerPayment;
 use App\Models\PaymentMethod;
 
 use App\Services\PaymentService;
@@ -49,11 +50,7 @@ class PaymentController extends Controller
 
         $data = [
             'plans' => $plans,
-            'methods' => $methods,
-            'tiptop' => [
-                'public_id' => env('TIPTOPPAY_PUBLIC_ID'),
-                'checkout_url' => env('TIPTOPPAY_CHECKOUT_URL')
-            ]
+            'methods' => $methods
         ];
 
         return response()->json($data, 200);
@@ -153,7 +150,7 @@ class PaymentController extends Controller
         return response()->json($payments->paginate($per_page)->onEachSide(1), 200);
     }
 
-    public function handle(Request $request)
+    public function school_handle(Request $request)
     {
         $language = Language::where('lang_tag', '=', $request->lang)->first();
 
@@ -302,14 +299,137 @@ class PaymentController extends Controller
                     return response()->json($response->json(), 200);
                 }
 
-                return response()->json(['error' => $response->json()], 400);
+                return response()->json(['message' => $response->json()], 500);
             }
+        }                
+    }
+
+    public function lesson_handle(Request $request)
+    {
+        $language = Language::where('lang_tag', '=', $request->lang)->first();
+
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'lessons' => 'required',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+
+        } elseif ($request->step == 2) {
+            $rules = [
+                'lessons' => 'required',
+                'cryptogram' => 'required|string|min:1',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $school = School::select(
+                'schools.*',
+            )
+            ->where('school_id', '=', auth()->user()->school_id)
+            ->first();
+
+            $lessons = json_decode($request->lessons);
+
+            $amount = 0;
+            $description = [];
+            $lesson_ids = [];
+
+            foreach ($lessons as $key => $lesson) {
+                $amount += $lesson->current_price;
+                $description[] = $lesson->lesson_name.' - '.$lesson->level_name.' ('.$lesson->course_name.')';
+                array_push($lesson_ids, [
+                    'lesson_id' => $lesson->lesson_id,
+                    'group_id' => $lesson->group_id
+                ]);
+            }
+
+            $currency = 'KZT';
+            $cryptogram = $request->cryptogram;
+
+            if(!isset($school->tiptop_public_id)){
+                return response()->json(['message' => 'TipTop Public ID is required'], 500);
+            }
+
+            if(!isset($school->commission_fee) || $school->commission_fee <= 0){
+                return response()->json(['message' => 'School commission fee is required'], 500);
+            }
+
+            $new_payment = new LearnerPayment();
+            $new_payment->description = implode("<br>", $description);
+            $new_payment->sum = $amount;
+            $new_payment->payment_method_id = 2;
+            $new_payment->iniciator_id = auth()->user()->user_id;
+            $new_payment->operator_id = auth()->user()->user_id;
+            $new_payment->school_id = auth()->user()->school_id;
+            $new_payment->save();
+
+            $apiUrl = env('TIPTOPPAY_API_URL');
+            $apiPublicIdMarketplace = env('TIPTOPPAY_PUBLIC_ID_MARKETPLACE');
+            $apiSecretKeyMarketplace = env('TIPTOPPAY_SECRET_KEY_MARKETPLACE');
+
+            $apiPublicIdSubMerchantOne = $school->tiptop_public_id;
+            $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_PUBLIC_ID_SUBMERCHANT_TWO');
+
+            $response = Http::withBasicAuth($apiPublicIdMarketplace, $apiSecretKeyMarketplace)
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($apiUrl, [
+                'Amount' => number_format($amount, 2, '.', ''),
+                'Currency' => $currency,
+                'CardCryptogramPacket' => $cryptogram,
+                'InvoiceId' => $new_payment->payment_id,
+                'Description' => $description,
+                'Email' => auth()->user()->email,
+                'Splits' => [
+                    [
+                        "PublicId" => $apiPublicIdSubMerchantOne,
+                        "Amount" => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', '')
+                    ],
+                    [
+                        "PublicId" => $apiPublicIdSubMerchantTwo,
+                        "Amount" => number_format(($amount / 100) * $school->comission_fee, 2, '.', '')
+                    ]
+                ],
+                'JsonData' => json_encode([
+                    'PaymentUrl' => $request->header('Origin'),
+                    'LessonIds' => $lesson_ids
+                ])
+            ]);
+
+            if ($response->ok()) {
+                $result = $response->json();
+
+                if ($result['Success'] === true) {
+                    // транзакция прошла успешно
+                    $this->paymentService->saveLearnerPayment($result['Model']['InvoiceId'], $lesson_ids);
+                }
+
+                return response()->json($response->json(), 200);
+            }
+
+            return response()->json(['error' => $response->json()], 500);
         }                
     }
 
     public function tiptop_handle3ds(Request $request)
     {
-
         $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');
         $apiSecretKey = env('TIPTOPPAY_SECRET_KEY');
         $api3dsUrl = env('TIPTOPPAY_API_POST_3DS_URL');
@@ -327,12 +447,9 @@ class PaymentController extends Controller
         $result = $response->json();
 
         if(isset($result['Model'])){
-            $jsonData = json_decode($result['Model']['JsonData']);
+            $jsonData = json_decode($result['Model']['JsonData'], true);
         
-            $redirectUrl = $jsonData->PaymentUrl. '/dashboard/payment-result?success=';
-
-            //Логируем, чтобы посмотреть
-            \Log::info('3DS Result', $result);
+            $redirectUrl = $jsonData['PaymentUrl'] . '/dashboard/payment-result?success=';
 
             if ($result['Success'] === true) {
                 // транзакция прошла успешно
@@ -351,11 +468,73 @@ class PaymentController extends Controller
         }
     }
 
+    public function tiptop_handle3ds_learner(Request $request)
+    {
+        $apiPublicIdMarketplace = env('TIPTOPPAY_PUBLIC_ID_MARKETPLACE');
+        $apiSecretKeyMarketplace = env('TIPTOPPAY_SECRET_KEY_MARKETPLACE');
+
+        $api3dsUrl = env('TIPTOPPAY_API_POST_3DS_URL');
+
+        $md = $request->input('MD');
+        $paRes = $request->input('PaRes');
+
+        // Отправляем их обратно в платёжный шлюз для подтверждения
+        $response = Http::withBasicAuth($apiPublicIdMarketplace, $apiSecretKeyMarketplace)
+        ->post($api3dsUrl, [
+            'TransactionId' => $md,
+            'PaRes' => $paRes,
+        ]);
+
+        $result = $response->json();
+
+        if(isset($result['Model'])){
+            $jsonData = json_decode($result['Model']['JsonData'], true);
+        
+            $redirectUrl = $jsonData['PaymentUrl'] . '/dashboard/payment-result?success=';
+
+            if ($result['Success'] === true && isset($jsonData['LessonIds']) && count($jsonData['LessonIds']) > 0) {
+                // транзакция прошла успешно
+                $this->paymentService->saveLearnerPayment($result['Model']['InvoiceId'], $jsonData['LessonIds']);
+
+                return redirect()->away($redirectUrl . 'true');
+            } else {
+                //транзакция отклонена
+                if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
+                    return redirect()->away($redirectUrl . 'false&message='.$result['Model']['CardHolderMessage'].'&reason=' . ($result['Model']['ReasonCode'] ?? 'unknown'));
+                }
+
+                return redirect()->away($redirectUrl . 'false&message='.$result['Message'].'&reason=unknown');
+            }
+        }
+    }
+
     public function tiptop_check(Request $request)
     {
-        $findPayment = Payment::where('payment_id', '=', $request['InvoiceId'])
-        ->where('is_paid', '=', 0)
-        ->first();
+        // Data приходит как JSON-строка → сохраняем
+        $data = $request['Data'];
+
+        // Декодируем JSON в массив
+        $decoded = json_decode($data, true);
+
+        $lesson_ids = [];
+
+        // Если LessonIds есть и это массив
+        if (!empty($decoded['LessonIds']) && is_array($decoded['LessonIds'])) {
+            $lesson_ids = $decoded['LessonIds'];
+        }
+
+        if (count($lesson_ids) > 0) {
+            $findPayment = LearnerPayment::where('payment_id', $request['InvoiceId'])
+                ->where('is_paid', 0)
+                ->first();
+
+            // Логируем красивый JSON
+            info('TipTop:', $decoded);
+        } else {
+            $findPayment = Payment::where('payment_id', $request['InvoiceId'])
+                ->where('is_paid', 0)
+                ->first();
+        }
 
         if(isset($findPayment)){
             if($findPayment->sum == $request['Amount']){
@@ -368,6 +547,7 @@ class PaymentController extends Controller
         else{
             return response()->json(['code' => 10], 200);
         }
+        
     }
 
     public function accept_payment(Request $request)

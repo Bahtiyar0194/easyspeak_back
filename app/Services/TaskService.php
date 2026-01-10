@@ -95,6 +95,23 @@ class TaskService
         return $edit_task;
     }
 
+    public function getTaskProgress($task_id, $learner_id){
+        $completed_task = CompletedTask::where('completed_tasks.task_id', '=', $task_id)
+        ->where('completed_tasks.learner_id', '=', $learner_id)
+        ->select(
+            'completed_tasks.progress'
+        )
+        ->first();
+
+        $progress = 0;
+
+        if(isset($completed_task)){
+            $progress = $completed_task->progress;
+        }
+
+        return $progress;
+    }
+
     public function getTaskResult($task_id, $learner_id){
         $completed_task = CompletedTask::leftJoin('tasks', 'completed_tasks.task_id', '=', 'tasks.task_id')
         ->leftJoin('types_of_tasks', 'tasks.task_type_id', '=', 'types_of_tasks.task_type_id')
@@ -242,6 +259,7 @@ class TaskService
                     ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
                     ->where('tasks.task_id', '=', $task_id)
                     ->where('group_members.member_id', '=', $auth_user->user_id)
+                    ->where('group_members.status_type_id', '=', 1)
                     ->select(
                         'groups.mentor_id',
                     )
@@ -265,7 +283,6 @@ class TaskService
 
             $new_completed_task->is_completed = $is_completed;
             $new_completed_task->mentor_id = $mentor_id;
-
             $new_completed_task->save();
 
             // Сохраняем результаты выполнения задания
@@ -308,7 +325,14 @@ class TaskService
                 $new_task_answer->save();
             }
 
-            return response()->json($this->getTaskResult($task_id, $auth_user->user_id), 200);
+            $get_task_result = $this->getTaskResult($task_id, $auth_user->user_id);
+
+            $save_task_progress = CompletedTask::find($new_completed_task->completed_task_id);
+            $save_task_progress->progress = $get_task_result->percentage;
+            $save_task_progress->is_completed = $get_task_result->completed;
+            $save_task_progress->save();
+
+            return response()->json($get_task_result, 200);
         }
         else{
             return response()->json('Task result is empty', 422);
@@ -412,6 +436,7 @@ class TaskService
     }
 
     public function getLessonTasks($lesson_id, $language, $get_result){
+
         $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
         ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
         ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
@@ -439,6 +464,20 @@ class TaskService
                 foreach ($tasks as $key => $task) {
                     $task->task_result = $this->getTaskResult($task->task_id, auth()->user()->user_id);
                 }
+            }
+        }
+
+        return $tasks;
+    }
+
+    public function getLessonTasksProgress($lesson_id){
+        $tasks = Task::where('lesson_id', '=', $lesson_id) 
+        ->orderBy('sort_num', 'asc')
+        ->get();
+
+        if(count($tasks) > 0){
+            foreach ($tasks as $key => $task) {
+                $task->task_progress = $this->getTaskProgress($task->task_id, auth()->user()->user_id);
             }
         }
 

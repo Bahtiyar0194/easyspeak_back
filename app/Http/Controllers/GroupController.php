@@ -7,23 +7,31 @@ use App\Models\GroupMember;
 use App\Models\User;
 use App\Models\Course;
 use App\Models\CourseLevel;
+use App\Models\CourseSection;
+use App\Models\Lesson;
+use App\Models\Conference;
+use App\Models\BoughtLesson;
 use App\Models\Language;
 use App\Models\UserOperation;
 use App\Models\UserRequest;
 
 use App\Services\ConferenceService;
+use App\Services\ScheduleService;
 
 use Illuminate\Http\Request;
 use Validator;
 use DB;
+use Carbon\Carbon;
 
 class GroupController extends Controller
 {
     protected $conferenceService;
+    protected $scheduleService;
 
-    public function __construct(Request $request, ConferenceService $conferenceService)
+    public function __construct(Request $request, ConferenceService $conferenceService, ScheduleService $scheduleService)
     {
         $this->conferenceService = $conferenceService;
+        $this->scheduleService = $scheduleService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -151,6 +159,9 @@ class GroupController extends Controller
                 'groups.group_description',
                 'groups.created_at',
                 'groups.started_at',
+                'groups.current_price',
+                'groups.first_lesson_free',
+                'groups.is_legal',
                 'course_levels_lang.level_name',
                 'courses_lang.course_name',
                 'mentor.first_name as mentor_first_name',
@@ -231,6 +242,8 @@ class GroupController extends Controller
 
     public function get_group(Request $request)
     {
+        $auth_user = auth()->user();
+
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $group = Group::select(
@@ -240,6 +253,9 @@ class GroupController extends Controller
                 'groups.level_id',
                 'groups.created_at',
                 'groups.started_at',
+                'groups.current_price',
+                'groups.first_lesson_free',
+                'groups.is_legal',
                 'groups.mentor_id',
                 'groups.operator_id'
             )
@@ -247,6 +263,7 @@ class GroupController extends Controller
             ->first();
 
         $members = GroupMember::where('group_id', '=', $request->group_id)
+            ->where('group_members.status_type_id', '=', 1)
             ->leftJoin('users as member', 'group_members.member_id', '=', 'member.user_id')
             ->select(
                 'member.user_id',
@@ -278,6 +295,29 @@ class GroupController extends Controller
         $group->mentor = $mentor->only(['last_name', 'first_name', 'avatar']);
         $group->operator = $operator->only(['last_name', 'first_name', 'avatar']);
 
+        $group->schedule = $this->scheduleService->getSchedule($request, $auth_user->user_id, $language->lang_id, false, $group->group_id);
+
+        $days = [];
+
+        foreach ($group->schedule as $conference) {
+            // Получаем номер дня недели
+            // Carbon::parse(...)->dayOfWeekIso возвращает:
+            // 1 = Пн, 2 = Вт, ..., 7 = Вс
+            $dayNum = Carbon::parse($conference->start_time)->dayOfWeekIso;
+
+            if($conference->moved === 0){
+                // Добавляем, если нет
+                if (!in_array($dayNum, $days)) {
+                    $days[] = $dayNum;
+                }
+            }
+        }
+
+        // Сортируем
+        sort($days);
+
+        $group->days = $days;
+
         return response()->json($group, 200);
     }
 
@@ -292,8 +332,8 @@ class GroupController extends Controller
                 'course_id' => 'required|numeric',
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
-                'start_date' => 'required|date|after_or_equal:today',
-                'start_time' => 'required|date_format:H:i',
+                'is_legal' => 'required|boolean',
+                'lesson_price' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -306,10 +346,30 @@ class GroupController extends Controller
             return response()->json([
                 'step' => 1
             ], 200);
-        } elseif ($request->step == 2) {
+        } 
+        elseif ($request->step == 2) {
+            $rules = [
+                'start_date' => 'required|date|after_or_equal:today',
+                'start_time' => 'required|date_format:H:i',
+                'selected_days' => 'required|string|min:3',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
             $rules = [
                 'members_count' => 'required|numeric|min:1',
                 'members' => 'required',
+                'step' => 'required|numeric',
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -338,6 +398,7 @@ class GroupController extends Controller
 
             foreach ($group_members as $member) {
                 $searchLevelGroup = GroupMember::leftJoin('groups', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('group_members.status_type_id', '=', 1)
                 ->where('group_members.member_id', '=', $member->user_id)
                 ->where('groups.level_id', '=', $level->level_id)
                 ->select(
@@ -360,7 +421,7 @@ class GroupController extends Controller
             }
 
             return response()->json([
-                'step' => 2,
+                'step' => 3,
                 'data' => [
                     'group_name' => $request->group_name,
                     'group_description' => $request->group_description,
@@ -369,7 +430,7 @@ class GroupController extends Controller
                     'members' => $request->members
                 ]
             ]);
-        } elseif ($request->step == 3) {
+        } elseif ($request->step == 4) {
 
             $mentor = User::find($request->mentor_id);
 
@@ -395,11 +456,25 @@ class GroupController extends Controller
                 $new_group = new Group();
                 $new_group->operator_id = auth()->user()->user_id;
                 $new_group->mentor_id = $request->mentor_id;
+                $new_group->is_legal = $request->is_legal;
                 $new_group->group_name = $request->group_name;
                 $new_group->group_description = $request->group_description;
                 $new_group->level_id = $level->level_id;
-                $new_group->started_at = $request->start_date.' '.$request->start_time;
+                $new_group->started_at = $request->start_date.' '.$request->start_time.':00';
+                $new_group->current_price = $request->lesson_price;
+                $new_group->first_lesson_free = isset($request->first_lesson_free) ? 1 : 0;
                 $new_group->save();
+
+                $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at, $request->selected_days);
+
+                if(isset($request->first_lesson_free)){
+                    //Ближайшая конференция
+                    $firstLesson = Conference::select('lesson_id')
+                    ->where('group_id', $new_group->group_id)
+                    ->where('start_time', '>=', date(now()))
+                    ->orderBy('start_time', 'asc')
+                    ->first();
+                }
 
                 foreach ($group_members as $member) {
                     $new_member = new GroupMember();
@@ -407,11 +482,24 @@ class GroupController extends Controller
                     $new_member->member_id = $member->user_id;
                     $new_member->save();
 
+                    if(isset($firstLesson)){
+                        $exists = BoughtLesson::where('lesson_id', $firstLesson->lesson_id)
+                        ->where('learner_id', $member->user_id)
+                        ->exists();
+
+                        if (!$exists) {
+                            $new_bought_lesson = new BoughtLesson();
+                            $new_bought_lesson->learner_id = $member->user_id;
+                            $new_bought_lesson->lesson_id = $firstLesson->lesson_id;
+                            $new_bought_lesson->iniciator_id = auth()->user()->user_id;
+                            $new_bought_lesson->is_free = 1;
+                            $new_bought_lesson->save();
+                        }
+                    }
+                     
                     // Сохранение имен участников
                     $member_names[] = $member->last_name . ' ' . $member->first_name;
                 }
-
-                $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at);
 
                 $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
                 <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
@@ -440,8 +528,8 @@ class GroupController extends Controller
                 'course_id' => 'required|numeric',
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
-                'start_date' => 'required|date',
-                'start_time' => 'required|date_format:H:i',
+                'is_legal' => 'required|boolean',
+                'lesson_price' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -454,10 +542,30 @@ class GroupController extends Controller
             return response()->json([
                 'step' => 1
             ], 200);
-        } elseif ($request->step == 2) {
+        } 
+        elseif ($request->step == 2) {
+            $rules = [
+                'start_date' => 'required|date',
+                'start_time' => 'required|date_format:H:i',
+                'selected_days' => 'required|string|min:3',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif ($request->step == 3) {
             $rules = [
                 'members_count' => 'required|numeric|min:1',
                 'members' => 'required',
+                'step' => 'required|numeric',
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -481,12 +589,12 @@ class GroupController extends Controller
                 return response()->json(['error' => 'Mentor or level not found.'], 404);
             }
 
-            
             $group_members = json_decode($request->members);
             $already_members = [];
 
             foreach ($group_members as $member) {
                 $searchLevelGroup = GroupMember::leftJoin('groups', 'group_members.group_id', '=', 'groups.group_id')
+                ->where('group_members.status_type_id', '=', 1)
                 ->where('group_members.member_id', '=', $member->user_id)
                 ->where('groups.level_id', '=', $level->level_id)
                 ->where('groups.group_id', '!=', $request->group_id)
@@ -510,7 +618,7 @@ class GroupController extends Controller
             }
 
             return response()->json([
-                'step' => 2,
+                'step' => 3,
                 'data' => [
                     'group_name' => $request->group_name,
                     'group_description' => $request->group_description,
@@ -519,7 +627,7 @@ class GroupController extends Controller
                     'members' => $request->members
                 ]
             ]);
-        } elseif ($request->step == 3) {
+        } elseif ($request->step == 4) {
 
             //$isOwner = auth()->user()->hasRole(['super_admin', 'school_owner']);
 
@@ -541,20 +649,35 @@ class GroupController extends Controller
             $edit_group = Group::find($request->group_id);
             $edit_group->operator_id = auth()->user()->user_id;
             $edit_group->mentor_id = $request->mentor_id;
+            $edit_group->is_legal = $request->is_legal;
             $edit_group->group_name = $request->group_name;
             $edit_group->group_description = $request->group_description;
-            $edit_group->level_id = $request->level_id;
-            $edit_group->started_at = $request->start_date.' '.$request->start_time;
+            $edit_group->level_id = $request->level_id;            
+            $edit_group->started_at = $request->start_date.' '.$request->start_time.':00';
+            $edit_group->current_price = $request->lesson_price;
+            $edit_group->first_lesson_free = isset($request->first_lesson_free) ? 1 : 0;
             $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
+
+            $this->conferenceService->editConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at, $request->selected_days);
+
+            if(isset($request->first_lesson_free)){
+                //Ближайшая конференция
+                $firstLesson = Conference::select('lesson_id')
+                ->where('group_id', $edit_group->group_id)
+                ->where('start_time', '>=', date(now()))
+                ->orderBy('start_time', 'asc')
+                ->first();
+            }
 
             // Извлекаем user_id из переданных данных
             $newMemberIds = collect(json_decode($request->members))->pluck('user_id')->toArray();
 
             // Получаем текущих участников группы
             $currentMembers = GroupMember::where('group_id', $request->group_id)
-                ->pluck('member_id')
-                ->toArray();
+            ->where('status_type_id', '=', 1)
+            ->pluck('member_id')
+            ->toArray();
 
             // Определяем бывших участников (были в группе, но их нет в новом массиве)
             $formerMembers = array_diff($currentMembers, $newMemberIds);
@@ -562,18 +685,12 @@ class GroupController extends Controller
             // Определяем новых участников (есть в новом массиве, но их нет в группе)
             $newMembersToAdd = array_diff($newMemberIds, $currentMembers);
 
-            // if ($isOwner) {
-            //     // Удаляем бывших участников
-                GroupMember::whereIn('member_id', $formerMembers)
-                    ->where('group_id', $request->group_id)
-                    ->delete();
-            // } else {
-            //     // Обрабатываем бывших участников
-            //     GroupMember::whereIn('member_id', $formerMembers)
-            //         ->where('group_id', $request->group_id)
-            //         ->update(['status_type_id' => 15]);
-            // }
-
+            //Бывших участников пока не удаляем, назначим статус на удаление
+            GroupMember::whereIn('member_id', $formerMembers)
+            ->where('group_id', $request->group_id)
+            ->where('status_type_id', '=', 1)
+            ->update(['status_type_id' => 15]);
+        
             // Добавляем новых участников
             foreach ($newMembersToAdd as $memberId) {
                 $new_member = new GroupMember();
@@ -581,6 +698,21 @@ class GroupController extends Controller
                 $new_member->member_id = $memberId;
                 $new_member->status_type_id = 1; //$isOwner ? 1 : 12;
                 $new_member->save();
+
+                if(isset($firstLesson)){
+                    $exists = BoughtLesson::where('lesson_id', $firstLesson->lesson_id)
+                    ->where('learner_id', $memberId)
+                    ->exists();
+
+                    if (!$exists) {
+                        $new_bought_lesson = new BoughtLesson();
+                        $new_bought_lesson->learner_id = $memberId;
+                        $new_bought_lesson->lesson_id = $firstLesson->lesson_id;
+                        $new_bought_lesson->iniciator_id = auth()->user()->user_id;
+                        $new_bought_lesson->is_free = 1;
+                        $new_bought_lesson->save();
+                    }
+                }
             }
 
             // Обрабатываем неизменных участников (если требуется)
@@ -615,8 +747,6 @@ class GroupController extends Controller
                 })
                 ->toArray();
 
-            $this->conferenceService->createConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at);
-
             // Формирование описания
             $description = "<p><span>Название группы:</span> <b>" . e($request->group_name) . "</b></p>
             <p><span>Куратор:</span> <b>" . $mentor->last_name . " " . $mentor->first_name . "</b></p>
@@ -642,5 +772,74 @@ class GroupController extends Controller
 
             return response()->json('success', 200);
         }
+    }
+
+    public function set_free_lessons(Request $request)
+    {
+        $members = GroupMember::get();
+
+        foreach ($members as $key => $member) {
+            $conferences = Conference::where('group_id', '=', $member->group_id)
+            ->orderBy('start_time', 'asc')
+            ->limit(12)
+            ->get();
+
+            foreach ($conferences as $c => $conference) {
+                $exists = BoughtLesson::where('lesson_id', $conference->lesson_id)
+                ->where('learner_id', $member->member_id)
+                ->exists();
+
+                if (!$exists) {
+                    BoughtLesson::create([
+                        'learner_id' => $member->member_id,
+                        'lesson_id'  => $conference->lesson_id,
+                        'iniciator_id' => $member->member_id,
+                        'is_free'    => 1,
+                    ]);
+                }
+            }
+        }
+
+        echo 123;
+    }
+
+    public function save_payments(Request $request){
+        $validator = Validator::make($request->all(), [
+            'payments_count' => 'required|numeric|min:1',
+            'payments' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+        }
+
+        $payments = json_decode($request->payments);
+
+        foreach ($payments as $key => $payment) {
+
+            $exists = BoughtLesson::where('lesson_id', $payment->lesson_id)
+            ->where('learner_id', $payment->user_id)
+            ->exists();
+
+            if($payment->checked === true){
+                if(!$exists){
+                    BoughtLesson::create([
+                        'learner_id' => $payment->user_id,
+                        'lesson_id'  => $payment->lesson_id,
+                        'iniciator_id' => auth()->user()->user_id,
+                        'is_free'    => 0,
+                    ]);
+                }
+            }
+            else{
+                if($exists){
+                    BoughtLesson::where('lesson_id', $payment->lesson_id)
+                    ->where('learner_id', $payment->user_id)
+                    ->delete();
+                }
+            }
+        }
+
+        return response()->json('success', 200);
     }
 }

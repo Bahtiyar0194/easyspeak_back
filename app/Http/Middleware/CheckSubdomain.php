@@ -144,6 +144,12 @@ class CheckSubdomain
                     }
                 }
 
+                $school->tiptoppay = [
+                    'public_id' => env('TIPTOPPAY_PUBLIC_ID'),
+                    'public_id_marketplace' => env('TIPTOPPAY_PUBLIC_ID_MARKETPLACE'),
+                    'checkout_url' => env('TIPTOPPAY_CHECKOUT_URL')
+                ];
+
                 $school->title_font_class = Font::where('font_id', '=', $school->title_font_id)->first()->font_class . '_title';
                 $school->body_font_class = Font::where('font_id', '=', $school->body_font_id)->first()->font_class . '_body';
                 $school->color_scheme_class = Color::where('color_id', '=', $school->color_id)->first()->color_class;

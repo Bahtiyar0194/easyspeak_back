@@ -511,7 +511,8 @@ class TaskController extends Controller
 
                 // ← Добавляем связи с группами
             ->leftJoin('group_members', function ($join) {
-                $join->on('group_members.member_id', '=', 'completed_tasks.learner_id');
+                $join->on('group_members.member_id', '=', 'completed_tasks.learner_id')
+                ->where('group_members.status_type_id', '=', 1);
             })
             ->leftJoin('groups', function ($join) {
                 $join->on('groups.group_id', '=', 'group_members.group_id')
@@ -4192,6 +4193,7 @@ class TaskController extends Controller
         ->join('group_members', 'group_members.group_id', '=', 'groups.group_id')
         ->where('tasks.task_id', $find_task->task_id)
         ->where('group_members.member_id', $auth_user->user_id)
+        ->where('group_members.status_type_id', '=', 1)
         ->exists();
 
         // Проверяем, является ли пользователь участником группы
@@ -4327,5 +4329,23 @@ class TaskController extends Controller
         $task->materials = $task_materials;
 
         return response()->json($task, 200);
+    }
+
+
+    public function set_task_progress(Request $request){
+        $completed_tasks = CompletedTask::where('progress', '=', 0)
+        ->limit(100)
+        ->get();
+
+        foreach ($completed_tasks as $key => $ct) {
+            $get_task_result = $this->taskService->getTaskResult($ct->task_id, $ct->learner_id);
+
+            $save_task_progress = CompletedTask::find($ct->completed_task_id);
+            $save_task_progress->progress = $get_task_result->percentage;
+            $save_task_progress->is_completed = $get_task_result->completed;
+            $save_task_progress->save();
+        }
+
+        echo 123;
     }
 }

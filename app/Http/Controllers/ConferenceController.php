@@ -62,7 +62,8 @@ class ConferenceController extends Controller
 
         foreach ($groups as $g => $group) {
 
-            $members = GroupMember::where('group_id', '=', $group->group_id)
+            $members = GroupMember::where('group_members.group_id', '=', $group->group_id)
+            ->where('group_members.status_type_id', '=', 1)
             ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
             ->select(
                 'users.user_id',
@@ -113,80 +114,7 @@ class ConferenceController extends Controller
 
     public function get_current_conferences(Request $request)
     {
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-
-        // Получаем текущего аутентифицированного пользователя
-        $auth_user = auth()->user();
-        $current_conferences = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-        ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-        ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
-        ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
-        ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-        ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
-        ->select(
-            'conferences.uuid',
-            'conferences.operator_id',
-            'conferences.created_at',
-            'conferences.start_time',
-            'conferences.end_time',
-            'lessons.lesson_name',
-            'mentor.first_name as mentor_first_name',
-            'mentor.last_name as mentor_last_name',
-            'courses_lang.course_name',
-            'course_levels_lang.level_name',
-            'groups.group_name',
-            'groups.group_id'
-        )
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        // Доступ за 10 минут до начала
-        ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(5))
-        ->where('conferences.end_time', '>=', now())
-        ->distinct();
-
-        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
-        $isMentor = $auth_user->hasRole(['mentor']);
-        $isLearner = $auth_user->hasRole(['learner']);
-
-        if ($isOwner || $isMentor || $isLearner) {
-            $current_conferences->where(function ($query) use ($isOwner, $isMentor, $isLearner, $auth_user) {
-                if ($isOwner) {
-                    $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
-                }
-                if ($isMentor || $isLearner) {
-                    $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
-                    ->orWhere('group_members.member_id', '=', $auth_user->user_id);
-                }
-            });
-        }        
-
-        $current_conferences = $current_conferences->get()->map(function ($conference) {
-            $conference->created_at_formatted = Carbon::parse($conference->created_at)
-                ->translatedFormat('d F Y, H:i');
-        
-            $conference->start_time_formatted = Carbon::parse($conference->start_time)
-                ->translatedFormat('d F Y, H:i');
-        
-            $conference->end_time_formatted = Carbon::parse($conference->end_time)
-                ->translatedFormat('d F Y, H:i');
-
-            $members = GroupMember::where('group_id', '=', $conference->group_id)
-            ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
-            ->select(
-                'users.user_id',
-                'users.last_name',
-                'users.first_name',
-                'users.avatar'
-            )
-            ->get();
-
-            $conference->members = $members;
-        
-            return $conference;
-        });
-
+        $current_conferences = $this->conferenceService->getCurrentConferences($request);
 
         return response()->json($current_conferences, 200);
     }
@@ -198,36 +126,37 @@ class ConferenceController extends Controller
     
         // Получаем конференцию без ограничения по времени
         $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-            ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-            ->leftJoin('users', 'conferences.mentor_id', '=', 'users.user_id')
-            ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
-            ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-            ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-            ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-            ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
-            ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-            ->select(
-                'conferences.conference_id',
-                'conferences.uuid',
-                'conferences.created_at',
-                'conferences.start_time',
-                'conferences.end_time',
-                'conferences.participated',
-                'lessons.lesson_name',
-                'types_of_lessons.lesson_type_slug',
-                'conferences.lesson_id',
-                'courses_lang.course_name',
-                'course_levels_lang.level_name',
-                'groups.group_name',
-                'conferences.mentor_id',
-                'groups.group_id',
-                'users.school_id',
-                'group_members.member_id'
-            )
-            ->where('conferences.uuid', $request->conference_id)
-            ->where('courses_lang.lang_id', $language->lang_id)
-            ->where('course_levels_lang.lang_id', $language->lang_id)
-            ->first();
+        ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+        ->leftJoin('users', 'conferences.mentor_id', '=', 'users.user_id')
+        ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
+        ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+        ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
+        ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+        ->select(
+            'conferences.conference_id',
+            'conferences.uuid',
+            'conferences.created_at',
+            'conferences.start_time',
+            'conferences.end_time',
+            'conferences.participated',
+            'conferences.forced',
+            'lessons.lesson_name',
+            'types_of_lessons.lesson_type_slug',
+            'conferences.lesson_id',
+            'courses_lang.course_name',
+            'course_levels_lang.level_name',
+            'groups.group_name',
+            'conferences.mentor_id',
+            'groups.group_id',
+            'users.school_id',
+            'group_members.member_id'
+        )
+        ->where('conferences.uuid', $request->conference_id)
+        ->where('courses_lang.lang_id', $language->lang_id)
+        ->where('course_levels_lang.lang_id', $language->lang_id)
+        ->first();
     
         // Если конференции не существует
         if (!$conference) {
@@ -237,6 +166,13 @@ class ConferenceController extends Controller
         $allowed = false;
 
         $isOwner = $auth_user->hasRole(['school_owner', 'school_admin']);
+        $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
+
+        $conference->is_only_learner = $isOnlyLearner;
+
+        if($isOnlyLearner === true){
+            $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
+        }
 
         if($isOwner && $auth_user->school_id === $conference->school_id){
             $allowed = true;
@@ -247,6 +183,7 @@ class ConferenceController extends Controller
         }
     
         $isMember = GroupMember::where('group_id', $conference->group_id)
+            ->where('status_type_id', '=', 1)
             ->where('member_id', $auth_user->user_id)
             ->exists();
 
@@ -265,7 +202,7 @@ class ConferenceController extends Controller
         }
     
         // Если конференция ещё не началась
-        if (now()->lessThan(Carbon::parse($conference->start_time)->subMinutes(5))) {
+        if (now()->lessThan(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')))) {
             return response()->json(['type' => 'pending', 'message' => trans('auth.conference_has_not_started_yet'), 'conference' => $conference], 200);
         }
 
@@ -292,7 +229,8 @@ class ConferenceController extends Controller
             $save_conference->save();
         }
 
-        $members = GroupMember::where('group_id', '=', $conference->group_id)
+        $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
+        ->where('group_members.status_type_id', '=', 1)
         ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
         ->select(
             'users.user_id',
@@ -338,7 +276,8 @@ class ConferenceController extends Controller
         $tasks = $this->taskService->getLessonTasks($conference->lesson_id, $language, $get_my_result);
 
         if($conference->mentor_id === $auth_user->user_id){
-            $members = GroupMember::where('group_id', '=', $conference->group_id)
+            $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
+            ->where('group_members.status_type_id', '=', 1)
             ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
             ->select(
                 'users.user_id',
@@ -417,7 +356,9 @@ class ConferenceController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $new_conference = $this->conferenceService->createConference($request->group_id, $request->lesson_id, date('Y-m-d H:i:s'), date('Y-m-d H:i:s', strtotime('+2 hour')));
+        $forced = true;
+
+        $new_conference = $this->conferenceService->createConference($request->group_id, $request->lesson_id, $forced, date('Y-m-d H:i:s'), date('Y-m-d H:i:s', strtotime('+2 hour')));
 
         return response()->json($new_conference, 200);
     }

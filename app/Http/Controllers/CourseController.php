@@ -62,13 +62,9 @@ class CourseController extends Controller
 
         if(Auth::check()){
             foreach ($levels as $key => $level) {
-                if($level->is_available_always === 1){
-                    $level->is_available = true;
-                }
-                else{
-                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id, auth()->user()->user_id);
-                }
-
+                
+                $level->available_status = $this->courseService->levelAvailableStatus($level, auth()->user()->user_id);
+                
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
                 $levelCompletedPercent = 0;
@@ -79,16 +75,14 @@ class CourseController extends Controller
                     $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
                     foreach ($lessons as $l => $lesson) {
-                        $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, true);
+                        $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
                         $completedTasksCount = 0;
                         $completedTasksPercent = 0;
 
                         foreach ($lesson->tasks as $key => $task) {
-                            if ($task->task_result && $task->task_result->completed === true) {
-                                $completedTasksCount++;
-                                $completedTasksPercent += $task->task_result->percentage;
-                            }
+                            $completedTasksCount++;
+                            $completedTasksPercent += $task->task_progress;
                         }
 
                         $lesson->completed_tasks_count = $completedTasksCount;
@@ -116,8 +110,9 @@ class CourseController extends Controller
         }
 
         $levels = $levels
+        ->sortByDesc('is_available_always')
         ->sortByDesc('completed_percent') // сначала сортируем по проценту
-        ->sortByDesc('is_available')      // потом по доступности (она будет приоритетнее)
+        ->sortByDesc('available_status.is_available')      // потом по доступности (она будет приоритетнее)
         ->values();
 
         $data = new \stdClass();
@@ -139,13 +134,8 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        if($level->is_available_always === 1){
-            $level->is_available = true;
-        }
-        else{
-            $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $auth_user->user_id);
-        }
-
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        
         $sections = $this->courseService->getLevelSections($level->level_id);
 
         foreach ($sections as $s => $section) {
@@ -154,19 +144,15 @@ class CourseController extends Controller
 
             $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
-            foreach ($lessons as $l => $lesson) {
-                $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
-    
-                $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, true);
+            foreach ($lessons as $l => $lesson) {    
+                $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
                 $completedTasksCount = 0;
                 $completedTasksPercent = 0;
 
                 foreach ($lesson->tasks as $key => $task) {
-                    if ($task->task_result && $task->task_result->completed === true) {
-                        $completedTasksCount++;
-                        $completedTasksPercent += $task->task_result->percentage;
-                    }
+                    $completedTasksCount++;
+                    $completedTasksPercent += $task->task_progress;
                 }
 
                 $lesson->completed_tasks_count = $completedTasksCount;
@@ -215,13 +201,8 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        if($level->is_available_always === 1){
-            $level->is_available = true;
-        }
-        else{
-            $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $auth_user->user_id);
-        }
-
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        
         $section = CourseSection::where('section_id', '=', $request->section_id)
         ->where('level_id', '=', $level->level_id)
         ->first();
@@ -235,18 +216,16 @@ class CourseController extends Controller
         $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
         foreach ($lessons as $l => $lesson) {
-            $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
+            $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always);
 
-            $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, true);
+            $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
             $completedTasksCount = 0;
             $completedTasksPercent = 0;
 
             foreach ($lesson->tasks as $key => $task) {
-                if ($task->task_result && $task->task_result->completed === true) {
-                    $completedTasksCount++;
-                    $completedTasksPercent += $task->task_result->percentage;
-                }
+                $completedTasksCount++;
+                $completedTasksPercent += $task->task_progress;
             }
 
             $lesson->completed_tasks_count = $completedTasksCount;
@@ -291,13 +270,8 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        if($level->is_available_always === 1){
-            $level->is_available = true;
-        }
-        else{
-            $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $auth_user->user_id);
-        }
-
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        
         $data->level = $level;
 
         $section = CourseSection::where('section_id', '=', $request->section_id)
@@ -326,8 +300,7 @@ class CourseController extends Controller
         )
         ->first();
 
-        $lesson->is_available = $this->courseService->lessonIsAvailable($lesson, $level->is_available_always);
-        $lesson->is_only_learner = $isOnlyLearner;
+        $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always);
 
         $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
 
@@ -751,14 +724,9 @@ class CourseController extends Controller
         //         foreach ($course[$courseKey]->levels as $levelKey => $level) {
         //             $levelCompletedPercent = 0;
 
-        //             if($level->is_available_always === 1){
-        //                 $level->is_available = true;
-        //             }
-        //             else{
-        //                 $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $request->user_id);
-        //             }
+        //             $level->available_status= $this->courseService->levelAvailableStatus($level, $request->user_id);            
 
-        //             if($level->is_available === true){
+        //             if($level->available_status->is_available === true){
         //                 if(count($levels[$levelKey]->sections) > 0){
         //                     foreach ($levels[$levelKey]->sections as $sectionKey => $section) {
         //                         $sectionCompletedPercent = 0;
@@ -803,14 +771,9 @@ class CourseController extends Controller
                 $levelCompletedPercent = 0;
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
-                if($level->is_available_always === 1){
-                    $level->is_available = true;
-                }
-                else{
-                    $level->is_available = $this->courseService->levelIsAvailable($level->level_id, $request->user_id);
-                }
-
-                if($level->is_available === true){
+                $level->available_status = $this->courseService->levelAvailableStatus($level, $request->user_id);
+                
+                if($level->available_status->is_available === true){
                     foreach ($sections as $sectionKey => $section) {
                         $sectionCompletedPercent = 0;
 
@@ -859,8 +822,9 @@ class CourseController extends Controller
             }
 
             $levels = $levels
+            ->sortByDesc('is_available_always')
             ->sortByDesc('completed_percent') // сначала сортируем по проценту
-            ->sortByDesc('is_available')      // потом по доступности (она будет приоритетнее)
+            ->sortByDesc('available_status.is_available')      // потом по доступности (она будет приоритетнее)
             ->values();
 
             $course->levels = $levels;

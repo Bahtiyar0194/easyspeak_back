@@ -13,6 +13,7 @@ use App\Models\UserRole;
 use App\Models\Language;
 use App\Models\School;
 use App\Models\Course;
+use App\Models\TelegramToken;
 
 use Mail;
 use App\Mail\PasswordRecoveryMail;
@@ -25,7 +26,7 @@ class AuthController extends Controller
 
     public function __construct(Request $request, TwilioWhatsAppService $twilioWhatsAppService)
     {
-        app()->setLocale($request->header('Accept-Language'));
+        //app()->setLocale($request->header('Accept-Language'));
         $this->twilioWhatsAppService = $twilioWhatsAppService;
     }
 
@@ -172,6 +173,7 @@ class AuthController extends Controller
         ]);
 
         app()->setLocale($request->lang);
+
         $language = Language::where('lang_tag', '=', $request->lang)->first();
 
         if ($validator->fails()) {
@@ -353,6 +355,11 @@ class AuthController extends Controller
             }
         }
 
+        $telegram_token = TelegramToken::where('user_id', $user->user_id)
+        ->first();
+
+        $user->telegram = $telegram_token;
+
         $user->roles = $roles;
 
         return response()->json($user, 200);
@@ -393,6 +400,14 @@ class AuthController extends Controller
         $findUser = User::find($user->user_id);
         $findUser->lang_id = $language->lang_id;
         $findUser->save();
+
+        $telegram_token = TelegramToken::where('user_id', $user->user_id)
+        ->first();
+
+        if(isset($telegram_token)){
+            $telegram_token->lang_id = $language->lang_id;
+            $telegram_token->save();
+        }
 
         return response()->json('User language change successful', 200);
     }

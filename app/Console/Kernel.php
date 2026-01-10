@@ -15,7 +15,20 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->command('conferences:notify-day-before')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->onOneServer();
+
+        $schedule->command('conferences:notify-hour-before')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->onOneServer();
+
+        $schedule->command('conferences:notify')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->onOneServer();
     }
 
     /**

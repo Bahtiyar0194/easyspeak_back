@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DemoController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TranslateController;
 use App\Http\Controllers\TextToSpeechController;
+use App\Http\Controllers\TelegramWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +68,14 @@ Route::group([
             // Route::post('/delete_avatar', [AuthController::class, 'delete_avatar']);
             // Route::post('/change_password', [AuthController::class, 'change_password']);
             Route::post('/logout', [AuthController::class, 'logout']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'dashboard'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get', [DashboardController::class, 'get']);
         });
     });
 
@@ -161,6 +171,7 @@ Route::group([
             Route::post('/create', [GroupController::class, 'create'])->middleware('check_roles');
             Route::get('/get/{group_id}', [GroupController::class, 'get_group']);
             Route::post('/update/{group_id}', [GroupController::class, 'update'])->middleware('check_roles');
+            Route::post('/save_payments', [GroupController::class, 'save_payments'])->middleware('check_roles');
         });
     });
 
@@ -306,11 +317,13 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [PaymentController::class, 'get_attributes']);
             Route::post('/get_payments', [PaymentController::class, 'get_payments']);
-            Route::post('/handle', [PaymentController::class, 'handle']);
+            Route::post('/school/handle', [PaymentController::class, 'school_handle']);
+            Route::post('/lesson/handle', [PaymentController::class, 'lesson_handle']);
             Route::post('/accept_payment/{payment_id}', [PaymentController::class, 'accept_payment'])->middleware('check_roles');
         });
 
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);
+        Route::post('/tiptop/handle3ds/learner', [PaymentController::class, 'tiptop_handle3ds_learner']);
         Route::post('/tiptop/check', [PaymentController::class, 'tiptop_check']);
     });
 
@@ -329,5 +342,24 @@ Route::group([
             Route::get('/list_voices', [TextToSpeechController::class, 'list_voices']);
             Route::get('/tts', [TextToSpeechController::class, 'tts']);
         });
+    });
+
+    Route::group([
+        'prefix' => 'telegram'
+    ], function ($router) {
+        Route::post('/webhook', [TelegramWebhookController::class, 'handle']);
+
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get/{token}', [TelegramWebhookController::class, 'get_account']);
+            Route::post('/connect/{token}', [TelegramWebhookController::class, 'connect']);
+            Route::post('/disconnect', [TelegramWebhookController::class, 'disconnect']);
+        });
+    });
+
+    Route::group([
+        'prefix' => 'set'
+    ], function ($router) {
+            Route::get('/set_task_progress', [TaskController::class, 'set_task_progress']);
+            Route::get('/set_free_lessons', [GroupController::class, 'set_free_lessons']);
     });
 });
