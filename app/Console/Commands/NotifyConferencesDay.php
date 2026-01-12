@@ -83,7 +83,7 @@ class NotifyConferencesDay extends Command
 
                         SendTelegramMessage::dispatch(
                             $member->chat_id,
-                            $this->message($conference, $member),
+                            $this->message($conference, $member, 'learner'),
                             $this->keyboard($conference->conference_id)
                         );
                     }
@@ -111,7 +111,7 @@ class NotifyConferencesDay extends Command
 
                         SendTelegramMessage::dispatch(
                             $mentor_token->chat_id,
-                            $this->message($conference, $mentor_token),
+                            $this->message($conference, $mentor_token, 'mentor'),
                             null
                         );
                     }
@@ -125,9 +125,9 @@ class NotifyConferencesDay extends Command
         return Command::SUCCESS;
     }
 
-    protected function message($conference, $member): string
+    protected function message($conference, $member, $member_type): string
     {
-        return trans('app.bot.conference.reminder.day', [
+        return trans('app.bot.conference.reminder.day.'.$member_type, [
             'name' => $member->first_name,
             'time' => $conference->start_time->format('H:i'),
             'lesson' => $conference->lesson->lesson_name,
