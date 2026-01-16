@@ -356,10 +356,10 @@ Route::group([
         });
     });
 
-    Route::group([
-        'prefix' => 'set'
-    ], function ($router) {
-            Route::get('/set_task_progress', [TaskController::class, 'set_task_progress']);
-            Route::get('/set_free_lessons', [GroupController::class, 'set_free_lessons']);
-    });
+    // Route::group([
+    //     'prefix' => 'set'
+    // ], function ($router) {
+    //         Route::get('/set_task_progress', [TaskController::class, 'set_task_progress']);
+    //         Route::get('/set_free_lessons', [GroupController::class, 'set_free_lessons']);
+    // });
 });
