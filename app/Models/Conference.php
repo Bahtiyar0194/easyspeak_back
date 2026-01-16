@@ -14,6 +14,7 @@ class Conference extends Model
     protected $fillable = [
         'notification_sent_day_before',
         'notification_sent_hour_before',
+        'notification_sent',
     ];
 
     protected $casts = [
