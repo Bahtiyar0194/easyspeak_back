@@ -4334,7 +4334,7 @@ class TaskController extends Controller
 
     public function set_task_progress(Request $request){
         $completed_tasks = CompletedTask::where('progress', '=', 0)
-        ->limit(100)
+        ->limit(1000)
         ->get();
 
         foreach ($completed_tasks as $key => $ct) {
