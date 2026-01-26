@@ -23,7 +23,7 @@ class MaterialController extends Controller
 
 
     public function explain(Request $request){
-        $driver = 'gemini'; // 'openai' или 'gemini'
+        $driver = 'openai'; // 'openai' или 'gemini'
         $auth_user_id = auth()->user()->user_id;
         $userPrompt = $request->prompt;
 
