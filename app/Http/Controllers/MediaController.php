@@ -69,7 +69,7 @@ class MediaController extends Controller
         // Получаем параметры лимита на страницу
         $per_page = $request->per_page ? $request->per_page : 10;
         // Получаем параметры сортировки
-        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
+        $sortKey = $request->input('sort_key', 'files.created_at');  // Поле для сортировки по умолчанию
         $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
 
         $files = MediaFile::leftJoin('types_of_materials', 'files.material_type_id', '=', 'types_of_materials.material_type_id')

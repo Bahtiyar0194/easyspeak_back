@@ -17,6 +17,7 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\SentenceController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TranslateController;
 use App\Http\Controllers\TextToSpeechController;
@@ -325,6 +326,15 @@ Route::group([
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);
         Route::post('/tiptop/handle3ds/learner', [PaymentController::class, 'tiptop_handle3ds_learner']);
         Route::post('/tiptop/check', [PaymentController::class, 'tiptop_check']);
+    });
+
+    Route::group([
+        'prefix' => 'material'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_chat/{lesson_material_id}', [MaterialController::class, 'get_chat']);
+            Route::post('/explain', [MaterialController::class, 'explain']);
+        });
     });
 
     Route::group([
