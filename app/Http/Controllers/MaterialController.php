@@ -7,6 +7,7 @@ use App\Models\MaterialExplain;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class MaterialController extends Controller
 {
@@ -46,16 +47,14 @@ class MaterialController extends Controller
             $material_content = "Материал:\n" . trim(preg_replace('/\s+/', ' ', strip_tags($material->content))) . "\n\n";
         }
 
-        $systemPrompt = "Ты — опытный и внимательный преподаватель.\n\n" . $material_content . 
+        $systemPrompt = "Ты — опытный и внимательный преподаватель по английскому и другим языкам.\n\n" . $material_content . 
         "📌 Правила ответа:
         - Обращайся на 'Вы'
-        - Не используй markdown, используй html форматирование
-        - Форматируй ответ в html
+        - Отвечай только на языковые темы
+        - Используй markdown форматирование
         - Можешь добавлять смайлики, эмодзи
         - В первую очередь отвечай на вопрос ученика
-        - Если вопрос ученика 'отошло' от темы материала то не отвечай на этот вопрос
-        - Объясняй материал (если он есть) только в рамках заданного вопроса
-        - Если вопрос частично выходит за рамки материала — используй только базовые знания
+        - Если вопрос ученика не связан с языком то не отвечай на этот вопрос
         - Объясняй простым, понятным языком
         - При необходимости разбивай объяснение на шаги
         - Используй примеры и аналогии
@@ -79,7 +78,9 @@ class MaterialController extends Controller
                 'parts' => [['text' => $userPrompt]]
             ];
 
-            $response = Http::post(env('GEMINI_API_URL')."/v1beta/models/gemini-3-flash-preview:generateContent?key=" . env('GEMINI_API_KEY'), [
+            $response = Http::timeout(30)
+            ->retry(2, 200)
+            ->post(env('GEMINI_API_URL')."/v1beta/models/gemini-3-flash-preview:generateContent?key=" . env('GEMINI_API_KEY'), [
                 'system_instruction' => [
                     'parts' => [['text' => $systemPrompt]]
                 ],
@@ -102,6 +103,8 @@ class MaterialController extends Controller
             );
 
             $response = Http::withToken(env('OPENAI_API_KEY'))
+                ->timeout(30)
+                ->retry(2, 200)
                 ->post(env('OPENAI_API_URL') . '/chat/completions', [
                     'model' => 'gpt-4o', // gpt-5.2 еще не вышла в 2026, вероятно вы имели в виду актуальную версию
                     'messages' => $messages
@@ -119,13 +122,13 @@ class MaterialController extends Controller
             $new_user_dialog->save();
 
             $new_system_dialog = new MaterialExplain();
-            $new_system_dialog->content = $answer;
+            $new_system_dialog->content = Str::markdown($answer);
             $new_system_dialog->user_id = $auth_user_id;
             $new_system_dialog->lesson_material_id = $material->lesson_material_id;
             $new_system_dialog->role = 'assistant';
             $new_system_dialog->save();
 
-            return response()->json($answer, 200);
+            return response()->json(Str::markdown($answer), 200);
         }
 
         return response()->json(['error' => 'API Error', 'message' => $response->json()], 400);

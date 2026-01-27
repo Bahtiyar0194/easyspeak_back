@@ -20,6 +20,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TranslateController;
+use App\Http\Controllers\SpeechToTextController;
 use App\Http\Controllers\TextToSpeechController;
 use App\Http\Controllers\TelegramWebhookController;
 
@@ -342,6 +343,7 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/translate', [TranslateController::class, 'translate']);
+            Route::post('/stt', [SpeechToTextController::class, 'stt']);
         });
     });
 
