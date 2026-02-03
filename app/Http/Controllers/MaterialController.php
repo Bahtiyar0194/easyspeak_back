@@ -52,8 +52,8 @@ class MaterialController extends Controller
         $speech_drivers = [
             [
                 'name' => 'elevenlabs',
-                'voice_id' => 'jqcCZkN6Knx8BJ5TBdYR', //Zara
-                'model' => 'eleven_multilingual_v2'
+                'voice_id' => '56AoDkrOh6qfVPDXZ7Pt', //Cassidy
+                'model' => 'eleven_v3_alpha'
             ]
         ];
 
