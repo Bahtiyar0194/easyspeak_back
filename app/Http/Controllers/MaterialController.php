@@ -29,6 +29,7 @@ class MaterialController extends Controller
 
         $chat = MaterialExplain::leftJoin('ai_explains', 'material_explains_chat.explain_id', '=', 'ai_explains.explain_id')
         ->leftJoin('files', 'ai_explains.audio_file_id', '=', 'files.file_id')
+        ->where('material_explains_chat.lesson_material_id', $request->lesson_material_id)
         ->where('material_explains_chat.user_id', $auth_user_id)
         ->select(
             'material_explains_chat.uuid',
