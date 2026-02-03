@@ -35,6 +35,25 @@ class TextToSpeechController extends Controller
         ], 400);
     }
 
+    public function list_models()
+    {
+        $apiKey = env('ELEVENLABS_API_KEY');
+        $apiUrl = env('ELEVENLABS_API_URL');
+
+        $response = Http::withHeaders([
+            'xi-api-key' => $apiKey,
+        ])->get($apiUrl.'/v1/models');
+
+        if ($response->ok()) {
+            return response()->json($response->json(), 200);
+        }
+
+        return response()->json([
+            'error' => 'Не удалось получить список моделей',
+            'message' => $response->body(),
+        ], 400);
+    }
+
     public function tts(Request $request)
     {
         $text = $request->input('text');

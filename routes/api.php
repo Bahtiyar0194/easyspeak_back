@@ -352,6 +352,7 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/list_voices', [TextToSpeechController::class, 'list_voices']);
+            Route::get('/list_models', [TextToSpeechController::class, 'list_models']);
             Route::get('/tts', [TextToSpeechController::class, 'tts']);
         });
     });
