@@ -30,6 +30,7 @@ class ScheduleService
         ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
         ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
+        ->leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
         ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
         ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
         ->select(
@@ -43,6 +44,7 @@ class ScheduleService
             'conferences.moved',
             'lessons.lesson_name',
             'types_of_lessons_lang.lesson_type_name',
+            'course_sections.section_name',
             'mentor.avatar as mentor_avatar',
             'mentor.first_name as mentor_first_name',
             'mentor.last_name as mentor_last_name',

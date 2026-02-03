@@ -250,7 +250,7 @@ class SentenceController extends Controller
         $new_sentence->sentence = trim(preg_replace('/\s+/', ' ', normalizeQuotes($request->sentence)));
         $new_sentence->transcription = preg_replace('/^\[(.*)\]$/', '$1', $request->transcription);
 
-        if($request['upload_new_sentence_audio_file'] == 'generate'){;
+        if($request['upload_new_sentence_audio_file'] == 'generate'){
             $binary = base64_decode($request->input('generate_new_sentence_audio_file'));
             $file_name = uniqid() . '.mp3';
 

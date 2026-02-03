@@ -205,7 +205,7 @@ class CourseService
                     ->select(
                         'conferences.conference_id'
                     )
-                    ->where('conferences.participated', '>=', 2)
+                    ->where('conferences.start_time', '<=', now())
                     ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
                     ->where('group_members.member_id', '=', $auth_user->user_id)
                     ->where('group_members.status_type_id', '=', 1)

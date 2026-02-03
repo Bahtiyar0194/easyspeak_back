@@ -5,8 +5,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
+use App\Services\TextToSpeechService;
+
 class TextToSpeechController extends Controller
 {
+    protected $textToSpeechService;
+
+    public function __construct(Request $request, TextToSpeechService $textToSpeechService)
+    {
+        $this->textToSpeechService = $textToSpeechService;
+    }
+
     public function list_voices()
     {
         $apiKey = env('ELEVENLABS_API_KEY');
@@ -28,43 +37,21 @@ class TextToSpeechController extends Controller
 
     public function tts(Request $request)
     {
-        $apiKey = env('ELEVENLABS_API_KEY');
-        $apiUrl = env('ELEVENLABS_API_URL');
-
         $text = $request->input('text');
-        $voiceId = $request->input('voice_id');
-        $model = $request->input('model', 'tts-1');
-        $instructions = $request->input('instructions', '');
+        $voice_id = $request->input('voice_id');
+
+        $service = 'elevenlabs';
+        $model = "eleven_multilingual_v2"; //$model = $request->input('model', 'tts-1'); //от openai
 
         if (!$text) {
             return response()->json('Поле "text" обязательно.', 422);
         }
 
-        if (!$voiceId) {
+        if (!$voice_id) {
             return response()->json(trans('auth.choose_a_voice'), 422);
         }
 
-        // $response = Http::withHeaders([
-        //     'Authorization' => 'Bearer ' . $apiKey,
-        //     'Content-Type' => 'application/json',
-        // ])->withBody(json_encode([
-        //     'model' => $model,
-        //     'input' => $text,
-        //     'voice' => $voice,
-        //     'instructions' => $instructions,
-        // ]), 'application/json')->post(env('OPENAI_API_URL').'/audio/speech');
-
-        $response = Http::withHeaders([
-            'xi-api-key' => $apiKey,
-            'Content-Type' => 'application/json',
-        ])->post("{$apiUrl}/v1/text-to-speech/{$voiceId}", [
-            'text' => $text,
-            'model_id' => 'eleven_monolingual_v1',
-            'voice_settings' => [
-                'stability' => 0.5,
-                'similarity_boost' => 0.75,
-            ],
-        ]);
+        $response = $this->textToSpeechService->textToSpeech($service, $text, $voice_id, $model);
 
         if ($response->ok()) {
             return response()->json([

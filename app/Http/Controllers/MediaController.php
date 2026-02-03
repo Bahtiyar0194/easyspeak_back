@@ -87,6 +87,7 @@ class MediaController extends Controller
             'types_of_materials_lang.material_type_name'
         )
         ->where('types_of_materials_lang.lang_id', '=', $language->lang_id)
+        ->where('files.show_on_library', 1)
         ->distinct()
         ->orderBy($sortKey, $sortDirection);
 
