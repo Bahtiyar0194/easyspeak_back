@@ -58,7 +58,7 @@ class MaterialController extends Controller
 
         $speech_driver = $speech_drivers[0];
 
-        $speech = false;
+        $speech = true;
 
         $material = json_decode($request->material);
 
