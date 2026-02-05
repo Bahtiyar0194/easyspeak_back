@@ -30,7 +30,7 @@ class MaterialController extends Controller
             [
                 'name' => 'elevenlabs',
                 'voice_id' => '56AoDkrOh6qfVPDXZ7Pt', //Cassidy
-                'model' => 'eleven_v3'
+                'model' => 'eleven_flash_v2_5' //eleven_v3
             ]
         ];
     }
