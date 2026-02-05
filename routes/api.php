@@ -335,6 +335,8 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_chat/{lesson_material_id}', [MaterialController::class, 'get_chat']);
             Route::post('/explain', [MaterialController::class, 'explain']);
+            Route::post('/audio_explain/{uuid}', [MaterialController::class, 'audio_explain']);
+            Route::post('/feedback/{uuid}', [MaterialController::class, 'feedback']);
         });
     });
 

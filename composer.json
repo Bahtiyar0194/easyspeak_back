@@ -15,6 +15,7 @@
         "laravel/sanctum": "^2.11",
         "laravel/socialite": "^5.15",
         "laravel/tinker": "^2.5",
+        "patrickschur/language-detection": "^5.3",
         "pbmedia/laravel-ffmpeg": "^7.8",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "telegram-bot/api": "^2.5",

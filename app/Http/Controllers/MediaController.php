@@ -27,7 +27,6 @@ class MediaController extends Controller
     {
         $this->uploadFileService = $uploadFileService;
         $this->videoThumbnailService = $videoThumbnailService;
-        app()->setLocale($request->header('Accept-Language'));
     }
 
     public function get_attributes(Request $request){    

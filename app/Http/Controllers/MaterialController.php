@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Storage;
+use LanguageDetection\Language;
 
 use App\Services\TextToSpeechService;
 
@@ -19,9 +20,19 @@ class MaterialController extends Controller
 {
     protected $textToSpeechService;
 
+    protected $speechDrivers;
+
     public function __construct(Request $request, TextToSpeechService $textToSpeechService)
     {
         $this->textToSpeechService = $textToSpeechService;
+
+        $this->speechDrivers = [
+            [
+                'name' => 'elevenlabs',
+                'voice_id' => '56AoDkrOh6qfVPDXZ7Pt', //Cassidy
+                'model' => 'eleven_v3'
+            ]
+        ];
     }
 
     public function get_chat(Request $request){
@@ -33,6 +44,7 @@ class MaterialController extends Controller
         ->where('material_explains_chat.user_id', $auth_user_id)
         ->select(
             'material_explains_chat.uuid',
+            'material_explains_chat.like',
             'material_explains_chat.user_prompt',
             'ai_explains.content as ai_content',
             'files.target'
@@ -49,15 +61,7 @@ class MaterialController extends Controller
         $auth_user_id = auth()->user()->user_id;
         $user_prompt = $request->prompt;
 
-        $speech_drivers = [
-            [
-                'name' => 'elevenlabs',
-                'voice_id' => '56AoDkrOh6qfVPDXZ7Pt', //Cassidy
-                'model' => 'eleven_v3'
-            ]
-        ];
-
-        $speech_driver = $speech_drivers[0];
+        $speech_driver = $this->speechDrivers[0];
 
         $speech = false;
 
@@ -202,7 +206,7 @@ class MaterialController extends Controller
                     ->timeout(30)
                     ->retry(2, 200)
                     ->post(env('OPENAI_API_URL') . '/chat/completions', [
-                        'model' => 'gpt-4o', // gpt-5.2 еще не вышла в 2026, вероятно вы имели в виду актуальную версию
+                        'model' => 'gpt-5.2', // gpt-5.2 еще не вышла в 2026, вероятно вы имели в виду актуальную версию
                         'messages' => $messages
                     ]);
 
@@ -213,6 +217,10 @@ class MaterialController extends Controller
                 $new_explain = new AiExplain();
                 $new_explain->content = Str::markdown($answer);
                 $new_explain->text_driver = $text_driver;
+
+                // $ld = new Language;
+                // $lang = $ld->detect($answer)->bestResults()->close(); 
+                // Log::info('Detected lang:', $lang);
 
                 if($speech === true){
                     $response = $this->textToSpeechService->textToSpeech($speech_driver['name'], $answer, $speech_driver['voice_id'], $speech_driver['model']);
@@ -244,7 +252,7 @@ class MaterialController extends Controller
                 $new_dialog->user_id = $auth_user_id;
                 $new_dialog->lesson_material_id = $material->lesson_material_id;
                 $new_dialog->explain_id = $new_explain->explain_id;
-                $new_dialog->save();;
+                $new_dialog->save();
 
                 return response()->json([
                     'text' => $new_explain->content,
@@ -254,5 +262,56 @@ class MaterialController extends Controller
 
             return response()->json(['error' => 'API Error', 'message' => $response->json()], 400);
         }
+    }
+
+    public function audio_explain(Request $request){
+        $speech_driver = $this->speechDrivers[0];
+
+        $material_explain = MaterialExplain::where('uuid', $request->uuid)
+        ->firstOrFail();
+
+        $ai_explain = AiExplain::findOrFail($material_explain->explain_id);
+
+        if(!isset($ai_explain->audio_file_id)){
+            $response = $this->textToSpeechService->textToSpeech($speech_driver['name'], $ai_explain->content, $speech_driver['voice_id'], $speech_driver['model']);
+
+            if ($response->ok()) {
+                $file_name = uniqid() . '.mp3';
+
+                Storage::put("/public/{$file_name}", $response->body());
+                $file_size = Storage::size("/public/{$file_name}");
+
+                $new_file = new MediaFile();
+                $new_file->file_name = uniqid();
+                $new_file->target = $file_name;
+                $new_file->size = $file_size / 1048576;
+                $new_file->material_type_id = 2;
+                $new_file->show_on_library = 0;
+                $new_file->save();
+
+                $ai_explain->audio_file_id = $new_file->file_id;
+                $ai_explain->audio_driver = $speech_driver['name'];
+                $ai_explain->save();
+
+                return response()->json([
+                    'audio' => isset($file_name) ? base64_encode($response->body()) : null
+                ], 200);
+            }
+
+            return response()->json(['error' => 'API Error', 'message' => $response->json()], 400);
+        }
+    }
+
+    public function feedback(Request $request){
+        $auth_user_id = auth()->user()->user_id;
+        $feedback = $request->feedback;
+
+        $material_explain = MaterialExplain::where('uuid', $request->uuid)
+        ->firstOrFail();
+
+        $material_explain->like = isset($feedback) ? $feedback : null;
+        $material_explain->save();
+
+        return response()->json('success', 200);
     }
 }
