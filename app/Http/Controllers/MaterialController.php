@@ -206,7 +206,7 @@ class MaterialController extends Controller
                     ->timeout(30)
                     ->retry(2, 200)
                     ->post(env('OPENAI_API_URL') . '/chat/completions', [
-                        'model' => 'gpt-5.2', // gpt-5.2 еще не вышла в 2026, вероятно вы имели в виду актуальную версию
+                        'model' => 'gpt-4o', // gpt-5.2 еще не вышла в 2026, вероятно вы имели в виду актуальную версию
                         'messages' => $messages
                     ]);
 
@@ -255,6 +255,7 @@ class MaterialController extends Controller
                 $new_dialog->save();
 
                 return response()->json([
+                    'uuid' => $new_dialog->uuid,
                     'text' => $new_explain->content,
                     'audio' => isset($file_name) ? base64_encode($response->body()) : null
                 ], 200);
