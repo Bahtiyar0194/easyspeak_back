@@ -211,6 +211,8 @@ Route::group([
             Route::post('/edit_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'edit_material'])->middleware('check_roles');
             Route::post('/order_materials/{lesson_id}', [CourseController::class, 'order_materials'])->middleware('check_roles');
             Route::delete('/delete_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'delete_material'])->middleware('check_roles');
+
+            Route::post('/promo/find', [CourseController::class, 'find_promo_code']);
         });
     });
 

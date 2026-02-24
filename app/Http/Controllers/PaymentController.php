@@ -339,11 +339,7 @@ class PaymentController extends Controller
                 return response()->json($validator->errors(), 422);
             }
 
-            $school = School::select(
-                'schools.*',
-            )
-            ->where('school_id', '=', auth()->user()->school_id)
-            ->first();
+            $school = School::findOrFail(auth()->user()->school_id);
 
             $lessons = json_decode($request->lessons);
 

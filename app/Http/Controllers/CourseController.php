@@ -14,6 +14,7 @@ use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
 use App\Models\School;
+use App\Models\PromoCode;
 
 use Mail;
 use App\Mail\CourseRequestMail;
@@ -26,6 +27,7 @@ use Image;
 use Storage;
 use Auth;
 use Log;
+use Carbon\Carbon;
 
 use App\Services\CourseService;
 use App\Services\TaskService;
@@ -216,7 +218,7 @@ class CourseController extends Controller
         $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
         foreach ($lessons as $l => $lesson) {
-            $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always);
+            $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always, $section->sort_num);
 
             $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
@@ -300,7 +302,7 @@ class CourseController extends Controller
         )
         ->first();
 
-        $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always);
+        $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always, $section->sort_num);
 
         $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
 
@@ -375,11 +377,15 @@ class CourseController extends Controller
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
+
+        $maxSort = CourseSection::where('level_id', $level->level_id)
+        ->max('sort_num');
     
         // Создание нового раздела
         $new_section = new CourseSection();
         $new_section->section_name = $request->section_name;
         $new_section->level_id = $level->level_id;
+        $new_section->sort_num = $maxSort ? $maxSort + 1 : 1;
         $new_section->save();
     
         return response()->json($new_section, 200);
@@ -412,9 +418,8 @@ class CourseController extends Controller
             return response()->json(['error' => 'Section not found'], 404);
         }
 
-        $last_lesson = Lesson::where('section_id', '=', $section->section_id)
-        ->orderByDesc('sort_num')
-        ->first();
+        $maxSort = Lesson::where('section_id', $section->section_id)
+        ->max('sort_num');
 
         // Создание нового урока
         $new_lesson = new Lesson();
@@ -422,7 +427,7 @@ class CourseController extends Controller
         $new_lesson->lesson_description = $request->lesson_description;
         $new_lesson->section_id = $section->section_id;
         $new_lesson->lesson_type_id = $request->lesson_type_id;
-        $new_lesson->sort_num = $last_lesson ? ($last_lesson->sort_num + 1) : 1;
+        $new_lesson->sort_num = $maxSort ? $maxSort + 1 : 1;
         $new_lesson->save();
 
         return response()->json($new_lesson, 200);
@@ -891,5 +896,39 @@ class CourseController extends Controller
         // else{
         //     return response()->json(['error' => 'Level not found'], 404);
         // }
+    }
+
+    public function find_promo_code(Request $request){
+        $rules = [
+            'code' => 'required|string',
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $promo_code = PromoCode::where('promo_name', '=', $request->code)
+        ->where('status_type_id', 1)
+        ->first();
+
+        if(isset($promo_code)){
+
+            if($promo_code->limit === 0){
+                return response()->json(['promo_code' => ['limit_has_expired']], 422);
+            }
+
+            if(isset($promo_code->expiration_at)){
+                if (now()->greaterThan(Carbon::parse($promo_code->expiration_at))){
+                    return response()->json(['promo_code' => ['date_expired']], 422);
+                }
+            }
+
+            return response()->json($promo_code, 200);
+        }
+        else{
+            return response()->json(['promo_code' => ['not_found']], 422);
+        }
     }
 }

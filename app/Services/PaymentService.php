@@ -49,16 +49,13 @@ class PaymentService
                 'learner_id' => $payment->iniciator_id,
                 'lesson_id'  => $lesson['lesson_id'],
                 'iniciator_id' => $payment->iniciator_id,
-                'is_free'    => 0,
+                'is_free' => 0,
             ]);
 
             // 2. Находим все прошедшие конференции по этому уроку
             $passed_conferences = Conference::where('group_id', $lesson['group_id'])
                 ->where('start_time', '<=', now())
                 ->get();
-
-            info('Passed conference: ' . json_encode($passed_conferences, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
- 
 
             // 3. Делаем их бесплатными, если ученик их не покупал
             foreach ($passed_conferences as $conf) {

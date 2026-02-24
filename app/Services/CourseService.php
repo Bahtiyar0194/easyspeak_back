@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 use App\Models\User;
+use App\Models\School;
 use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
@@ -10,8 +11,17 @@ use App\Models\BoughtLesson;
 use App\Models\Conference;
 use App\Models\Language;
 
+use App\Services\SchoolService;
+
 class CourseService
 {
+
+    protected $schoolService;
+
+    public function __construct(SchoolService $schoolService)
+    {
+        $this->schoolService = $schoolService;
+    }
 
     public function getCourses($request){
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
@@ -83,6 +93,7 @@ class CourseService
             'course_levels.level_slug',
             'course_levels.is_available_always',
             'course_levels_lang.level_name',
+            'course_levels.price',
             'courses.course_name_slug'
         )
         ->first();
@@ -116,11 +127,7 @@ class CourseService
         }
         else{
             // получаем пользователя по ID
-            $user = User::find($user_id);
-
-            if (!isset($user)) {
-                return response()->json(['error' => 'User not found'], 404);
-            }
+            $user = User::findOrFail($user_id);
 
             $isOnlyLearner = $user->hasOnlyRoles(['learner']);
 
@@ -129,21 +136,26 @@ class CourseService
                 $available_status->is_available = true;
             }
             else{
-                $group_member = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-                ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-                ->where('course_levels.level_id', '=', $level->level_id)
-                ->where('group_members.member_id', '=', $user->user_id)
-                ->where('group_members.status_type_id', '=', 1)
-                ->first();
-
                 $available_status->is_learner = true;
 
-                if(isset($group_member)){
+                if($this->schoolService->isAiSchoolDomain($user->school_id)){
                     $available_status->is_available = true;
                 }
                 else{
-                    $available_status->is_available = false;
-                }
+                    $group_member = CourseLevel::leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+                    ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+                    ->where('course_levels.level_id', '=', $level->level_id)
+                    ->where('group_members.member_id', '=', $user->user_id)
+                    ->where('group_members.status_type_id', '=', 1)
+                    ->first();
+
+                    if(isset($group_member)){
+                        $available_status->is_available = true;
+                    }
+                    else{
+                        $available_status->is_available = false;
+                    }
+                };
             }
         }
 
@@ -175,7 +187,7 @@ class CourseService
         return $status;
     }
 
-    public function lessonAvailableStatus($lesson, $is_available_always){
+    public function lessonAvailableStatus($lesson, $is_available_always, $section_sort_num){
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
 
@@ -192,39 +204,50 @@ class CourseService
                 $available_status->is_available_always = true;
             }
             else{
-                $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-                ->where('lessons.section_id', '=', $lesson->section_id)
-                ->where('lessons.sort_num', '<=', $lesson->sort_num)
-                ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
-                ->orderBy('lessons.sort_num', 'desc')
-                ->first();
-
-                if(isset($conferenceLesson)){
-                    $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-                    ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-                    ->select(
-                        'conferences.conference_id'
-                    )
-                    ->where('conferences.start_time', '<=', now())
-                    ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
-                    ->where('group_members.member_id', '=', $auth_user->user_id)
-                    ->where('group_members.status_type_id', '=', 1)
-                    ->first();
-
-                    if(isset($conference)){
+                if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+                    if($section_sort_num === 1 && $lesson->sort_num === 1){
                         $available_status->is_available = true;
+                        $available_status->is_available_always = true;
                     }
                     else{
                         $available_status->is_available = false;
                     }
-
-                    if($lesson->lesson_type_slug === 'conference' || $lesson->lesson_type_slug === 'file_test'){
-                        $available_status->is_bought_status = $this->lessonIsBoughtStatus($lesson->lesson_id, $auth_user->user_id);
-                    }
                 }
                 else{
-                    $available_status->is_available = true;
-                }
+                    $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+                    ->where('lessons.section_id', '=', $lesson->section_id)
+                    ->where('lessons.sort_num', '<=', $lesson->sort_num)
+                    ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
+                    ->orderBy('lessons.sort_num', 'desc')
+                    ->first();
+
+                    if(isset($conferenceLesson)){
+                        $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
+                        ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+                        ->select(
+                            'conferences.conference_id'
+                        )
+                        ->where('conferences.start_time', '<=', now())
+                        ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
+                        ->where('group_members.member_id', '=', $auth_user->user_id)
+                        ->where('group_members.status_type_id', '=', 1)
+                        ->first();
+
+                        if(isset($conference)){
+                            $available_status->is_available = true;
+                        }
+                        else{
+                            $available_status->is_available = false;
+                        }
+
+                        if($lesson->lesson_type_slug === 'conference' || $lesson->lesson_type_slug === 'file_test'){
+                            $available_status->is_bought_status = $this->lessonIsBoughtStatus($lesson->lesson_id, $auth_user->user_id);
+                        }
+                    }
+                    else{
+                        $available_status->is_available = true;
+                    }
+                }    
             }
         }
 
