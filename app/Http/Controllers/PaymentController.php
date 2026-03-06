@@ -383,7 +383,7 @@ class PaymentController extends Controller
             $apiSecretKeyMarketplace = env('TIPTOPPAY_SECRET_KEY_MARKETPLACE');
 
             $apiPublicIdSubMerchantOne = $school->tiptop_public_id;
-            $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_PUBLIC_ID_SUBMERCHANT_TWO');
+            $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_PUBLIC_ID');
 
             $response = Http::withBasicAuth($apiPublicIdMarketplace, $apiSecretKeyMarketplace)
             ->withHeaders([
