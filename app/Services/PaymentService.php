@@ -2,6 +2,7 @@
 namespace App\Services;
 use App\Models\Payment;
 use App\Models\LearnerPayment;
+use App\Models\LearnerLevelPayment;
 use App\Models\BoughtLesson;
 use App\Models\Conference;
 use App\Models\School;
@@ -74,6 +75,13 @@ class PaymentService
                 }
             }
         }
+    }
+
+    public function saveLevelPayment($payment_id){
+        $payment = LearnerLevelPayment::findOrFail($payment_id);
+        $payment->is_paid = 1;
+        $payment->save();
+
     }
 }
 ?>

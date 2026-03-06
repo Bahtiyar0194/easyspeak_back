@@ -9,5 +9,5 @@ class LearnerLevelPayment extends Model
 {
     use HasFactory;
     protected $table = 'learner_level_payments';
-    protected $primaryKey = 'payment_id';
+    protected $primaryKey = 'level_payment_id';
 }

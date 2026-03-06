@@ -8,8 +8,10 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\LessonMaterial;
 use App\Models\BoughtLesson;
+use App\Models\LearnerLevelPayment;
 use App\Models\Conference;
 use App\Models\Language;
+use Carbon\Carbon;
 
 use App\Services\SchoolService;
 
@@ -100,6 +102,30 @@ class CourseService
 
         if (!isset($level)) {
             return response()->json(['error' => 'Level not found'], 404);
+        }
+
+        // Получаем текущего аутентифицированного пользователя
+        $auth_user = auth()->user();
+
+        $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
+
+            if($this->schoolService->isAiSchoolDomain($auth_user->school_id) && $isOnlyLearner){
+        
+            $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
+            ->where('level_id', $level->level_id)
+            ->where('is_paid', 1)
+            ->first();
+
+            if(isset($learnerPayment)){
+                if (now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
+                    $level->is_available_always = 0;
+                    $level->has_expired = 1;
+                }
+                else{
+                    $level->is_available_always = 1;
+                    $level->has_expired = 0;
+                }
+            }
         }
 
         return $level;

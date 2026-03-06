@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Language;
 use App\Models\School;
+use App\Models\CourseLevel;
 use App\Models\SubscriptionPlanType;
 use App\Models\Payment;
 use App\Models\LearnerPayment;
+use App\Models\LearnerLevelPayment;
 use App\Models\PaymentMethod;
+use App\Models\PromoCode;
 
 use App\Services\PaymentService;
 
@@ -23,7 +26,6 @@ class PaymentController extends Controller
     public function __construct(Request $request, PaymentService $paymentService)
     {
         $this->paymentService = $paymentService;
-        app()->setLocale($request->header('Accept-Language'));
     }
 
     public function get_attributes(Request $request)
@@ -424,6 +426,130 @@ class PaymentController extends Controller
         }                
     }
 
+    public function level_handle(Request $request)
+    {
+        $language = Language::where('lang_tag', '=', $request->lang)->first();
+
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'level_id' => 'required|numeric',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        } elseif ($request->step == 2) {
+            $rules = [
+                'level_id' => 'required|numeric',
+                'cryptogram' => 'required|string|min:1',
+                'step' => 'required|numeric',
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            $selectedLevel = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->select(
+                'course_levels.level_id',
+                'course_levels.price',
+                'course_levels_lang.level_name',
+                'course_levels.subscription_period_in_months'
+            )
+            ->where('course_levels.level_id', $request->level_id)
+            ->where('course_levels_lang.lang_id', $language->lang_id)
+            ->distinct()
+            ->firstOrFail();
+
+            $basePrice = $selectedLevel->price;
+            $amount = $basePrice;
+
+            $promo_code = PromoCode::where('promo_name', $request->promo_code)
+                ->where('status_type_id', 1)
+                ->first();
+
+            if (
+                $promo_code &&
+                $promo_code->discount_percent > 0 &&
+                $promo_code->limit !== 0 &&
+                (
+                    !$promo_code->expiration_at ||
+                    now()->lessThanOrEqualTo(Carbon::parse($promo_code->expiration_at))
+                )
+            ) {
+                $amount = ($basePrice / 100) * $promo_code->discount_percent;
+            }
+
+            $amount = number_format($amount, 2, '.', '');
+
+            $currency = 'KZT';
+            $cryptogram = $request->cryptogram;
+
+            // $now = Carbon::now()->toDateString();
+
+            // $expiration = Carbon::parse($school->subscription_expiration_at)->toDateString();
+
+            $start_date =  Carbon::now();
+
+            // Добавляем нужное количество месяцев
+            $end_date = $start_date->copy()->addMonths($selectedLevel->subscription_period_in_months);
+
+            $new_payment = new LearnerLevelPayment();
+            $new_payment->description = $selectedLevel->level_name.', ('.$start_date->format('d.m.Y').' - '.$end_date->format('d.m.Y').')';
+            $new_payment->sum = $amount;
+            $new_payment->level_id = $selectedLevel->level_id;
+            $new_payment->payment_method_id = 2;
+            $new_payment->promo_id = ($basePrice > $amount && isset($promo_code)) ? $promo_code->promo_id : null;
+            $new_payment->iniciator_id = auth()->user()->user_id;
+            $new_payment->subscription_expiration_at = $end_date;
+            $new_payment->save();
+
+            $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');
+            $apiSecretKey = env('TIPTOPPAY_SECRET_KEY');
+            $apiUrl = env('TIPTOPPAY_API_URL');
+
+            $response = Http::withBasicAuth($apiPublicId, $apiSecretKey)
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($apiUrl, [
+                'Amount' => $amount,
+                'Currency' => $currency,
+                'CardCryptogramPacket' => $cryptogram,
+                'InvoiceId' => $new_payment->level_payment_id,
+                'Description' => $new_payment->description,
+                'Email' => auth()->user()->email,
+                'JsonData' => json_encode([
+                    'PaymentUrl' => $request->header('Origin'),
+                ])
+            ]);
+
+            if ($response->ok()) {
+                $result = $response->json();
+
+                if ($result['Success'] === true) {
+                    // транзакция прошла успешно
+                    $this->paymentService->saveLevelPayment($result['Model']['InvoiceId']);
+                }
+
+                return response()->json($response->json(), 200);
+            }
+
+            return response()->json(['message' => $response->json()], 500);
+            
+        }                
+    }
+
     public function tiptop_handle3ds(Request $request)
     {
         $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');
@@ -451,6 +577,46 @@ class PaymentController extends Controller
                 // транзакция прошла успешно
 
                 $this->paymentService->savePayment($result['Model']['InvoiceId'], null);
+
+                return redirect()->away($redirectUrl . 'true');
+            } else {
+                //транзакция отклонена
+                if(isset($result['Model']) && isset($result['Model']['ReasonCode'])){
+                    return redirect()->away($redirectUrl . 'false&message='.$result['Model']['CardHolderMessage'].'&reason=' . ($result['Model']['ReasonCode'] ?? 'unknown'));
+                }
+
+                return redirect()->away($redirectUrl . 'false&message='.$result['Message'].'&reason=unknown');
+            }
+        }
+    }
+
+    public function tiptop_handle3ds_level(Request $request)
+    {
+        $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');
+        $apiSecretKey = env('TIPTOPPAY_SECRET_KEY');
+        $api3dsUrl = env('TIPTOPPAY_API_POST_3DS_URL');
+
+        $md = $request->input('MD');
+        $paRes = $request->input('PaRes');
+
+        // Отправляем их обратно в платёжный шлюз для подтверждения
+        $response = Http::withBasicAuth($apiPublicId, $apiSecretKey)
+        ->post($api3dsUrl, [
+            'TransactionId' => $md,
+            'PaRes' => $paRes,
+        ]);
+
+        $result = $response->json();
+
+        if(isset($result['Model'])){
+            $jsonData = json_decode($result['Model']['JsonData'], true);
+        
+            $redirectUrl = $jsonData['PaymentUrl'] . '/dashboard/payment-result?success=';
+
+            if ($result['Success'] === true) {
+                // транзакция прошла успешно
+
+                $this->paymentService->saveLevelPayment($result['Model']['InvoiceId']);
 
                 return redirect()->away($redirectUrl . 'true');
             } else {

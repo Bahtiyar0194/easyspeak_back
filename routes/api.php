@@ -323,11 +323,13 @@ Route::group([
             Route::post('/get_payments', [PaymentController::class, 'get_payments']);
             Route::post('/school/handle', [PaymentController::class, 'school_handle']);
             Route::post('/lesson/handle', [PaymentController::class, 'lesson_handle']);
+            Route::post('/course_level/handle', [PaymentController::class, 'level_handle']);
             Route::post('/accept_payment/{payment_id}', [PaymentController::class, 'accept_payment'])->middleware('check_roles');
         });
 
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);
         Route::post('/tiptop/handle3ds/learner', [PaymentController::class, 'tiptop_handle3ds_learner']);
+        Route::post('/tiptop/handle3ds/level', [PaymentController::class, 'tiptop_handle3ds_level']);
         Route::post('/tiptop/check', [PaymentController::class, 'tiptop_check']);
     });
 

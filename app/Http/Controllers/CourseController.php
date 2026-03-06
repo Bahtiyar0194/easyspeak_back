@@ -913,7 +913,7 @@ class CourseController extends Controller
         ->where('status_type_id', 1)
         ->first();
 
-        if(isset($promo_code)){
+        if(isset($promo_code) && $promo_code->discount_percent > 0){
 
             if($promo_code->limit === 0){
                 return response()->json(['promo_code' => ['limit_has_expired']], 422);
