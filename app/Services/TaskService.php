@@ -26,15 +26,18 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 use App\Services\UploadFileService;
+use App\Services\SchoolService;
 use App\Jobs\ProcessVideoJob;
 
 class TaskService
 {
     protected $uploadFileService;
+    protected $schoolService;
 
-    public function __construct(UploadFileService $uploadFileService)
+    public function __construct(UploadFileService $uploadFileService, SchoolService $schoolService)
     {
         $this->uploadFileService = $uploadFileService;
+        $this->schoolService = $schoolService;
     }
 
     //Добавить задание
@@ -238,7 +241,6 @@ class TaskService
                 $mentor_id = $auth_user->user_id;
             }
             else{
-
                 $level = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
                 ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
                 ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
@@ -248,7 +250,7 @@ class TaskService
                 ->where('tasks.task_id', '=', $task_id)
                 ->first();
 
-                if($level->is_available_always === 1){
+                if($level->is_available_always === 1 || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
                     $mentor_id = null;
                 }
                 else{
