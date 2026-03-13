@@ -8,6 +8,7 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\LessonMaterial;
 use App\Models\BoughtLesson;
+use App\Models\PromoCode;
 use App\Models\LearnerLevelPayment;
 use App\Models\Conference;
 use App\Models\Language;
@@ -111,22 +112,26 @@ class CourseService
 
             if($this->schoolService->isAiSchoolDomain($auth_user->school_id) && $isOnlyLearner){
         
-            $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
-            ->where('level_id', $level->level_id)
-            ->where('is_paid', 1)
-            ->first();
+                $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
+                ->where('level_id', $level->level_id)
+                ->where('is_paid', 1)
+                ->first();
 
-            if(isset($learnerPayment)){
-                if (now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
-                    $level->is_available_always = 0;
-                    $level->has_expired = 1;
-                }
-                else{
-                    $level->is_available_always = 1;
-                    $level->has_expired = 0;
+                $promo_code = PromoCode::where('user_id', $auth_user->user_id)
+                ->first();
+
+                if(isset($learnerPayment) || (isset($promo_code) && ($promo_code->expiration_at === null || now()->lessThan(Carbon::parse($promo_code->expiration_at))))){
+                    if (isset($learnerPayment) && now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
+                        $level->is_available_always = 0;
+                        $level->has_expired = 1;
+                        $level->expiration_at = $learnerPayment->subscription_expiration_at;
+                    }
+                    else{
+                        $level->is_available_always = 1;
+                        $level->has_expired = 0;
+                    }
                 }
             }
-        }
 
         return $level;
     }
