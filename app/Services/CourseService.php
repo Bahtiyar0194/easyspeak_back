@@ -110,28 +110,27 @@ class CourseService
 
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
-            if($this->schoolService->isAiSchoolDomain($auth_user->school_id) && $isOnlyLearner){
-        
-                $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
-                ->where('level_id', $level->level_id)
-                ->where('is_paid', 1)
-                ->first();
+        if($this->schoolService->isAiSchoolDomain($auth_user->school_id) && $isOnlyLearner){
+            $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
+            ->where('level_id', $level->level_id)
+            ->where('is_paid', 1)
+            ->first();
 
-                $promo_code = PromoCode::where('user_id', $auth_user->user_id)
-                ->first();
+            $promo_code = PromoCode::where('user_id', $auth_user->user_id)
+            ->first();
 
-                if(isset($learnerPayment) || (isset($promo_code) && ($promo_code->expiration_at === null || now()->lessThan(Carbon::parse($promo_code->expiration_at))))){
-                    if (isset($learnerPayment) && now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
-                        $level->is_available_always = 0;
-                        $level->has_expired = 1;
-                        $level->expiration_at = $learnerPayment->subscription_expiration_at;
-                    }
-                    else{
-                        $level->is_available_always = 1;
-                        $level->has_expired = 0;
-                    }
+            if(isset($learnerPayment) || (isset($promo_code) && ($promo_code->expiration_at === null || now()->lessThan(Carbon::parse($promo_code->expiration_at))))){
+                if (isset($learnerPayment) && now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
+                    $level->is_available_always = 0;
+                    $level->has_expired = 1;
+                    $level->expiration_at = $learnerPayment->subscription_expiration_at;
+                }
+                else{
+                    $level->is_available_always = 1;
+                    $level->has_expired = 0;
                 }
             }
+        }
 
         return $level;
     }

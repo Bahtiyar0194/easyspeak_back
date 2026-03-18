@@ -24,6 +24,7 @@ use App\Models\CourseSection;
 use App\Models\Lesson;
 
 use App\Services\TaskService;
+use App\Services\SchoolService;
 
 use Validator;
 use DB;
@@ -35,10 +36,12 @@ class TaskController extends Controller
 {
 
     protected $taskService;
+    protected $schoolService;
 
-    public function __construct(Request $request, TaskService $taskService)
+    public function __construct(Request $request, TaskService $taskService, SchoolService $schoolService)
     {
         $this->taskService = $taskService;
+        $this->schoolService = $schoolService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -370,6 +373,8 @@ class TaskController extends Controller
     }
 
     public function check_answers(Request $request){
+        
+        $auth_user = auth()->user();
         $task = Task::findOrFail($request->task_id);
 
         $task_result = [];
@@ -377,14 +382,14 @@ class TaskController extends Controller
 
         foreach ($questions as $key => $question) {
             if (strlen(trim($question->userInput)) > 0) {
-                if($question->checking_by == 'by_ai'){
+                if($question->checking_by == 'by_ai' || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
                     $prompt = "Question: {$question->sentence}\nLearner answer: {$question->userInput}";
     
                     $response = Http::withHeaders([
                         'Authorization' => 'Bearer ' . env('OPENAI_API_KEY'),
                         'Content-Type' => 'application/json',
                     ])->post(env('OPENAI_API_URL').'/chat/completions', [
-                        'model' => 'gpt-4', // или 'gpt-3.5-turbo'
+                        'model' => 'gpt-4o', // или 'gpt-3.5-turbo'
                         'messages' => [
                             [
                                 'role' => 'system',
@@ -4197,7 +4202,7 @@ class TaskController extends Controller
         ->exists();
 
         // Проверяем, является ли пользователь участником группы
-        if($is_member || $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])){
+        if($is_member || $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor']) || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
             $task_questions = $this->taskService->getTaskQuestions($find_task->task_id, $language, $task_options);
 
             $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
