@@ -8,6 +8,8 @@ class TextToSpeechService
 {
     public function textToSpeech($service, $text, $voice_id, $model){
 
+        info($model);
+
         switch ($service) {
             case 'openai':
 
@@ -16,12 +18,12 @@ class TextToSpeechService
 
                 $response = Http::withHeaders([
                     'Authorization' => 'Bearer ' . $apiKey,
-                    'Content-Type' => 'application/json',
-                ])->withBody(json_encode([
-                    'model' => $model,
+                ])->post($apiUrl . '/audio/speech', [
+                    'model' => $model ?? 'gpt-4o-mini-tts',
                     'input' => $text,
                     'voice' => $voice_id,
-                ]), 'application/json')->post($apiUrl.'/audio/speech');
+                ]);
+
                 break;
 
             case 'elevenlabs':

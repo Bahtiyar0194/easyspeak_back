@@ -28,6 +28,12 @@ class MaterialController extends Controller
 
         $this->speechDrivers = [
             [
+                'name' => 'openai',
+                'voice_id' => 'coral', //coral
+                'model' => 'gpt-4o-mini-tts', //gpt-audio
+                'instructions' => 'Speak in a cheerful and positive tone.'
+            ],
+            [
                 'name' => 'elevenlabs',
                 'voice_id' => '56AoDkrOh6qfVPDXZ7Pt', //Cassidy
                 'model' => 'eleven_v3' //eleven_flash_v2_5
