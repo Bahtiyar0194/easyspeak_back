@@ -111,6 +111,7 @@ class MaterialController extends Controller
             $new_dialog->save();
 
             return response()->json([
+                'uuid' => $new_dialog->uuid,
                 'text' => $searchSameExplain->content,
                 'audio_url' => isset($searchSameExplain->target) ? $searchSameExplain->target : null
             ], 200);
