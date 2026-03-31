@@ -68,8 +68,6 @@ class MaterialController extends Controller
 
         $speech_driver = $this->speechDrivers[0];
 
-        $speech = false;
-
         $material = json_decode($request->material);
 
         $searchSameExplain = MaterialExplain::leftJoin(
@@ -113,7 +111,6 @@ class MaterialController extends Controller
             return response()->json([
                 'uuid' => $new_dialog->uuid,
                 'text' => $searchSameExplain->content,
-                'audio_url' => isset($searchSameExplain->target) ? $searchSameExplain->target : null
             ], 200);
         }
         else{
@@ -223,33 +220,6 @@ class MaterialController extends Controller
                 $new_explain = new AiExplain();
                 $new_explain->content = Str::markdown($answer);
                 $new_explain->text_driver = $text_driver;
-
-                // $ld = new Language;
-                // $lang = $ld->detect($answer)->bestResults()->close(); 
-                // Log::info('Detected lang:', $lang);
-
-                if($speech === true){
-                    $response = $this->textToSpeechService->textToSpeech($speech_driver['name'], $answer, $speech_driver['voice_id'], $speech_driver['model']);
-
-                    if ($response->ok()) {
-                        $file_name = uniqid() . '.mp3';
-
-                        Storage::put("/public/{$file_name}", $response->body());
-                        $file_size = Storage::size("/public/{$file_name}");
-
-                        $new_file = new MediaFile();
-                        $new_file->file_name = uniqid();
-                        $new_file->target = $file_name;
-                        $new_file->size = $file_size / 1048576;
-                        $new_file->material_type_id = 2;
-                        $new_file->show_on_library = 0;
-                        $new_file->save();
-
-                        $new_explain->audio_file_id = $new_file->file_id;
-                        $new_explain->audio_driver = $speech_driver['name'];
-                    }
-                }
-
                 $new_explain->save();
 
                 $new_dialog = new MaterialExplain();
@@ -263,7 +233,6 @@ class MaterialController extends Controller
                 return response()->json([
                     'uuid' => $new_dialog->uuid,
                     'text' => $new_explain->content,
-                    'audio' => isset($file_name) ? base64_encode($response->body()) : null
                 ], 200);
             }
 
@@ -279,18 +248,62 @@ class MaterialController extends Controller
 
         $ai_explain = AiExplain::findOrFail($material_explain->explain_id);
 
-        if(!isset($ai_explain->audio_file_id)){
-            $response = $this->textToSpeechService->textToSpeech($speech_driver['name'], $ai_explain->content, $speech_driver['voice_id'], $speech_driver['model']);
+        if ($ai_explain->audio_file_id) {
+            $file = MediaFile::find($ai_explain->audio_file_id);
 
-            if ($response->ok()) {
-                $file_name = uniqid() . '.mp3';
+            return response()->file(storage_path('app/public/' . $file->target));
+        }
+        else{
+            
+            $streamResponse = $this->textToSpeechService->textToSpeechStream($speech_driver['name'], $ai_explain->content, $speech_driver['voice_id'], $speech_driver['model']);
 
-                Storage::put("/public/{$file_name}", $response->body());
-                $file_size = Storage::size("/public/{$file_name}");
+            $file_name = uniqid() . '.mp3';
+            $file_path = storage_path("app/public/{$file_name}");
+
+            // перед стримом
+            ignore_user_abort(true); //Если пользователь покинул страницу
+            set_time_limit(0);
+
+            return response()->stream(function () use ($streamResponse, $file_name, $file_path, $ai_explain, $speech_driver) {
+                if (ob_get_level()) ob_end_clean();
+
+                $body = $streamResponse->getBody();
+                $file = fopen($file_path, 'wb');
+
+                try {
+                    while (!$body->eof()) {
+                        $chunk = $body->read(4096);
+
+                        if (!$chunk) continue;
+
+                        echo $chunk;
+                        flush();
+
+                        fwrite($file, $chunk);
+                    }
+
+                } catch (\Throwable $e) {
+
+                    fclose($file);
+                    @unlink($file_path); // ❌ удаляем битый файл
+
+                    throw $e;
+
+                } finally {
+
+                    if (is_resource($file)) {
+                        fclose($file);
+                    }
+                }
+
+                // 👉 сохраняем файл в БД ПОСЛЕ завершения стрима 
+                // 👉 выполняется только если не было ошибок
+
+                $file_size = filesize($file_path);
 
                 $new_file = new MediaFile();
-                $new_file->file_name = uniqid();
-                $new_file->target = $file_name;
+                $new_file->file_name = $file_name;
+                $new_file->target = basename($file_path);
                 $new_file->size = $file_size / 1048576;
                 $new_file->material_type_id = 2;
                 $new_file->show_on_library = 0;
@@ -300,12 +313,11 @@ class MaterialController extends Controller
                 $ai_explain->audio_driver = $speech_driver['name'];
                 $ai_explain->save();
 
-                return response()->json([
-                    'audio' => isset($file_name) ? base64_encode($response->body()) : null
-                ], 200);
-            }
-
-            return response()->json(['error' => 'API Error', 'message' => $response->json()], 400);
+            }, 200, [
+                'Content-Type' => 'audio/mpeg',
+                'Cache-Control' => 'no-cache',
+                'X-Accel-Buffering' => 'no', // 🔥 важно для nginx
+            ]);
         }
     }
 

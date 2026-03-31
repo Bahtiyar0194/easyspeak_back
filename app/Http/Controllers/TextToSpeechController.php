@@ -60,7 +60,7 @@ class TextToSpeechController extends Controller
         $voice_id = $request->input('voice_id');
 
         $service = 'elevenlabs';
-        $model = "eleven_multilingual_v2"; //$model = $request->input('model', 'tts-1'); //от openai
+        $model = "eleven_v3"; //$model = $request->input('model', 'tts-1'); //от openai
 
         if (!$text) {
             return response()->json('Поле "text" обязательно.', 422);
