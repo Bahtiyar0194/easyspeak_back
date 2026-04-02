@@ -249,7 +249,7 @@ class MaterialController extends Controller
         $ai_explain = AiExplain::findOrFail($material_explain->explain_id);
 
         if ($ai_explain->audio_file_id) {
-            $file = MediaFile::find($ai_explain->audio_file_id);
+            $file = MediaFile::findOrFail($ai_explain->audio_file_id);
 
             return response()->file(storage_path('app/public/' . $file->target));
         }

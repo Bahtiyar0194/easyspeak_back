@@ -15,9 +15,9 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'storage/*', 'videos/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'stream/*', 'storage/*', 'videos/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['*'],
+    'allowed_methods' => ['GET', 'POST', 'OPTIONS'],
 
     'allowed_origins' => ['*'],
 
@@ -25,7 +25,7 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['Content-Range', 'Accept-Ranges'],
 
     'max_age' => 0,
 
