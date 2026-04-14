@@ -315,7 +315,10 @@ class MaterialController extends Controller
 
             }, 200, [
                 'Content-Type' => 'audio/mpeg',
-                'Cache-Control' => 'no-cache',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+                'Connection' => 'keep-alive', // Важно для стабильного потока
                 'X-Accel-Buffering' => 'no', // 🔥 важно для nginx
             ]);
         }
