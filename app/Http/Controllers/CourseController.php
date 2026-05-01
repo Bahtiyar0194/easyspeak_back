@@ -8,6 +8,7 @@ use App\Models\Lesson;
 use App\Models\LessonType;
 use App\Models\MaterialType;
 use App\Models\LessonMaterial;
+use App\Models\LessonProgress;
 use App\Models\Task;
 use App\Models\Language;
 use App\Models\MediaFile;
@@ -63,9 +64,11 @@ class CourseController extends Controller
         $levels = $this->courseService->getCourseLevels($course->course_id, $language->lang_id);
 
         if(Auth::check()){
+            $auth_user = auth()->user();
+
             foreach ($levels as $key => $level) {
                 
-                $level->available_status = $this->courseService->levelAvailableStatus($level, auth()->user()->user_id);
+                $level->available_status = $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
                 
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
@@ -75,24 +78,32 @@ class CourseController extends Controller
                     $sectionCompletedPercent = 0;
 
                     $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
-
                     foreach ($lessons as $l => $lesson) {
-                        $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
+                        $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
+                        ->where('learner_id', $auth_user->user_id)
+                        ->first();
 
-                        $completedTasksCount = 0;
-                        $completedTasksPercent = 0;
-
-                        foreach ($lesson->tasks as $key => $task) {
-                            $completedTasksCount++;
-                            $completedTasksPercent += $task->task_progress;
+                        if(isset($lesson_progress)){
+                            $sectionCompletedPercent += $lesson_progress->progress;
                         }
+                        // else{
+                        //     $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
-                        $lesson->completed_tasks_count = $completedTasksCount;
-                        $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                            ? $completedTasksPercent / count($lesson->tasks)
-                            : 0;
+                        //     $completedTasksCount = 0;
+                        //     $completedTasksPercent = 0;
 
-                        $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                        //     foreach ($lesson->tasks as $key => $task) {
+                        //         $completedTasksCount++;
+                        //         $completedTasksPercent += $task->task_progress;
+                        //     }
+
+                        //     $lesson->completed_tasks_count = $completedTasksCount;
+                        //     $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                        //         ? $completedTasksPercent / count($lesson->tasks)
+                        //         : 0;
+
+                        //     $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                        // }
                     }
 
                     $section->lessons = $lessons;
@@ -147,22 +158,31 @@ class CourseController extends Controller
             $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
             foreach ($lessons as $l => $lesson) {    
-                $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
+                $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
+                ->where('learner_id', $auth_user->user_id)
+                ->first();
 
-                $completedTasksCount = 0;
-                $completedTasksPercent = 0;
-
-                foreach ($lesson->tasks as $key => $task) {
-                    $completedTasksCount++;
-                    $completedTasksPercent += $task->task_progress;
+                if(isset($lesson_progress)){
+                    $sectionCompletedPercent += $lesson_progress->progress;
                 }
+                // else{
+                //     $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
-                $lesson->completed_tasks_count = $completedTasksCount;
-                $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                    ? $completedTasksPercent / count($lesson->tasks)
-                    : 0;
+                //     $completedTasksCount = 0;
+                //     $completedTasksPercent = 0;
 
-                $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                //     foreach ($lesson->tasks as $key => $task) {
+                //         $completedTasksCount++;
+                //         $completedTasksPercent += $task->task_progress;
+                //     }
+
+                //     $lesson->completed_tasks_count = $completedTasksCount;
+                //     $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+                //         ? $completedTasksPercent / count($lesson->tasks)
+                //         : 0;
+
+                //     $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                // }
 
                 $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
                 ->get();
@@ -220,6 +240,14 @@ class CourseController extends Controller
         foreach ($lessons as $l => $lesson) {
             $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always, $section->sort_num);
 
+            $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
+                ->where('learner_id', $auth_user->user_id)
+                ->first();
+
+            if(isset($lesson_progress)){
+                $sectionCompletedPercent += $lesson_progress->progress;
+            }
+            
             $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
 
             $completedTasksCount = 0;
@@ -234,8 +262,7 @@ class CourseController extends Controller
             $lesson->completed_tasks_percent = count($lesson->tasks) > 0
                 ? $completedTasksPercent / count($lesson->tasks)
                 : 0;
-
-            $sectionCompletedPercent += $lesson->completed_tasks_percent;
+            
 
             $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
             ->get();

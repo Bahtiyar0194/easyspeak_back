@@ -6,6 +6,7 @@ use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
+use App\Models\LessonProgress;
 use App\Models\LessonMaterial;
 use App\Models\BoughtLesson;
 use App\Models\PromoCode;

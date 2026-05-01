@@ -14,6 +14,7 @@ use App\Models\TaskAnswer;
 use App\Models\TaskOption;
 use App\Models\TaskSentenceMaterial;
 use App\Models\CompletedTask;
+use App\Models\LessonProgress;
 use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
@@ -222,7 +223,7 @@ class TaskService
         }
     }
 
-    public function saveTaskResult($task_id, $task_result){
+    public function saveTaskResult($task_id, $lesson_id, $task_result){
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
         $is_completed = true;
@@ -333,6 +334,33 @@ class TaskService
             $save_task_progress->progress = $get_task_result->percentage;
             $save_task_progress->is_completed = $get_task_result->completed;
             $save_task_progress->save();
+
+            //Сохранить общий прогресс урока
+            $lesson_tasks = $this->getLessonTasksProgress($lesson_id);
+
+            $completedTasksCount = 0;
+            $completedTasksPercent = 0;
+
+            foreach ($lesson_tasks as $key => $task) {
+                $completedTasksCount++;
+                $completedTasksPercent += $task->task_progress;
+            }
+
+            $completed_tasks_count = $completedTasksCount;
+            $completed_tasks_percent = count($lesson_tasks) > 0
+                ? $completedTasksPercent / count($lesson_tasks)
+                : 0;
+
+            // Удаляем старый прогресс по уроку
+            LessonProgress::where('lesson_id', '=', $lesson_id)
+            ->where('learner_id', '=', $auth_user->user_id)
+            ->delete();
+
+            $new_lesson_progress = new LessonProgress();
+            $new_lesson_progress->lesson_id = $lesson_id;
+            $new_lesson_progress->learner_id = $auth_user->user_id;
+            $new_lesson_progress->progress = $completed_tasks_percent;
+            $new_lesson_progress->save();
 
             return response()->json($get_task_result, 200);
         }

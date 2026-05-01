@@ -22,6 +22,8 @@ use App\Models\Course;
 use App\Models\CourseLevel;
 use App\Models\CourseSection;
 use App\Models\Lesson;
+use App\Models\LessonProgress;
+use App\Models\User;
 
 use App\Services\TaskService;
 use App\Services\SchoolService;
@@ -42,7 +44,6 @@ class TaskController extends Controller
     {
         $this->taskService = $taskService;
         $this->schoolService = $schoolService;
-        app()->setLocale($request->header('Accept-Language'));
     }
 
     public function get_task_attributes(Request $request)
@@ -362,7 +363,7 @@ class TaskController extends Controller
         $task = Task::findOrFail($request->task_id);
         $task_result = json_decode($request->task_result);
 
-        return $this->taskService->saveTaskResult($task->task_id, $task_result);
+        return $this->taskService->saveTaskResult($task->task_id, $task->lesson_id, $task_result);
     }
 
     public function change_task_result(Request $request){
@@ -482,7 +483,7 @@ class TaskController extends Controller
             }
         }
 
-        return $this->taskService->saveTaskResult($task->task_id, json_decode(json_encode($task_result)));
+        return $this->taskService->saveTaskResult($task->task_id, $task->lesson_id, json_decode(json_encode($task_result)));
     }
 
     public function get_task_results(Request $request)
@@ -546,7 +547,7 @@ class TaskController extends Controller
                 'mentor.avatar as mentor_avatar',
                 'types_of_tasks_lang.task_type_name',
 
-                        // ← Поля группы
+                // ← Поля группы
                 'groups.group_id',
                 'groups.group_name'
             )
@@ -4349,6 +4350,47 @@ class TaskController extends Controller
             $save_task_progress->progress = $get_task_result->percentage;
             $save_task_progress->is_completed = $get_task_result->completed;
             $save_task_progress->save();
+        }
+
+        echo 123;
+    }
+
+    public function set_lesson_progress(Request $request){
+        $users = User::get();
+        $lessons = Lesson::get();
+
+        foreach ($lessons as $key => $lesson) {
+            $tasks = Task::where('lesson_id', $lesson->lesson_id)
+            ->get();
+
+            $lesson->tasks = $tasks;
+        }
+
+        foreach ($users as $user) {
+            foreach ($lessons as $lesson) {
+
+                $total_progress = 0;
+
+                foreach ($lesson->tasks as $task) {
+                    $completed_tasks = CompletedTask::where('learner_id', $user->user_id)
+                    ->where('task_id', $task->task_id)
+                    ->get();
+
+                    foreach ($completed_tasks as $completed_task) {
+                        $total_progress += $completed_task->progress;
+                    }
+                }
+
+                $task_count = count($lesson->tasks);
+
+                if($total_progress > 0 && $task_count > 0){
+                    $new_lesson_progress = new LessonProgress();
+                    $new_lesson_progress->lesson_id = $lesson->lesson_id;
+                    $new_lesson_progress->learner_id = $user->user_id;
+                    $new_lesson_progress->progress = $task_count > 0 ? $total_progress / $task_count : 0;
+                    $new_lesson_progress->save();
+                }
+            }
         }
 
         echo 123;
