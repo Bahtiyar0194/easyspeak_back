@@ -4356,6 +4356,8 @@ class TaskController extends Controller
     }
 
     public function set_lesson_progress(Request $request){
+        set_time_limit(300);
+        
         $users = User::get();
         $lessons = Lesson::get();
 
