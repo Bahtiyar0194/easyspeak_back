@@ -812,26 +812,24 @@ class CourseController extends Controller
                         $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
                         foreach ($lessons as $lessonKey => $lesson) {
-                            $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
 
-                            $completedTasksCount = 0;
-                            $completedTasksPercent = 0;
+                            $tasks_count = Task::where('lesson_id', $lesson->lesson_id)
+                            ->where('status_type_id', 1)
+                            ->count();
 
-                            foreach ($lesson->tasks as $key => $task) {
-                                $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+                            $lesson->tasks_count = $tasks_count;
 
-                                if ($task->task_result && $task->task_result->completed === true) {
-                                    $completedTasksCount++;
-                                    $completedTasksPercent += $task->task_result->percentage;
-                                }
+                            $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
+                            ->where('learner_id', $request->user_id)
+                            ->first();
+
+                            if(isset($lesson_progress)){
+                                $lesson->completed_tasks_percent = $lesson_progress->progress;
+                                $sectionCompletedPercent += $lesson_progress->progress;
                             }
-
-                            $lesson->completed_tasks_count = $completedTasksCount;
-                            $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                                ? $completedTasksPercent / count($lesson->tasks)
-                                : 0;
-
-                            $sectionCompletedPercent += $lesson->completed_tasks_percent;
+                            else{
+                                $lesson->completed_tasks_percent = 0;
+                            }
                         }
 
                         $section->lessons = $lessons;
@@ -863,6 +861,33 @@ class CourseController extends Controller
         }
 
         return response()->json(['courses' => $courses], 200);
+    }
+
+    public function get_lesson_grade(Request $request){
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $lesson = Lesson::findOrFail($request->lesson_id);
+
+        $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
+
+        $completedTasksCount = 0;
+        $completedTasksPercent = 0;
+
+        foreach ($lesson->tasks as $key => $task) {
+            $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+
+            if ($task->task_result && $task->task_result->completed === true) {
+                $completedTasksCount++;
+                $completedTasksPercent += $task->task_result->percentage;
+            }
+        }
+
+        $lesson->completed_tasks_count = $completedTasksCount;
+        $lesson->completed_tasks_percent = count($lesson->tasks) > 0
+            ? $completedTasksPercent / count($lesson->tasks)
+            : 0;
+
+        return response()->json($lesson, 200);    
     }
 
     public function send_request(Request $request)
