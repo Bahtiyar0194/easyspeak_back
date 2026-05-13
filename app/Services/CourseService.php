@@ -11,6 +11,7 @@ use App\Models\LessonMaterial;
 use App\Models\BoughtLesson;
 use App\Models\PromoCode;
 use App\Models\LearnerLevelPayment;
+use App\Models\SubscriptionTypeLevel;
 use App\Models\Conference;
 use App\Models\Language;
 use Carbon\Carbon;
@@ -97,7 +98,6 @@ class CourseService
             'course_levels.level_slug',
             'course_levels.is_available_always',
             'course_levels_lang.level_name',
-            'course_levels.price',
             'courses.course_name_slug'
         )
         ->first();
@@ -105,6 +105,13 @@ class CourseService
         if (!isset($level)) {
             return response()->json(['error' => 'Level not found'], 404);
         }
+
+        $subscription_types = SubscriptionTypeLevel::where('level_id', $level->level_id)
+        ->where('status_type_id', 1)
+        ->orderBy('price', 'asc')
+        ->get();
+
+        $level->subscription_types = $subscription_types;
 
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();

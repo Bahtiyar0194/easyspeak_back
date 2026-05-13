@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\School;
 use App\Models\CourseLevel;
 use App\Models\SubscriptionPlanType;
+use App\Models\SubscriptionTypeLevel;
 use App\Models\Payment;
 use App\Models\LearnerPayment;
 use App\Models\LearnerLevelPayment;
@@ -435,6 +436,7 @@ class PaymentController extends Controller
         if ($request->step == 1) {
             $rules = [
                 'level_id' => 'required|numeric',
+                'subscription_type_id' => 'required|numeric',
                 'step' => 'required|numeric',
             ];
 
@@ -460,19 +462,20 @@ class PaymentController extends Controller
                 return response()->json($validator->errors(), 422);
             }
 
-            $selectedLevel = CourseLevel::leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            $selectedSubscriptionType = SubscriptionTypeLevel::leftJoin('course_levels', 'types_of_subscriptions_for_level.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
             ->select(
-                'course_levels.level_id',
-                'course_levels.price',
-                'course_levels_lang.level_name',
-                'course_levels.subscription_period_in_months'
+                'types_of_subscriptions_for_level.level_id',
+                'types_of_subscriptions_for_level.price',
+                'types_of_subscriptions_for_level.subscription_period_in_months',
+                'course_levels_lang.level_name'
             )
-            ->where('course_levels.level_id', $request->level_id)
+            ->where('types_of_subscriptions_for_level.subscription_type_id', $request->subscription_type_id)
             ->where('course_levels_lang.lang_id', $language->lang_id)
             ->distinct()
             ->firstOrFail();
 
-            $basePrice = $selectedLevel->price;
+            $basePrice = $selectedSubscriptionType->price;
             $amount = $basePrice;
 
             $promo_code = PromoCode::where('promo_name', $request->promo_code)
@@ -503,12 +506,12 @@ class PaymentController extends Controller
             $start_date =  Carbon::now();
 
             // Добавляем нужное количество месяцев
-            $end_date = $start_date->copy()->addMonths($selectedLevel->subscription_period_in_months);
+            $end_date = $start_date->copy()->addMonths($selectedSubscriptionType->subscription_period_in_months);
 
             $new_payment = new LearnerLevelPayment();
-            $new_payment->description = $selectedLevel->level_name.', ('.$start_date->format('d.m.Y').' - '.$end_date->format('d.m.Y').')';
+            $new_payment->description = $selectedSubscriptionType->level_name.', ('.$start_date->format('d.m.Y').' - '.$end_date->format('d.m.Y').')';
             $new_payment->sum = $amount;
-            $new_payment->level_id = $selectedLevel->level_id;
+            $new_payment->level_id = $selectedSubscriptionType->level_id;
             $new_payment->payment_method_id = 2;
             $new_payment->promo_id = ($basePrice > $amount && isset($promo_code)) ? $promo_code->promo_id : null;
             $new_payment->iniciator_id = auth()->user()->user_id;
