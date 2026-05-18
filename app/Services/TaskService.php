@@ -29,6 +29,7 @@ use Illuminate\Validation\ValidationException;
 use App\Services\UploadFileService;
 use App\Services\SchoolService;
 use App\Jobs\ProcessVideoJob;
+use App\Jobs\LessonProgressJob;
 
 class TaskService
 {
@@ -45,6 +46,8 @@ class TaskService
     public function newTask($request, $task_type_id){
         // Проверяем, существует ли тип задания
         $task_type = TaskType::findOrFail($task_type_id);
+
+        $auth_user = auth()->user();
 
         $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
         ->where('tasks.lesson_id', '=', $request->lesson_id) 
@@ -99,6 +102,8 @@ class TaskService
         $new_task_lang->task_id = $edit_task->task_id;
         $new_task_lang->lang_id = 2;
         $new_task_lang->save();
+
+        LessonProgressJob::dispatch();
 
         return $edit_task;
     }

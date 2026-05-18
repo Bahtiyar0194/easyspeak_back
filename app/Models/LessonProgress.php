@@ -10,4 +10,10 @@ class LessonProgress extends Model
     use HasFactory;
     protected $table = 'lesson_progress';
     protected $primaryKey = 'lesson_progress_id';
+
+    protected $fillable = [
+        'lesson_id',
+        'learner_id',
+        'progress',
+    ];
 }

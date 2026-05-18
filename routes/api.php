@@ -251,7 +251,7 @@ Route::group([
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
             Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
             Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
-            Route::delete('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
+            Route::post('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
             Route::post('/save_result/{task_id}', [TaskController::class, 'save_task_result'])->middleware('check_roles');
             Route::post('/change_result/{completed_task_id}', [TaskController::class, 'change_task_result'])->middleware('check_roles');
             Route::post('/check_answers/{task_id}', [TaskController::class, 'check_answers'])->middleware('check_roles');

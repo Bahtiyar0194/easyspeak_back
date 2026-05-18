@@ -28,6 +28,8 @@ use App\Models\User;
 use App\Services\TaskService;
 use App\Services\SchoolService;
 
+use App\Jobs\LessonProgressJob;
+
 use Validator;
 use DB;
 use Http;
@@ -245,6 +247,7 @@ class TaskController extends Controller
 
         if(isset($task)){
             $task->delete();
+            LessonProgressJob::dispatch();
             return response()->json('delete task is success', 200);
         }
     }

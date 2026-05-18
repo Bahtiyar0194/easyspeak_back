@@ -15,4 +15,9 @@ class Task extends Model
     {
         return $this->hasMany(CompletedTask::class, 'task_id');
     }
+
+    public function taskOption()
+    {
+        return $this->hasOne(TaskOption::class, 'task_id');
+    }
 }
