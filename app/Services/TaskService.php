@@ -45,7 +45,7 @@ class TaskService
     public function newTask($request, $task_type_id){
         // Проверяем, существует ли тип задания
         $task_type = TaskType::findOrFail($task_type_id);
-        
+
         $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
         ->where('tasks.lesson_id', '=', $request->lesson_id) 
         ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
@@ -510,6 +510,8 @@ class TaskService
     }
 
     public function getLessonTasksProgress($lesson_id){
+        $auth_user = auth()->user();
+
         $tasks = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
         ->where('tasks.lesson_id', '=', $lesson_id) 
         ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
