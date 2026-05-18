@@ -45,8 +45,12 @@ class TaskService
     public function newTask($request, $task_type_id){
         // Проверяем, существует ли тип задания
         $task_type = TaskType::findOrFail($task_type_id);
-
-        $tasks_count = Task::where("lesson_id", $request->lesson_id)->count();
+        
+        $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
+        ->where('tasks.lesson_id', '=', $request->lesson_id) 
+        ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
+        ->where('status_type_id', 1)
+        ->count();
 
         $new_task = new Task();
         $new_task->task_slug = $request->task_slug;
@@ -462,14 +466,18 @@ class TaskService
         $new_task_option->max_answer_attempts = isset($request->max_answer_attempts) ? $request->max_answer_attempts : 0;
         $new_task_option->show_materials_option = isset($request->show_materials_option) ? $request->show_materials_option : null;
         $new_task_option->sentence_material_type_slug = isset($request->sentence_material_type_slug) ? $request->sentence_material_type_slug : null;
+        $new_task_option->show_on_platform = isset($request->show_on_platform) ? $request->show_on_platform : 'both';
         $new_task_option->save();
     }
 
     public function getLessonTasks($lesson_id, $language, $get_result){
 
+        $auth_user = auth()->user();
+
         $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
         ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
         ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
+        ->leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
         ->select(
             'tasks.task_id',
             'tasks.task_slug',
@@ -485,6 +493,7 @@ class TaskService
         ->where('tasks_lang.lang_id', '=', $language->lang_id)
         ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)    
         ->where('tasks.lesson_id', '=', $lesson_id) 
+        ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
         ->distinct()
         ->orderBy('tasks.sort_num', 'asc')
         ->get();
@@ -492,7 +501,7 @@ class TaskService
         if($get_result === true){
             if(count($tasks) > 0){
                 foreach ($tasks as $key => $task) {
-                    $task->task_result = $this->getTaskResult($task->task_id, auth()->user()->user_id);
+                    $task->task_result = $this->getTaskResult($task->task_id, $auth_user->user_id);
                 }
             }
         }
@@ -501,8 +510,10 @@ class TaskService
     }
 
     public function getLessonTasksProgress($lesson_id){
-        $tasks = Task::where('lesson_id', '=', $lesson_id) 
-        ->orderBy('sort_num', 'asc')
+        $tasks = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
+        ->where('tasks.lesson_id', '=', $lesson_id) 
+        ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
+        ->orderBy('tasks.sort_num', 'asc')
         ->get();
 
         if(count($tasks) > 0){

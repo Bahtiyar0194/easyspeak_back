@@ -217,117 +217,6 @@ class TaskController extends Controller
         return response()->json($attributes, 200);
     }
 
-    public function get_tasks(Request $request){
-        // Получаем язык из заголовка
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
-
-        // Получаем параметры лимита на страницу
-        $per_page = $request->per_page ? $request->per_page : 10;
-        // Получаем параметры сортировки
-        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
-        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
-
-        $tasks = Task::leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
-        ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
-        ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
-        ->leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
-        ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
-        ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
-        ->leftJoin('course_levels_lang', 'course_levels_lang.level_id', '=', 'course_levels.level_id')
-        ->leftJoin('courses', 'courses.course_id', '=', 'course_levels.course_id')
-        ->leftJoin('courses_lang', 'courses_lang.course_id', '=', 'courses.course_id')
-        ->leftJoin('users as operator', 'tasks.operator_id', '=', 'operator.user_id')
-        ->leftJoin('types_of_status', 'tasks.status_type_id', '=', 'types_of_status.status_type_id')
-        ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')
-        ->select(
-            'tasks.task_id',
-            'tasks.task_slug',
-            'tasks.task_example',
-            'tasks.task_type_id',
-            'types_of_tasks.task_type_component',
-            'types_of_tasks_lang.task_type_name',
-            'tasks_lang.task_name',
-            'tasks.created_at',
-            'lessons.lesson_name',
-            'course_sections.section_name',
-            'course_levels_lang.level_name',
-            'courses_lang.course_name',
-            'operator.first_name as operator_first_name',
-            'operator.last_name as operator_last_name',
-            'operator.avatar as operator_avatar',
-            'types_of_status.color as status_color',
-            'types_of_status_lang.status_type_name'
-        )     
-        ->where('tasks_lang.lang_id', '=', $language->lang_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)  
-        ->where('courses_lang.lang_id', '=', $language->lang_id)  
-        ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)     
-        ->where('types_of_status_lang.lang_id', '=', $language->lang_id)
-        ->distinct()
-        ->orderBy($sortKey, $sortDirection);
-
-        // Применяем фильтрацию по параметрам из запроса
-        $task_name = $request->task_name;
-        $task_slug = $request->task_slug;
-        $course_id = $request->course_id;
-        $level_id = $request->level_id;
-        $section_id = $request->section_id;
-        $lesson_id = $request->lesson_id;
-        $task_types_id = $request->task_types;
-        $created_at_from = $request->created_at_from;
-        $created_at_to = $request->created_at_to;
-        $operators_id = $request->operators;
-        $statuses_id = $request->statuses;
-
-
-        if (!empty($task_name)) {
-            $tasks->where('tasks_lang.task_name', 'LIKE', '%' . $task_name . '%');
-        }
-
-        if (!empty($task_slug)) {
-            $tasks->where('tasks.task_slug', 'LIKE', '%' . $task_slug . '%');
-        }
-
-        if (!empty($course_id)) {
-            $tasks->where('courses.course_id', '=', $course_id);
-        }
-
-        if (!empty($level_id)) {
-            $tasks->where('course_levels.level_id', '=', $level_id);
-        }
-
-        if (!empty($section_id)) {
-            $tasks->where('course_sections.section_id', '=', $section_id);
-        }
-
-        if (!empty($lesson_id)) {
-            $tasks->where('lessons.lesson_id', '=', $lesson_id);
-        }
-
-        if(!empty($task_types_id)){
-            $tasks->whereIn('types_of_tasks.task_type_id', $task_types_id);
-        }
-
-        if(!empty($operators_id)){
-            $tasks->whereIn('tasks.operator_id', $operators_id);
-        }
-
-        if (!empty($statuses_id)) {
-            $tasks->whereIn('tasks.status_type_id', $statuses_id);
-        }
-
-        if ($created_at_from && $created_at_to) {
-            $tasks->whereBetween('tasks.created_at', [$created_at_from . ' 00:00:00', $created_at_to . ' 23:59:59']);
-        } elseif ($created_at_from) {
-            $tasks->where('tasks.created_at', '>=', $created_at_from . ' 00:00:00');
-        } elseif ($created_at_to) {
-            $tasks->where('tasks.created_at', '<=', $created_at_to . ' 23:59:59');
-        }
-
-        // Возвращаем пагинированный результат
-        return response()->json($tasks->paginate($per_page)->onEachSide(1), 200);
-    }
-
     public function get_lesson_tasks(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
@@ -341,6 +230,7 @@ class TaskController extends Controller
             $task = Task::where('task_id', $task_item->task_id)
             ->where('lesson_id', $request->lesson_id)
             ->first();
+
             $task->sort_num = $key + 1;
             $task->save();
         }
@@ -720,6 +610,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_word' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -843,6 +734,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_word' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -989,6 +881,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:10',
                 'match_words_by_pictures_option' => 'required|string',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -1078,6 +971,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:10',
                 'match_words_by_pictures_option' => 'required|string',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -1214,6 +1108,7 @@ class TaskController extends Controller
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'in_the_main_lang' => 'required|boolean',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -1301,6 +1196,7 @@ class TaskController extends Controller
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'in_the_main_lang' => 'required|boolean',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -1428,6 +1324,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:3',
                 'in_the_main_lang' => 'required|boolean',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -1521,6 +1418,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:3',
                 'in_the_main_lang' => 'required|boolean',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -1717,6 +1615,7 @@ class TaskController extends Controller
                 'show_translate' => 'required|boolean',
                 'seconds_per_word' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -1845,6 +1744,7 @@ class TaskController extends Controller
                 'show_translate' => 'required|boolean',
                 'seconds_per_word' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -1966,6 +1866,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -2122,6 +2023,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -2380,6 +2282,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -2535,6 +2438,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -2781,6 +2685,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -2925,6 +2830,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_section' => 'required|numeric|min:3',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -3153,6 +3059,7 @@ class TaskController extends Controller
                 'show_translate' => 'required|boolean',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -3268,6 +3175,7 @@ class TaskController extends Controller
                 'show_translate' => 'required|boolean',
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -3371,6 +3279,7 @@ class TaskController extends Controller
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
                 'sentence_material_type_slug' => 'required|string|min:1',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -3486,6 +3395,7 @@ class TaskController extends Controller
                 'seconds_per_sentence' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
                 'sentence_material_type_slug' => 'required|string|min:1',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -3713,6 +3623,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:3',
                 'impression_limit' => 'required|min:1',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -3849,6 +3760,7 @@ class TaskController extends Controller
                 'seconds_per_word' => 'required|numeric|min:3',
                 'impression_limit' => 'required|min:1',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric',
             ];
 
@@ -3974,6 +3886,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_question' => 'required|numeric|min:10',
                 'max_answer_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -4078,6 +3991,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_question' => 'required|numeric|min:10',
                 'max_answer_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -4253,6 +4167,7 @@ class TaskController extends Controller
                 'impression_limit' => 'required|min:1',
                 'seconds_per_sentence' => 'required|numeric|min:15',
                 'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
             ];
 
@@ -4386,6 +4301,11 @@ class TaskController extends Controller
                 $task_count = count($lesson->tasks);
 
                 if($total_progress > 0 && $task_count > 0){
+                    // Удаляем старый прогресс по уроку
+                    LessonProgress::where('lesson_id', '=', $lesson->lesson_id)
+                    ->where('learner_id', '=', $user->user_id)
+                    ->delete();
+
                     $new_lesson_progress = new LessonProgress();
                     $new_lesson_progress->lesson_id = $lesson->lesson_id;
                     $new_lesson_progress->learner_id = $user->user_id;

@@ -33,18 +33,21 @@ use Carbon\Carbon;
 use App\Services\CourseService;
 use App\Services\TaskService;
 use App\Services\UploadFileService;
+use App\Services\SchoolService;
 
 class CourseController extends Controller
 {
     protected $courseService;
     protected $taskService;
     protected $uploadFileService;
+    protected $schoolService;
 
-    public function __construct(Request $request, CourseService $courseService, TaskService $taskService, UploadFileService $uploadFileService)
+    public function __construct(Request $request, CourseService $courseService, TaskService $taskService, UploadFileService $uploadFileService, SchoolService $schoolService)
     {
         $this->courseService = $courseService;
         $this->taskService = $taskService;
         $this->uploadFileService = $uploadFileService;
+        $this->schoolService = $schoolService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -86,24 +89,6 @@ class CourseController extends Controller
                         if(isset($lesson_progress)){
                             $sectionCompletedPercent += $lesson_progress->progress;
                         }
-                        // else{
-                        //     $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
-
-                        //     $completedTasksCount = 0;
-                        //     $completedTasksPercent = 0;
-
-                        //     foreach ($lesson->tasks as $key => $task) {
-                        //         $completedTasksCount++;
-                        //         $completedTasksPercent += $task->task_progress;
-                        //     }
-
-                        //     $lesson->completed_tasks_count = $completedTasksCount;
-                        //     $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                        //         ? $completedTasksPercent / count($lesson->tasks)
-                        //         : 0;
-
-                        //     $sectionCompletedPercent += $lesson->completed_tasks_percent;
-                        // }
                     }
 
                     $section->lessons = $lessons;
@@ -165,24 +150,6 @@ class CourseController extends Controller
                 if(isset($lesson_progress)){
                     $sectionCompletedPercent += $lesson_progress->progress;
                 }
-                // else{
-                //     $lesson->tasks = $this->taskService->getLessonTasksProgress($lesson->lesson_id);
-
-                //     $completedTasksCount = 0;
-                //     $completedTasksPercent = 0;
-
-                //     foreach ($lesson->tasks as $key => $task) {
-                //         $completedTasksCount++;
-                //         $completedTasksPercent += $task->task_progress;
-                //     }
-
-                //     $lesson->completed_tasks_count = $completedTasksCount;
-                //     $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-                //         ? $completedTasksPercent / count($lesson->tasks)
-                //         : 0;
-
-                //     $sectionCompletedPercent += $lesson->completed_tasks_percent;
-                // }
 
                 $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
                 ->get();
@@ -736,64 +703,6 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        // $courses = Course::with([
-        //     'levels.translation' => function ($q) use ($language) {
-        //         $q->where('lang_id', $language->lang_id);
-        //     }, 
-        //     'levels.sections.lessons.tasks.completedTask' => function ($q) use ($request) {
-        //         $q->where('learner_id', $request->user_id)
-        //             ->with('taskAnswer');
-        //     }
-        // ])
-        // ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        // ->where('courses.show_status_id', 1)
-        // ->where('courses_lang.lang_id', $language->lang_id)
-        // ->select('courses.course_id', 'courses.course_name_slug', 'courses_lang.course_name')
-        // ->get();
-
-        // foreach ($courses as $courseKey => $course) {
-        //     if(count($course[$courseKey]->levels) > 0){
-        //         foreach ($course[$courseKey]->levels as $levelKey => $level) {
-        //             $levelCompletedPercent = 0;
-
-        //             $level->available_status= $this->courseService->levelAvailableStatus($level, $request->user_id);            
-
-        //             if($level->available_status->is_available === true){
-        //                 if(count($levels[$levelKey]->sections) > 0){
-        //                     foreach ($levels[$levelKey]->sections as $sectionKey => $section) {
-        //                         $sectionCompletedPercent = 0;
-
-        //                         if(count($sections[$sectionKey]->lessons) > 0){
-        //                             foreach ($sections[$sectionKey]->lessons as $lessonKey => $lesson) {
-        //                                 $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
-
-        //                                 $completedTasksCount = 0;
-        //                                 $completedTasksPercent = 0;
-
-        //                                 foreach ($lesson->tasks as $key => $task) {
-        //                                     $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
-
-        //                                     if ($task->task_result && $task->task_result->completed === true) {
-        //                                         $completedTasksCount++;
-        //                                         $completedTasksPercent += $task->task_result->percentage;
-        //                                     }
-        //                                 }
-
-        //                                 $lesson->completed_tasks_count = $completedTasksCount;
-        //                                 $lesson->completed_tasks_percent = count($lesson->tasks) > 0
-        //                                     ? $completedTasksPercent / count($lesson->tasks)
-        //                                     : 0;
-
-        //                                 $sectionCompletedPercent += $lesson->completed_tasks_percent;
-        //                             }
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
         $courses = $this->courseService->getCourses($request);
 
         foreach ($courses as $courseKey => $course) {
@@ -812,10 +721,11 @@ class CourseController extends Controller
                         $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
                         foreach ($lessons as $lessonKey => $lesson) {
-
-                            $tasks_count = Task::where('lesson_id', $lesson->lesson_id)
+                            $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
+                            ->where('tasks.lesson_id', '=', $lesson->lesson_id) 
+                            ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
                             ->where('status_type_id', 1)
-                            ->count();
+                            ->get();
 
                             $lesson->tasks_count = $tasks_count;
 

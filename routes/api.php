@@ -249,7 +249,6 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
-            Route::post('/get', [TaskController::class, 'get_tasks']);
             Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
             Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
             Route::delete('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
