@@ -729,7 +729,7 @@ class CourseController extends Controller
                             ->where('tasks.lesson_id', '=', $lesson->lesson_id)
                             ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($user->school_id) ? 'b2c' : 'b2b'])
                             ->where('status_type_id', 1)
-                            ->get();
+                            ->count();
 
                             $lesson->tasks_count = $tasks_count;
 
