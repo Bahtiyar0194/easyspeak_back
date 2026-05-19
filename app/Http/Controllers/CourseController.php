@@ -14,6 +14,7 @@ use App\Models\Language;
 use App\Models\MediaFile;
 use App\Models\Block;
 use App\Models\UploadConfiguration;
+use App\Models\User;
 use App\Models\School;
 use App\Models\PromoCode;
 
@@ -71,7 +72,7 @@ class CourseController extends Controller
 
             foreach ($levels as $key => $level) {
                 
-                $level->available_status = $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+                $level->available_status = $this->courseService->levelAvailableStatus($level, $auth_user);
                 
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
@@ -132,7 +133,7 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user);
         
         $sections = $this->courseService->getLevelSections($level->level_id);
 
@@ -190,7 +191,7 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user);
         
         $section = CourseSection::where('section_id', '=', $request->section_id)
         ->where('level_id', '=', $level->level_id)
@@ -266,7 +267,7 @@ class CourseController extends Controller
 
         $level = $this->courseService->getCourseLevel($course->course_id, $request->level_slug, $language->lang_id);
 
-        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user->user_id);
+        $level->available_status= $this->courseService->levelAvailableStatus($level, $auth_user);
         
         $data->level = $level;
 
@@ -703,6 +704,9 @@ class CourseController extends Controller
     {
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
+        // получаем пользователя по ID
+        $user = User::findOrFail($request->user_id);
+
         $courses = $this->courseService->getCourses($request);
 
         foreach ($courses as $courseKey => $course) {
@@ -712,7 +716,7 @@ class CourseController extends Controller
                 $levelCompletedPercent = 0;
                 $sections = $this->courseService->getLevelSections($level->level_id);
 
-                $level->available_status = $this->courseService->levelAvailableStatus($level, $request->user_id);
+                $level->available_status = $this->courseService->levelAvailableStatus($level, $user);
                 
                 if($level->available_status->is_available === true){
                     foreach ($sections as $sectionKey => $section) {
@@ -722,8 +726,8 @@ class CourseController extends Controller
 
                         foreach ($lessons as $lessonKey => $lesson) {
                             $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
-                            ->where('tasks.lesson_id', '=', $lesson->lesson_id) 
-                            ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 'b2c' : 'b2b'])
+                            ->where('tasks.lesson_id', '=', $lesson->lesson_id)
+                            ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($user->school_id) ? 'b2c' : 'b2b'])
                             ->where('status_type_id', 1)
                             ->get();
 

@@ -155,7 +155,7 @@ class CourseService
         return $sections;
     }
 
-    public function levelAvailableStatus($level, $user_id){
+    public function levelAvailableStatus($level, $user){
         
         $available_status = new \stdClass();
 
@@ -164,8 +164,6 @@ class CourseService
             $available_status->is_available_always = true;
         }
         else{
-            // получаем пользователя по ID
-            $user = User::findOrFail($user_id);
 
             $isOnlyLearner = $user->hasOnlyRoles(['learner']);
 
