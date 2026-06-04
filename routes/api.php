@@ -18,6 +18,7 @@ use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\SentenceController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\MaterialController;
+use App\Http\Controllers\SpeakingController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TranslateController;
 use App\Http\Controllers\SpeechToTextController;
@@ -343,6 +344,18 @@ Route::group([
         });
 
         Route::get('/audio_explain/{uuid}', [MaterialController::class, 'audio_explain']);
+    });
+
+    Route::group([
+        'prefix' => 'speaking'
+    ], function ($router) {
+        Route::group(['middleware' => ['auth:sanctum']], function () {
+            Route::get('/get_chat', [SpeakingController::class, 'get_chat']);
+            Route::post('/explain', [SpeakingController::class, 'explain']);
+            Route::post('/feedback/{uuid}', [SpeakingController::class, 'feedback']);
+        });
+
+        Route::get('/audio_explain/{uuid}', [SpeakingController::class, 'audio_explain']);
     });
 
     Route::group([

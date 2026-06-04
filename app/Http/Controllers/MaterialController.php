@@ -8,7 +8,6 @@ use App\Models\MediaFile;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Storage;
 use LanguageDetection\Language;
@@ -123,7 +122,7 @@ class MaterialController extends Controller
                 'ai_explains.content as ai_content' // ответ от ии
             )
             ->orderBy('material_explains_chat.id', 'desc')
-            ->take(3)
+            ->take(5)
             ->get()
             ->reverse()
             ->values();
