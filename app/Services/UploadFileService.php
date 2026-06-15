@@ -9,9 +9,9 @@ class UploadFileService
 {
     public function uploadFile($file, $file_name, $material_type_slug){
         if($material_type_slug == 'image'){
-            $resized_image = Image::make($file)->resize(500, null, function ($constraint) {
+            $resized_image = Image::make($file)->resize(1200, null, function ($constraint) {
                 $constraint->aspectRatio();
-            })->stream('png', 80);
+            })->stream('png', 90);
             Storage::disk('local')->put('/public/'.$file_name, $resized_image);
         }
         else{

@@ -100,9 +100,10 @@ Route::group([
             Route::post('/convert/{file_id}', [MediaController::class, 'convert_file'])->middleware('check_roles');
 
             Route::get('/get/file_info/{file_id}', [MediaController::class, 'get_file_info']);
-            Route::get('/check_video/{file_name}', [MediaController::class, 'check_video']);
             Route::get('/get_hls_video/{file_name}', [MediaController::class, 'get_hls_video']);
         });
+
+        Route::get('/check_video/{file_name}', [MediaController::class, 'check_video']);
 
         Route::get('/get/{file_name}', [MediaController::class, 'get_file']);
 
