@@ -13,6 +13,8 @@ use App\Models\PromoCode;
 use App\Models\LearnerLevelPayment;
 use App\Models\SubscriptionTypeLevel;
 use App\Models\Conference;
+use App\Models\B2cConference;
+use App\Models\B2cConferenceLevel;
 use App\Models\Language;
 use Carbon\Carbon;
 
@@ -119,24 +121,41 @@ class CourseService
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         if($this->schoolService->isAiSchoolDomain($auth_user->school_id) && $isOnlyLearner){
+            // 1. Ищем строго АКТИВНУЮ оплату
             $learnerPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
-            ->where('level_id', $level->level_id)
-            ->where('is_paid', 1)
-            ->first();
+                ->where('level_id', $level->level_id)
+                ->where('is_paid', 1)
+                ->where('subscription_expiration_at', '>=', now())
+                ->latest('level_payment_id')
+                ->first();
 
-            $promo_code = PromoCode::where('user_id', $auth_user->user_id)
-            ->first();
+            // 2. Ищем действующий промокод (добавь проверку на уровень, если она есть в БД!)
+            $promoCode = PromoCode::where('user_id', $auth_user->user_id)
+                ->where(function($query) {
+                    $query->whereNull('expiration_at') // Промокод бессрочный
+                        ->orWhere('expiration_at', '>', now()); // Или еще не истек
+                })
+                ->first();
 
-            if(isset($learnerPayment) || (isset($promo_code) && ($promo_code->expiration_at === null || now()->lessThan(Carbon::parse($promo_code->expiration_at))))){
-                if (isset($learnerPayment) && now()->greaterThan(Carbon::parse($learnerPayment->subscription_expiration_at))){
-                    $level->is_available_always = 0;
-                    $level->has_expired = 1;
-                    $level->expiration_at = $learnerPayment->subscription_expiration_at;
-                }
-                else{
-                    $level->is_available_always = 1;
-                    $level->has_expired = 0;
-                }
+            // 3. Определяем, есть ли хоть какой-то доступ
+            $hasAccess = isset($learnerPayment) || isset($promoCode);
+
+            if ($hasAccess) {
+                // Доступ есть! Помечаем для фронтенда, что уровень сейчас активен
+                $level->is_available_always = 1;
+                $level->has_expired = 0;
+            } else {
+                // Доступа нет. Но мы можем найти САМУЮ ПОСЛЕДНЮЮ (даже истекшую) оплату, чтобы показать инфо о том, когда она закончилась
+                $expiredPayment = LearnerLevelPayment::where('iniciator_id', $auth_user->user_id)
+                    ->where('level_id', $level->level_id)
+                    ->where('is_paid', 1)
+                    ->latest('level_payment_id')
+                    ->first();
+
+                $level->is_available_always = 0;
+                $level->has_expired = 1;
+                // Если когда-то была оплата — выводим её дату, иначе null
+                $level->expiration_at = $expiredPayment ? $expiredPayment->subscription_expiration_at : null;
             }
         }
 
@@ -290,6 +309,37 @@ class CourseService
         $available_status->is_only_learner = $isOnlyLearner;
 
         return $available_status;
+    }
+
+    public function levelIsBoughtStatus($uuid, $user_id)
+    {
+        // 1. Ищем конференцию
+        $conference = B2cConference::where('uuid', $uuid)->firstOrFail();
+
+        $levels = $conference->levels()
+            ->select('course_levels.level_id', 'course_levels.is_available_always')
+            ->get();
+
+        foreach ($levels as $level) {
+            if ((int)$level->is_available_always === 1) {
+                return $conference; // <-- Возвращаем объект конференции вместо true
+            }
+
+            $learnerPayment = LearnerLevelPayment::where('iniciator_id', $user_id)
+                ->where('level_id', $level->level_id)
+                ->where('subscription_expiration_at', '>=', now()) // База данных сама проверит актуальность дат
+                ->latest('level_payment_id')
+                ->where('is_paid', 1)
+                ->first();
+
+            if ($learnerPayment) {
+                $conference->level_payment_id = $learnerPayment->level_payment_id;
+                $conference->conferences_remain = $learnerPayment->conferences_remain;
+                return $conference; // <-- Возвращаем объект конференции вместо true
+            }
+        }
+
+        return null;
     }
 
     public function getLessons($section_id, $language_id){

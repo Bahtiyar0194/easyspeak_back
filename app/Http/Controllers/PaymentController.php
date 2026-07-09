@@ -468,6 +468,7 @@ class PaymentController extends Controller
                 'types_of_subscriptions_for_level.level_id',
                 'types_of_subscriptions_for_level.price',
                 'types_of_subscriptions_for_level.subscription_period_in_months',
+                'types_of_subscriptions_for_level.conferences_count',
                 'course_levels_lang.level_name'
             )
             ->where('types_of_subscriptions_for_level.subscription_type_id', $request->subscription_type_id)
@@ -516,6 +517,7 @@ class PaymentController extends Controller
             $new_payment->promo_id = ($basePrice > $amount && isset($promo_code)) ? $promo_code->promo_id : null;
             $new_payment->iniciator_id = auth()->user()->user_id;
             $new_payment->subscription_expiration_at = $end_date;
+            $new_payment->conferences_remain = $selectedSubscriptionType->conferences_count;
             $new_payment->save();
 
             $apiPublicId = env('TIPTOPPAY_PUBLIC_ID');

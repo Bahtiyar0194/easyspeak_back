@@ -20,4 +20,14 @@ class CourseLevel extends Model
     {
         return $this->hasOne(CourseLevelLang::class, 'level_id');
     }
+
+    public function conferences()
+    {
+        return $this->belongsToMany(
+            B2cConference::class,
+            'b2c_conferences_levels',
+            'level_id',
+            'conference_id'
+        );
+    }
 }

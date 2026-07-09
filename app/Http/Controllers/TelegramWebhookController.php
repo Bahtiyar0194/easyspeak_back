@@ -412,14 +412,14 @@ class TelegramWebhookController extends Controller
                             $mentor_title = trans('app.bot.conference.confirm', [
                                 'learner_name' => $learner->last_name.' '.$learner->first_name,
                                 'lesson' => $conference->lesson->lesson_name,
-                                'time' => humanDate($conference->start_time)
+                                'time' => humanDate($conference->start_time, null)
                             ]);
                         }
                         elseif($method === 'decline'){
                             $mentor_title = trans('app.bot.conference.decline', [
                                 'learner_name' => $learner->last_name.' '.$learner->first_name,
                                 'lesson' => $conference->lesson->lesson_name,
-                                'time' => humanDate($conference->start_time)
+                                'time' => humanDate($conference->start_time, null)
                             ]);
                         }
 

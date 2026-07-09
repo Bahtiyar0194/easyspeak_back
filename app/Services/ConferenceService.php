@@ -4,20 +4,26 @@ use App\Models\Language;
 use App\Models\CourseSection;
 use App\Models\Lesson;
 use App\Models\Conference;
+use App\Models\B2cConference;
+use App\Models\B2cConferenceLevel;
+use App\Models\B2cConferenceMember;
 use App\Models\Group;
 use App\Models\GroupMember;
 use Str;
 use Carbon\Carbon;
 
 use App\Services\CourseService;
+use App\Services\SchoolService;
 
 class ConferenceService
 {
     protected $courseService;
+    protected $schoolService;
 
-    public function __construct(CourseService $courseService)
+    public function __construct(CourseService $courseService, SchoolService $schoolService)
     {
         $this->courseService = $courseService;
+        $this->schoolService = $schoolService;
     }
 
     public function createConference($group_id, $lesson_id, $forced, $start_time, $end_time){
@@ -148,85 +154,144 @@ class ConferenceService
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
 
-        $current_conferences = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-        ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
-        ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
-        ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
-        ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
-        ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
-        ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
-        ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
-        ->select(
-            'conferences.uuid',
-            'conferences.lesson_id',
-            'conferences.operator_id',
-            'conferences.created_at',
-            'conferences.start_time',
-            'conferences.end_time',
-            'conferences.forced',
-            'lessons.lesson_name',
-            'mentor.first_name as mentor_first_name',
-            'mentor.last_name as mentor_last_name',
-            'courses_lang.course_name',
-            'course_levels_lang.level_name',
-            'groups.group_name',
-            'groups.group_id'
-        )
-        ->where('courses_lang.lang_id', '=', $language->lang_id)
-        ->where('course_levels_lang.lang_id', '=', $language->lang_id)
-        // Доступ за 10 минут до начала
-        ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
-        ->where('conferences.end_time', '>=', now())
-        ->distinct();
-
         $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
         $isMentor = $auth_user->hasRole(['mentor']);
         $isLearner = $auth_user->hasRole(['learner']);
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
-        if ($isOwner || $isMentor || $isLearner) {
-            $current_conferences->where(function ($query) use ($isOwner, $isMentor, $isLearner, $auth_user) {
-                if ($isOwner) {
-                    $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
-                }
-                if ($isMentor || $isLearner) {
-                    $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
-                    ->orWhere('group_members.member_id', '=', $auth_user->user_id)
-                    ->where('group_members.status_type_id', '=', 1);
-                }
-            });
-        }        
-
-        $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user) {
-
-            if($isOnlyLearner === true){
-                $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
-            }
-
-            $conference->created_at_formatted = Carbon::parse($conference->created_at)
-                ->translatedFormat('H:i');
-        
-            $conference->start_time_formatted = Carbon::parse($conference->start_time)
-                ->translatedFormat('H:i');
-        
-            $conference->end_time_formatted = Carbon::parse($conference->end_time)
-                ->translatedFormat('H:i');
-
-            $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
-            ->where('group_members.status_type_id', '=', 1)
-            ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
+        if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $current_conferences = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
+            ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+            ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
+            ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+            ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+            ->leftJoin('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
             ->select(
-                'users.user_id',
-                'users.last_name',
-                'users.first_name',
-                'users.avatar'
+                'conferences.uuid',
+                'conferences.lesson_id',
+                'conferences.operator_id',
+                'conferences.created_at',
+                'conferences.start_time',
+                'conferences.end_time',
+                'conferences.forced',
+                'lessons.lesson_name',
+                'mentor.first_name as mentor_first_name',
+                'mentor.last_name as mentor_last_name',
+                'courses_lang.course_name',
+                'course_levels_lang.level_name',
+                'groups.group_name',
+                'groups.group_id'
             )
-            ->get();
+            ->where('courses_lang.lang_id', '=', $language->lang_id)
+            ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+            // Доступ за 10 минут до начала
+            ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
+            ->where('conferences.end_time', '>=', now())
+            ->distinct();
 
-            $conference->members = $members;
-        
-            return $conference;
-        });
+            if ($isOwner || $isMentor || $isLearner) {
+                $current_conferences->where(function ($query) use ($isOwner, $isMentor, $isLearner, $auth_user) {
+                    if ($isOwner) {
+                        $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
+                    }
+                    if ($isMentor || $isLearner) {
+                        $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
+                        ->orWhere('group_members.member_id', '=', $auth_user->user_id)
+                        ->where('group_members.status_type_id', '=', 1);
+                    }
+                });
+            }        
+
+            $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user) {
+
+                if($isOnlyLearner === true){
+                    $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
+                }
+
+                $conference->created_at_formatted = Carbon::parse($conference->created_at)
+                    ->translatedFormat('H:i');
+            
+                $conference->start_time_formatted = Carbon::parse($conference->start_time)
+                    ->translatedFormat('H:i');
+            
+                $conference->end_time_formatted = Carbon::parse($conference->end_time)
+                    ->translatedFormat('H:i');
+
+                $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
+                ->where('group_members.status_type_id', '=', 1)
+                ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
+                ->select(
+                    'users.user_id',
+                    'users.last_name',
+                    'users.first_name',
+                    'users.avatar'
+                )
+                ->get();
+
+                $conference->members = $members;
+            
+                return $conference;
+            });
+        }
+        else{
+            $current_conferences = B2cConference::leftJoin('users as moderator', 'b2c_conferences.moderator_id', '=', 'moderator.user_id')
+            ->leftJoin('users as operator', 'b2c_conferences.operator_id', '=', 'operator.user_id')
+            ->leftJoin('files as poster_file', 'b2c_conferences.poster_file_id', '=', 'poster_file.file_id')
+            ->select(
+                'b2c_conferences.conference_id',
+                'b2c_conferences.uuid',
+                'b2c_conferences.topic',
+                'b2c_conferences.topic_description',
+                'b2c_conferences.created_at',
+                'b2c_conferences.start_time',
+                'b2c_conferences.end_time',
+                'poster_file.target as poster_file',
+                'moderator.avatar as moderator_avatar',
+                'moderator.first_name as moderator_first_name',
+                'moderator.last_name as moderator_last_name',
+            )
+            ->where('b2c_conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
+            ->where('b2c_conferences.end_time', '>=', now())
+            ->distinct();
+
+            $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user, $language) {
+
+                $levels = B2cConferenceLevel::leftJoin('course_levels_lang', 'b2c_conferences_levels.level_id', '=', 'course_levels_lang.level_id')
+                ->select(
+                    'course_levels_lang.level_name'
+                )
+                ->where('b2c_conferences_levels.conference_id', $conference->conference_id)
+                ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+                ->get();
+
+                $conference->levels = $levels;
+
+                $conference->created_at_formatted = Carbon::parse($conference->created_at)
+                    ->translatedFormat('H:i');
+            
+                $conference->start_time_formatted = Carbon::parse($conference->start_time)
+                    ->translatedFormat('H:i');
+            
+                $conference->end_time_formatted = Carbon::parse($conference->end_time)
+                    ->translatedFormat('H:i');
+
+                $members = B2cConferenceMember::leftJoin('users', 'b2c_conference_members.member_id', '=', 'users.user_id')
+                ->select(
+                    'users.user_id',
+                    'users.last_name',
+                    'users.first_name',
+                    'users.avatar'
+                )
+                ->where('conference_id', $conference->conference_id)
+                ->get();
+
+                $conference->members = $members;
+            
+                return $conference;
+            });
+        }
 
         return $current_conferences;
     }

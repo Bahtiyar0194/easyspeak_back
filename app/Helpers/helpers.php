@@ -17,9 +17,12 @@ if (!function_exists('normalizeQuotes')) {
 }
 
 if (! function_exists('humanDate')) {
-    function humanDate($date)
+    function humanDate($date, $lang_tag)
     {
-        Carbon::setLocale(app()->getLocale());
+        if(!isset($lang_tag)){
+            Carbon::setLocale(app()->getLocale());
+        }
+
         $dt = Carbon::parse($date);
 
         if ($dt->isToday()) {

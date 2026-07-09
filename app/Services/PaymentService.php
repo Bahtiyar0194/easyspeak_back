@@ -81,7 +81,6 @@ class PaymentService
         $payment = LearnerLevelPayment::findOrFail($payment_id);
         $payment->is_paid = 1;
         $payment->save();
-
     }
 }
 ?>
