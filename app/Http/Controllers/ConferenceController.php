@@ -15,6 +15,7 @@ use App\Models\B2cConference;
 use App\Models\B2cConferenceLevel;
 use App\Models\LearnerLevelPayment;
 use App\Models\ConferenceTask;
+use App\Models\B2cConferenceTask;
 use App\Models\ConferenceMember;
 use App\Models\B2cConferenceMember;
 use App\Models\UploadConfiguration;
@@ -201,7 +202,7 @@ class ConferenceController extends Controller
                 'b2c_conferences.start_time',
                 'b2c_conferences.end_time',
                 'b2c_conferences.participated',
-                'b2c_conferences.moderator_id',
+                'b2c_conferences.mentor_id',
                 'b2c_conferences.topic'
             )
             ->where('b2c_conferences.uuid', $request->conference_id)
@@ -248,7 +249,7 @@ class ConferenceController extends Controller
                 $allowed = true;
             }
 
-            if ($conference->moderator_id == $auth_user->user_id) {
+            if ($conference->mentor_id == $auth_user->user_id) {
                 $allowed = true;
             }
 
@@ -336,97 +337,244 @@ class ConferenceController extends Controller
 
         $auth_user = auth()->user();
 
-        $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
-        ->select(
-            'conferences.conference_id',
-            'conferences.uuid',
-            'conferences.lesson_id',
-            'conferences.mentor_id',
-            'groups.group_id'
-        )
-        ->where('conferences.uuid', '=', $request->conference_id)
-        ->first();
-
-        // Если конференции не существует
-        if (!$conference) {
-            return response()->json(['message' => 'Conference not found'], 404);
-        }
-
-        if($conference->mentor_id === $auth_user->user_id){
-            $get_my_result = false;
-        }
-        else{
-            $get_my_result = true;
-        }
-
-        $tasks = $this->taskService->getLessonTasks($conference->lesson_id, $language, $get_my_result);
-
-        if($conference->mentor_id === $auth_user->user_id){
-            $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
-            ->where('group_members.status_type_id', '=', 1)
-            ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
+        if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $conference = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
             ->select(
-                'users.user_id',
-                'users.last_name',
-                'users.first_name',
-                'users.avatar'
+                'conferences.conference_id',
+                'conferences.uuid',
+                'conferences.lesson_id',
+                'conferences.mentor_id',
+                'groups.group_id'
             )
-            ->get();
-
-            foreach ($tasks as $t) {
-                $t->learners = collect($members->map(function ($member) {
-                    return clone $member;
-                }));
-
-                $completed_learners_tasks = 0;
-
-                foreach ($t->learners as $learner) {
-                    $task_result = $this->taskService->getTaskResult($t->task_id, $learner->user_id);
-                    $learner->task_result = $task_result;
-                    if($learner->task_result->completed === true){
-                        $completed_learners_tasks++;
-                    }
-                }
-
-                $t->completed_learners_tasks = $completed_learners_tasks;
-            }
-        }
-
-        foreach ($tasks as $key => $task) {
-            $launched = ConferenceTask::where('conference_tasks.conference_id', '=', $conference->conference_id)
-            ->where('conference_tasks.task_id', '=', $task->task_id)
+            ->where('conferences.uuid', '=', $request->conference_id)
             ->first();
 
-            if(isset($launched)){
-                $task->launched = true;
+            // Если конференции не существует
+            if (!$conference) {
+                return response()->json(['message' => 'Conference not found'], 404);
+            }
 
-                if($conference->mentor_id !== $auth_user->user_id){
-                    if($task->task_result->completed === false){
-                        $task->to_complete = true;
-                    }
-                }
+            if($conference->mentor_id === $auth_user->user_id){
+                $get_my_result = false;
             }
             else{
-                $task->launched = false;
+                $get_my_result = true;
+            }
+
+            $tasks = $this->taskService->getLessonTasks($conference->lesson_id, $language, $get_my_result);
+
+            if($conference->mentor_id === $auth_user->user_id){
+                $members = GroupMember::where('group_members.group_id', '=', $conference->group_id)
+                ->where('group_members.status_type_id', '=', 1)
+                ->leftJoin('users', 'group_members.member_id', '=', 'users.user_id')
+                ->select(
+                    'users.user_id',
+                    'users.last_name',
+                    'users.first_name',
+                    'users.avatar'
+                )
+                ->get();
+
+                foreach ($tasks as $t) {
+                    $t->learners = collect($members->map(function ($member) {
+                        return clone $member;
+                    }));
+
+                    $completed_learners_tasks = 0;
+
+                    foreach ($t->learners as $learner) {
+                        $task_result = $this->taskService->getTaskResult($t->task_id, $learner->user_id);
+                        $learner->task_result = $task_result;
+                        if($learner->task_result->completed === true){
+                            $completed_learners_tasks++;
+                        }
+                    }
+
+                    $t->completed_learners_tasks = $completed_learners_tasks;
+                }
+            }
+
+            foreach ($tasks as $key => $task) {
+                $launched = ConferenceTask::where('conference_tasks.conference_id', '=', $conference->conference_id)
+                ->where('conference_tasks.task_id', '=', $task->task_id)
+                ->first();
+
+                if(isset($launched)){
+                    $task->launched = true;
+
+                    if($conference->mentor_id !== $auth_user->user_id){
+                        if($task->task_result->completed === false){
+                            $task->to_complete = true;
+                        }
+                    }
+                }
+                else{
+                    $task->launched = false;
+                }
+            }
+
+            return response()->json([
+                'tasks' => $tasks
+            ], 200);
+        }
+        else{
+            $conference = B2cConference::select(
+                'b2c_conferences.conference_id',
+                'b2c_conferences.mentor_id',
+            )
+            ->where('b2c_conferences.uuid', '=', $request->conference_id)
+            ->first();
+
+            // Если конференции не существует
+            if (!$conference) {
+                return response()->json(['message' => 'Conference not found'], 404);
+            }
+
+            $tasks = B2cConferenceTask::leftJoin('tasks', 'b2c_conference_tasks.task_id', '=', 'tasks.task_id')
+            ->leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
+            ->leftJoin('types_of_tasks', 'types_of_tasks.task_type_id', '=', 'tasks.task_type_id')
+            ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
+            ->leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
+            ->select(
+                'tasks.task_id',
+                'tasks.task_slug',
+                'tasks.task_example',
+                'tasks.task_type_id',
+                'tasks.sort_num',
+                'types_of_tasks.task_type_component',
+                'types_of_tasks.icon',
+                'types_of_tasks_lang.task_type_name',
+                'tasks_lang.task_name',
+                'tasks.created_at'
+            )     
+            ->where('tasks_lang.lang_id', '=', $language->lang_id)
+            ->where('types_of_tasks_lang.lang_id', '=', $language->lang_id)    
+            ->where('b2c_conference_tasks.conference_id', '=', $conference->conference_id)
+            ->distinct()
+            ->orderBy('b2c_conference_tasks.conference_task_id', 'asc')
+            ->get();
+
+            if($conference->mentor_id === $auth_user->user_id){
+
+                $members = B2cConferenceMember::leftJoin('users', 'b2c_conference_members.member_id', '=', 'users.user_id')
+                ->select(
+                    'users.user_id',
+                    'users.last_name',
+                    'users.first_name',
+                    'users.avatar'
+                )
+                ->where('conference_id', $conference->conference_id)
+                ->get();
+
+                foreach ($tasks as $t) {
+                    $t->learners = collect($members->map(function ($member) {
+                        return clone $member;
+                    }));
+
+                    $t->launched = true;
+
+                    $completed_learners_tasks = 0;
+
+                    foreach ($t->learners as $learner) {
+                        $task_result = $this->taskService->getTaskResult($t->task_id, $learner->user_id);
+                        $learner->task_result = $task_result;
+                        if($learner->task_result->completed === true){
+                            $completed_learners_tasks++;
+                        }
+                    }
+
+                    $t->completed_learners_tasks = $completed_learners_tasks;
+                }
+
+                $levels = B2cConferenceLevel::leftJoin('course_levels', 'b2c_conferences_levels.level_id', '=', 'course_levels.level_id')
+                ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+                ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+                ->select(
+                    'b2c_conferences_levels.level_id',
+                    'course_levels_lang.level_name',
+                    'course_levels.level_id',
+                    'course_levels.level_slug',
+                    'course_levels.is_available_always',
+                    'courses.course_name_slug'
+                )
+                ->where('b2c_conferences_levels.conference_id', $conference->conference_id)
+                ->where('course_levels_lang.lang_id', '=', $language->lang_id)
+                ->get();
+
+                foreach ($levels as $key => $level) {
+                    $level->available_status = $this->courseService->levelAvailableStatus($level, $auth_user);
+
+                    $sections = $this->courseService->getLevelSections($level->level_id);
+
+                    foreach ($sections as $s => $section) {
+
+                        $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
+
+                        foreach ($lessons as $l => $lesson) {
+                            $lesson->tasks = $this->taskService->getLessonTasks($lesson->lesson_id, $language, false);
+                        }
+
+                        $section->lessons = $lessons;
+                    }
+
+                    $level->sections = $sections;
+                }
+
+                return response()->json([
+                    'levels' => $levels,
+                    'tasks' => $tasks
+                ], 200);
+            }
+            else{
+
+                if(count($tasks) > 0){
+                    foreach ($tasks as $key => $task) {
+                        $task->launched = true;
+                        $task->task_result = $this->taskService->getTaskResult($task->task_id, $auth_user->user_id);
+
+                        if($task->task_result->completed === false){
+                            $task->to_complete = true;
+                        }
+                    }
+                }
+
+                return response()->json([
+                    'tasks' => $tasks
+                ], 200);
             }
         }
-
-        return response()->json($tasks, 200);
     }
 
     public function run_task(Request $request)
     {
-        $conference = Conference::select(
-            'conferences.uuid',
-            'conferences.conference_id',
-        )
-        ->where('conferences.uuid', '=', $request->conference_id)
-        ->first();
-        
-        $conference_task = new ConferenceTask();
-        $conference_task->conference_id = $conference->conference_id;
-        $conference_task->task_id = $request->task_id;
-        $conference_task->save();
+        $auth_user = auth()->user();
+
+        if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $conference = Conference::select(
+                'conferences.uuid',
+                'conferences.conference_id',
+            )
+            ->where('conferences.uuid', '=', $request->conference_id)
+            ->first();
+            
+            $conference_task = new ConferenceTask();
+            $conference_task->conference_id = $conference->conference_id;
+            $conference_task->task_id = $request->task_id;
+            $conference_task->save();
+        }
+        else{
+            $conference = B2cConference::select(
+                'b2c_conferences.uuid',
+                'b2c_conferences.conference_id',
+            )
+            ->where('b2c_conferences.uuid', '=', $request->conference_id)
+            ->first();
+            
+            $conference_task = new B2cConferenceTask();
+            $conference_task->conference_id = $conference->conference_id;
+            $conference_task->task_id = $request->task_id;
+            $conference_task->save();
+        }
 
         return response()->json($conference_task, 200);
     }
@@ -487,7 +635,7 @@ class ConferenceController extends Controller
 
             $new_conference->start_time = $start_time;
             $new_conference->end_time = $end_time;
-            $new_conference->moderator_id = $auth_user->user_id;
+            $new_conference->mentor_id = $auth_user->user_id;
             $new_conference->operator_id = $auth_user->user_id;
 
             $poster_file = $request->file('upload_poster_file_create');
@@ -560,7 +708,7 @@ class ConferenceController extends Controller
             ->exists();
 
             if (!$isMember) {
-                $moderator = User::findOrFail($conference->moderator_id);
+                $moderator = User::findOrFail($conference->mentor_id);
 
                 $moderator_selected_language = Language::find($moderator->lang_id);
 

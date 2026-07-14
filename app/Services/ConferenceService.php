@@ -236,7 +236,7 @@ class ConferenceService
             });
         }
         else{
-            $current_conferences = B2cConference::leftJoin('users as moderator', 'b2c_conferences.moderator_id', '=', 'moderator.user_id')
+            $current_conferences = B2cConference::leftJoin('users as moderator', 'b2c_conferences.mentor_id', '=', 'moderator.user_id')
             ->leftJoin('users as operator', 'b2c_conferences.operator_id', '=', 'operator.user_id')
             ->leftJoin('files as poster_file', 'b2c_conferences.poster_file_id', '=', 'poster_file.file_id')
             ->select(
