@@ -239,6 +239,7 @@ class ConferenceService
             $current_conferences = B2cConference::leftJoin('users as moderator', 'b2c_conferences.mentor_id', '=', 'moderator.user_id')
             ->leftJoin('users as operator', 'b2c_conferences.operator_id', '=', 'operator.user_id')
             ->leftJoin('files as poster_file', 'b2c_conferences.poster_file_id', '=', 'poster_file.file_id')
+            ->leftJoin('b2c_conference_members', 'b2c_conferences.conference_id', '=', 'b2c_conference_members.conference_id')
             ->select(
                 'b2c_conferences.conference_id',
                 'b2c_conferences.uuid',
@@ -255,6 +256,10 @@ class ConferenceService
             ->where('b2c_conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
             ->where('b2c_conferences.end_time', '>=', now())
             ->distinct();
+
+            if($isOnlyLearner){
+                $current_conferences->where('b2c_conference_members.member_id', '=', $auth_user->user_id);
+            }
 
             $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user, $language) {
 
