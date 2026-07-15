@@ -220,6 +220,7 @@ class ConferenceController extends Controller
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         $conference->is_only_learner = $isOnlyLearner;
+        $conference->lesson_type_slug = 'conference';
 
         if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
             if($isOnlyLearner === true){
