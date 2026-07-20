@@ -152,10 +152,12 @@ class CourseService
                     ->latest('level_payment_id')
                     ->first();
 
-                $level->is_available_always = 0;
-                $level->has_expired = 1;
-                // Если когда-то была оплата — выводим её дату, иначе null
-                $level->expiration_at = $expiredPayment ? $expiredPayment->subscription_expiration_at : null;
+                if(isset($expiredPayment)){
+                    $level->is_available_always = 0;
+                    $level->has_expired = 1;
+                    // Если когда-то была оплата — выводим её дату, иначе null
+                    $level->expiration_at = $expiredPayment ? $expiredPayment->subscription_expiration_at : null;
+                }
             }
         }
 
