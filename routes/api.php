@@ -312,6 +312,10 @@ Route::group([
             Route::post('/edit/pronunciation_check/{task_id}', [TaskController::class, 'edit_pronunciation_check_task'])->middleware('check_roles');
             Route::get('/get/pronunciation_check/{task_id}', [TaskController::class, 'get_pronunciation_check_task']);
 
+            Route::post('/create/choose_the_right_phrase/{lesson_id}', [TaskController::class, 'create_choose_the_right_phrase_task'])->middleware('check_roles');
+            Route::post('/edit/choose_the_right_phrase/{task_id}', [TaskController::class, 'edit_choose_the_right_phrase_task'])->middleware('check_roles');
+            Route::get('/get/choose_the_right_phrase/{task_id}', [TaskController::class, 'get_choose_the_right_phrase_task']);
+
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
             // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
             // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');

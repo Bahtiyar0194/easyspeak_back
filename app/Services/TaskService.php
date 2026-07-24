@@ -453,6 +453,7 @@ class TaskService
         $new_task_option->show_translate = isset($request->show_translate) ? $request->show_translate : null;
         $new_task_option->show_options = isset($request->show_options) ? $request->show_options : null;
         $new_task_option->impression_limit = isset($request->impression_limit) ? $request->impression_limit : null;
+        $new_task_option->option_label = isset($request->option_label) ? $request->option_label : null;
         $new_task_option->seconds_per_word = isset($request->seconds_per_word) ? $request->seconds_per_word : null;
         $new_task_option->seconds_per_sentence = isset($request->seconds_per_sentence) ? $request->seconds_per_sentence : null;
         $new_task_option->seconds_per_section = isset($request->seconds_per_section) ? $request->seconds_per_section : null;

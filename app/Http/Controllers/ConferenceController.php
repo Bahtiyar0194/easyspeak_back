@@ -437,6 +437,7 @@ class ConferenceController extends Controller
             ->leftJoin('types_of_tasks_lang', 'types_of_tasks_lang.task_type_id', '=', 'types_of_tasks.task_type_id')
             ->leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
             ->select(
+                'b2c_conference_tasks.conference_task_id',
                 'tasks.task_id',
                 'tasks.task_slug',
                 'tasks.task_example',

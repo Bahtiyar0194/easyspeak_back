@@ -4255,6 +4255,127 @@ class TaskController extends Controller
         return response()->json($task, 200);
     }
 
+    public function create_choose_the_right_phrase_task(Request $request)
+    {
+        $rules = [];
+
+        if ($request->step == 1) {
+            $rules = [
+                'task_slug' => 'required',
+                'task_name_kk' => 'required',
+                'task_name_ru' => 'required',
+                'option_label' => 'required',
+                //'impression_limit' => 'required|min:1',
+                'seconds_per_sentence' => 'required|numeric|min:10',
+                'max_attempts' => 'required|numeric',
+                'show_on_platform' => 'required|string',
+                'step' => 'required|numeric'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 1
+            ], 200);
+        }
+        elseif ($request->step == 2) {
+
+            // 1. Декодируем JSON из запроса
+            $questions = json_decode($request->questions, true); // true возвращает массив, а не объект
+
+            // 2. Внедряем распарсенный массив обратно в запрос
+            $request->merge([
+                'questions' => $questions
+            ]);
+
+            // 3. Описываем правила с использованием стандартной точечной нотации Laravel (*)
+            $validator = Validator::make($request->all(), [
+                'questions_count'             => 'required|numeric|min:1',
+                'step'                        => 'required|numeric',
+                'questions'                   => 'required|array|min:1',
+                'questions.*.question'        => 'required|string',
+                'questions.*.answers.*.title' => 'required|string',
+                'questions.*.answers' => [
+                    'required',
+                    'array',
+                    'min:2', // Обычно для множественного выбора нужно минимум 2 ответа
+                    function ($attribute, $value, $fail) {
+                        app()->setLocale('ru');
+
+                        $totalAnswers = count($value);
+
+                        // Применяем filter_var для точной проверки булевого значения
+                        $correctCount = collect($value)->filter(function ($answer) {
+                            return isset($answer['is_correct']) && filter_var($answer['is_correct'], FILTER_VALIDATE_BOOLEAN);
+                        })->count();
+
+                        if ($correctCount === 0) {
+                            $fail(trans('app.quiz.indicate'));
+                        } elseif ($correctCount === $totalAnswers) {
+                            $fail(trans('app.quiz.one'));
+                        }
+                    },
+                ],
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json($validator->errors(), 422);
+            }
+
+            return response()->json([
+                'step' => 2
+            ], 200);
+        }
+        elseif($request->step == 3){
+
+            // Проверяем материалы на задание
+            $validate_errors = $this->taskService->validateTaskMaterials($request);
+
+            if ($validate_errors) {
+                return response()->json($validate_errors, 422);
+            }
+
+            // Добавляем задание
+            $new_task = $this->taskService->newTask($request, 10);
+
+            // $sentences = json_decode($request->sentences);
+
+            // if (count($sentences) > 0) {
+            //     foreach ($sentences as $sentenceIndex => $sentence) {
+            //         $new_task_sentence = new TaskSentence();
+            //         $new_task_sentence->task_id = $new_task->task_id;
+            //         $new_task_sentence->sentence_id = $sentence->sentence_id;
+            //         $new_task_sentence->save();
+
+            //         // Добавляем материалы к фразе
+            //         $this->taskService->addMaterialsToTaskSentence($sentenceIndex, $new_task_sentence->task_sentence_id, $request);
+            //     }
+            // }
+
+            // Добавляем материалы к заданию
+            $this->taskService->addMaterialsToTask($new_task->task_id, $request);
+            
+            // Добавляем опции к заданию
+            $this->taskService->addTaskOptions($new_task->task_id, $request);
+
+            // // $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
+            // // <p><span>Куратор:</span> <b>{$mentor->last_name} {$mentor->first_name}</b></p>
+            // // <p><span>Категория:</span> <b>{$category->category_name}</b></p>
+            // // <p><span>Участники:</span> <b>" . implode(", ", $member_names) . "</b></p>";
+
+            // // $user_operation = new UserOperation();
+            // // $user_operation->operator_id = auth()->user()->user_id;
+            // // $user_operation->operation_type_id = 3;
+            // // $user_operation->description = $description;
+            // // $user_operation->save();
+
+            return response()->json('success', 200);
+        }
+    }
 
     public function set_task_progress(Request $request){
         $completed_tasks = CompletedTask::where('progress', '=', 0)
