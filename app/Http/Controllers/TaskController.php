@@ -4305,8 +4305,8 @@ class TaskController extends Controller
                     'required',
                     'array',
                     'min:2', // Обычно для множественного выбора нужно минимум 2 ответа
-                    function ($attribute, $value, $fail) {
-                        app()->setLocale('ru');
+                    function ($attribute, $value, $fail) use ($request) {
+                        app()->setLocale($request->lang);
 
                         $totalAnswers = count($value);
 
@@ -4431,8 +4431,8 @@ class TaskController extends Controller
                     'required',
                     'array',
                     'min:2', // Обычно для множественного выбора нужно минимум 2 ответа
-                    function ($attribute, $value, $fail) {
-                        app()->setLocale('ru');
+                    function ($attribute, $value, $fail) use ($request) {
+                        app()->setLocale($request->lang);
 
                         $totalAnswers = count($value);
 

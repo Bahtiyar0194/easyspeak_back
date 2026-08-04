@@ -3,6 +3,7 @@
 namespace App\Services;
 use App\Models\Dictionary;
 use App\Models\Sentence;
+use App\Models\PhraseQuestion;
 use App\Models\Task;
 use App\Models\TaskLang;
 use App\Models\TaskType;
@@ -152,17 +153,27 @@ class TaskService
             ->get();
     
             if(count($task_answers) > 0){
-                $correct_anwers = [];
+                $correct_answers = [];
+                $partly_correct_answers = [];
                 $incorrect_answers = [];
                 $unverified_answers = [];
                 $correct_answers_count = 0;
+                $partly_correct_answers_count = 0;
                 $incorrect_answers_count = 0;
                 $unverified_answers_count = 0;
+
+                $percentage_for_phrase_answers = 0;
     
                 foreach ($task_answers as $key => $answer) {
                     if($answer->is_correct === 1){
-                        array_push($correct_anwers, $answer);
-                        $correct_answers_count++;
+                        if(isset($answer->partly_progress) && $answer->partly_progress < 100){
+                            array_push($partly_correct_answers, $answer);
+                            $partly_correct_answers_count++;
+                        }
+                        else{
+                            array_push($correct_answers, $answer);
+                            $correct_answers_count++;
+                        }
                     }
                     elseif($answer->is_correct === 0){
                         array_push($incorrect_answers, $answer);
@@ -171,6 +182,10 @@ class TaskService
                     else{
                         array_push($unverified_answers, $answer);
                         $unverified_answers_count++;
+                    }
+
+                    if($answer->partly_progress >= 0){
+                        $percentage_for_phrase_answers += $answer->partly_progress;
                     }
                     
     
@@ -213,15 +228,32 @@ class TaskService
                         ->first();
                         $answer->question = $question;
                     }
+
+                    if(isset($answer->phrase_question_id)){
+                        $question = PhraseQuestion::where('question_id', '=', $answer->phrase_question_id)
+                        ->first();
+
+                        $answer->question = $question;
+                    }
+                }
+
+                if($percentage_for_phrase_answers > 0){
+                    $percentage_for_phrase_answers = round(($percentage_for_phrase_answers / count($task_answers)), 2);
                 }
     
                 $task_result->completed_task = $completed_task;
                 $task_result->correct_answers_count = $correct_answers_count;
+                $task_result->partly_correct_answers_count = $partly_correct_answers_count;
                 $task_result->incorrect_answers_count = $incorrect_answers_count;
                 $task_result->unverified_answers_count = $unverified_answers_count;
-                $task_result->answers = ['correct_answers' => $correct_anwers, 'incorrect_answers' => $incorrect_answers, 'unverified_answers' => $unverified_answers];
+                $task_result->answers = [
+                    'correct_answers' => $correct_answers, 
+                    'partly_correct_answers' => $partly_correct_answers,
+                    'incorrect_answers' => $incorrect_answers, 
+                    'unverified_answers' => $unverified_answers
+                ];
                 $task_result->completed = count($unverified_answers) > 0 ? false : true;
-                $task_result->percentage = round(($correct_answers_count / count($task_answers)) * 100, 2);
+                $task_result->percentage = $percentage_for_phrase_answers > 0 ? $percentage_for_phrase_answers : round(($correct_answers_count / count($task_answers)) * 100, 2);
                 return $task_result;
             }
             else{
@@ -330,9 +362,18 @@ class TaskService
                     $new_task_answer->question_id = $result->question_id;
                 }
 
+                if(isset($result->phrase_question_id)){
+                    $new_task_answer->phrase_question_id = $result->phrase_question_id;
+                }
+
+                if(isset($result->progress)){
+                    $new_task_answer->partly_progress = $result->progress;
+                }
+
                 if(isset($result->comment)){
                     $new_task_answer->comment = $result->comment;
                 }
+                
 
                 $new_task_answer->save();
             }
