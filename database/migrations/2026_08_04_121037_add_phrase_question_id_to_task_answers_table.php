@@ -15,7 +15,8 @@ class AddPhraseQuestionIdToTaskAnswersTable extends Migration
     {
         Schema::table('task_answers', function (Blueprint $table) {
             $table->integer('phrase_question_id')->unsigned()->nullable()->after('question_id');
-            $table->foreign('phrase_question_id')->references('question_id')->on('phrase_questions');
+            $table->foreign('phrase_question_id')->references('question_id')->on('phrase_questions')->onDelete('cascade');
+            $table->integer('partly_progress')->nullable()->after('phrase_question_id');
         });
     }
 

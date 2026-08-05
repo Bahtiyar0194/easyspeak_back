@@ -4257,7 +4257,7 @@ class TaskController extends Controller
         return response()->json($task, 200);
     }
 
-    public function create_choose_the_right_phrase_task(Request $request)
+    public function create_choose_the_right_answer_task(Request $request)
     {
         $rules = [];
 
@@ -4268,7 +4268,7 @@ class TaskController extends Controller
                 'task_name_ru' => 'required',
                 'option_label' => 'required',
                 //'impression_limit' => 'required|min:1',
-                'seconds_per_sentence' => 'required|numeric|min:10',
+                'seconds_per_question' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
                 'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
@@ -4384,7 +4384,7 @@ class TaskController extends Controller
         }
     }
 
-    public function edit_choose_the_right_phrase_task(Request $request){
+    public function edit_choose_the_right_answer_task(Request $request){
         $rules = [];
 
         if ($request->step == 1) {
@@ -4394,7 +4394,7 @@ class TaskController extends Controller
                 'task_name_ru' => 'required',
                 'option_label' => 'required',
                 //'impression_limit' => 'required|min:1',
-                'seconds_per_sentence' => 'required|numeric|min:10',
+                'seconds_per_question' => 'required|numeric|min:10',
                 'max_attempts' => 'required|numeric',
                 'show_on_platform' => 'required|string',
                 'step' => 'required|numeric'
@@ -4517,7 +4517,7 @@ class TaskController extends Controller
         }
     }
 
-    public function get_choose_the_right_phrase_task(Request $request){
+    public function get_choose_the_right_answer_task(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
