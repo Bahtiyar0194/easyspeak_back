@@ -613,6 +613,7 @@ class TaskService
             'task_sentences.task_sentence_id',
             'task_sentences.sentence_id',
             'task_sentences.answer',
+            'task_sentences.answer_type',
             'sentences.sentence',
             'image_file.target as image_file',
             'audio_file.target as audio_file',

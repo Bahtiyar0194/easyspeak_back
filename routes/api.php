@@ -292,9 +292,9 @@ Route::group([
             Route::post('/edit/find_an_extra_word/{task_id}', [TaskController::class, 'edit_find_an_extra_word_task'])->middleware('check_roles');
             Route::get('/get/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
 
-            Route::post('/create/true_or_false/{lesson_id}', [TaskController::class, 'create_true_or_false_task'])->middleware('check_roles');
-            Route::post('/edit/true_or_false/{task_id}', [TaskController::class, 'edit_true_or_false_task'])->middleware('check_roles');
-            Route::get('/get/true_or_false/{task_id}', [TaskController::class, 'get_true_or_false_task']);
+            Route::post('/create/right_or_wrong/{lesson_id}', [TaskController::class, 'create_right_or_wrong_task'])->middleware('check_roles');
+            Route::post('/edit/right_or_wrong/{task_id}', [TaskController::class, 'edit_right_or_wrong_task'])->middleware('check_roles');
+            Route::get('/get/right_or_wrong/{task_id}', [TaskController::class, 'get_right_or_wrong_task']);
 
             Route::post('/create/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles');
             Route::post('/edit/match_sentences_with_materials/{task_id}', [TaskController::class, 'edit_match_sentences_with_materials_task'])->middleware('check_roles');

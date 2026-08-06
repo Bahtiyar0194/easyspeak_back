@@ -3006,7 +3006,7 @@ class TaskController extends Controller
         return response()->json($task, 200);
     }
 
-    public function create_true_or_false_task(Request $request)
+    public function create_right_or_wrong_task(Request $request)
     {
         $rules = [];
 
@@ -3097,6 +3097,7 @@ class TaskController extends Controller
                     $new_task_sentence->task_id = $new_task->task_id;
                     $new_task_sentence->sentence_id = $sentence->sentence_id;
                     $new_task_sentence->answer = $sentence->answer;
+                    $new_task_sentence->answer_type = $sentence->answer_type;
                     $new_task_sentence->save();
                 }
             }
@@ -3122,7 +3123,7 @@ class TaskController extends Controller
         }
     }
 
-    public function edit_true_or_false_task(Request $request)
+    public function edit_right_or_wrong_task(Request $request)
     {
         $rules = [];
 
@@ -3215,6 +3216,7 @@ class TaskController extends Controller
                     $new_task_sentence->task_id = $edit_task->task_id;
                     $new_task_sentence->sentence_id = $sentence->sentence_id;
                     $new_task_sentence->answer = $sentence->answer;
+                    $new_task_sentence->answer_type = $sentence->answer_type;
                     $new_task_sentence->save();
                 }
             }
@@ -3244,7 +3246,7 @@ class TaskController extends Controller
         }
     }
 
-    public function get_true_or_false_task(Request $request){
+    public function get_right_or_wrong_task(Request $request){
         // Получаем язык из заголовка
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
@@ -3258,6 +3260,12 @@ class TaskController extends Controller
         }
 
         $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
+
+        foreach ($task_sentences as $sentence) {
+            if($sentence->answer_type === null){
+                $sentence->answer_type = 0;
+            }
+        }
 
         $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
 
