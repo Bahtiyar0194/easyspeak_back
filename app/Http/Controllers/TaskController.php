@@ -299,7 +299,7 @@ class TaskController extends Controller
                                     Respond strictly in JSON format:
                                     {
                                     "grade": 1 or 0,
-                                    "comment": "A short comment, max 1 sentence. The correct answer to the question should be as an example. Mark the correct answer in the comment with the <b> tag"
+                                    "comment": "A short comment, max 1-2 sentence. The correct answer to the question should be as an example. Mark the correct answer in the comment with the <b> tag and give recommendations if there are similar correction options."
                                     }
 
                                     Do not add any extra text before or after the JSON.
