@@ -777,6 +777,65 @@ class CourseController extends Controller
         return response()->json(['courses' => $courses], 200);
     }
 
+    public function get_level_grade(Request $request){
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $level = new \stdClass();
+
+        // получаем пользователя по ID
+        $user = User::findOrFail($request->user_id);
+
+        $levelCompletedPercent = 0;
+        
+        $sections = $this->courseService->getLevelSections($request->level_id);
+                
+        foreach ($sections as $sectionKey => $section) {
+            $sectionCompletedPercent = 0;
+
+            $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
+
+            foreach ($lessons as $lessonKey => $lesson) {
+                $tasks_count = Task::leftJoin('task_options', 'tasks.task_id', '=', 'task_options.task_id')
+                ->where('tasks.lesson_id', '=', $lesson->lesson_id)
+                ->whereIn('task_options.show_on_platform', ['both', $this->schoolService->isAiSchoolDomain($user->school_id) ? 'b2c' : 'b2b'])
+                ->where('status_type_id', 1)
+                ->count();
+
+                $lesson->tasks_count = $tasks_count;
+
+                $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
+                ->where('learner_id', $request->user_id)
+                ->first();
+
+                if(isset($lesson_progress)){
+                    $lesson->completed_tasks_percent = $lesson_progress->progress;
+                    $sectionCompletedPercent += $lesson_progress->progress;
+                }
+                else{
+                    $lesson->completed_tasks_percent = 0;
+                }
+            }
+
+            $section->lessons = $lessons;
+            $section->completed_percent = count($lessons) > 0
+            ? $sectionCompletedPercent / count($lessons)
+            : 0;
+
+            
+            // 👇 добавляем в общий процент уровня
+            $levelCompletedPercent += $section->completed_percent;
+        }
+
+        $level->sections = $sections;
+                                
+        // 👇 итоговый процент по уровню
+        $level->completed_percent = count($sections) > 0
+        ? $levelCompletedPercent / count($sections)
+        : 0;
+
+        return response()->json(['level' => $level], 200);
+    }
+
     public function get_lesson_grade(Request $request){
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
