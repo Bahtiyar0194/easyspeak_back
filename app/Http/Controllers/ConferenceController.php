@@ -801,4 +801,28 @@ class ConferenceController extends Controller
             'message' => 'not_bought'
         ], 400);
     }
+
+    public function save_settings(Request $request){
+        $rules = [
+            'mode' => 'required|string',
+            'bg_mode' => 'required|string',
+            'bg_image' => 'required|string'
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $auth_user = auth()->user();
+
+        $findUser = User::find($auth_user->user_id);
+        $findUser->conf_mode = e($request->mode);
+        $findUser->conf_bg_mode = e($request->bg_mode);
+        $findUser->conf_bg_image = e($request->bg_image);
+        $findUser->save();
+
+        return response()->json('User settings change successful', 200);
+    }
 }

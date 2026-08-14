@@ -141,6 +141,7 @@ Route::group([
             Route::get('/get_conference_tasks/{conference_id}', [ConferenceController::class, 'get_conference_tasks']);
             Route::post('/run_task/{conference_id}/{task_id}', [ConferenceController::class, 'run_task']);
             Route::post('/accept/{uuid}', [ConferenceController::class, 'accept']);
+            Route::post('/save_settings', [ConferenceController::class, 'save_settings']);
         });
     });
 
