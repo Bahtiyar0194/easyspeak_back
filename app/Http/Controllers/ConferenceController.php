@@ -203,7 +203,8 @@ class ConferenceController extends Controller
                 'b2c_conferences.end_time',
                 'b2c_conferences.participated',
                 'b2c_conferences.mentor_id',
-                'b2c_conferences.topic'
+                'b2c_conferences.topic',
+                'b2c_conferences.is_free'
             )
             ->where('b2c_conferences.uuid', $request->conference_id)
             ->first();
@@ -259,6 +260,16 @@ class ConferenceController extends Controller
             ->exists();
 
             if($isMember) {
+                $allowed = true;
+                $conference->is_member = true;
+            }
+
+            if($isOnlyLearner && $conference->is_free === 1){
+                B2cConferenceMember::firstOrCreate([
+                    'conference_id' => $conference->conference_id,
+                    'member_id'     => $auth_user->user_id,
+                ]);
+
                 $allowed = true;
                 $conference->is_member = true;
             }
@@ -639,6 +650,10 @@ class ConferenceController extends Controller
             $new_conference->end_time = $end_time;
             $new_conference->mentor_id = $auth_user->user_id;
             $new_conference->operator_id = $auth_user->user_id;
+
+            if(isset($request->is_free)){
+                $new_conference->is_free = 1;
+            }
 
             $poster_file = $request->file('upload_poster_file_create');
 

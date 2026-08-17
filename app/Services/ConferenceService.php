@@ -258,7 +258,10 @@ class ConferenceService
             ->distinct();
 
             if($isOnlyLearner){
-                $current_conferences->where('b2c_conference_members.member_id', '=', $auth_user->user_id);
+                $current_conferences->where(function($query) use($auth_user) {
+                    $query->where('b2c_conference_members.member_id', '=', $auth_user->user_id)
+                    ->orWhere('b2c_conferences.is_free', '=' , 1);
+                });
             }
 
             $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user, $language) {

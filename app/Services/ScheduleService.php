@@ -203,6 +203,7 @@ class ScheduleService
             $conferences = B2cConference::leftJoin('users as moderator', 'b2c_conferences.mentor_id', '=', 'moderator.user_id')
             ->leftJoin('users as operator', 'b2c_conferences.operator_id', '=', 'operator.user_id')
             ->leftJoin('files as poster_file', 'b2c_conferences.poster_file_id', '=', 'poster_file.file_id')
+            ->leftJoin('b2c_conference_members', 'b2c_conferences.conference_id', '=', 'b2c_conference_members.conference_id')
             ->select(
                 'b2c_conferences.conference_id',
                 'b2c_conferences.uuid',
@@ -219,12 +220,20 @@ class ScheduleService
             ->orderBy('b2c_conferences.start_time', 'asc')
             ->distinct();
 
+            if($isOnlyLearner){
+                $conferences->where(function($query) use($user) {
+                    $query->where('b2c_conference_members.member_id', '=', $user->user_id)
+                    ->orWhere('b2c_conferences.is_free', '=' , 1);
+                });
+            }
+
             if($for_dashboard === true){
                 // Вывести и текущий урок за 2 часа
                 $threshold = Carbon::now()->subHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s');
                 // На месяц вперед
 
                 $monthAhead = Carbon::now()->addMonth();
+
                 $conferences->where('b2c_conferences.start_time', '>=', $threshold)
                 ->where('b2c_conferences.start_time', '<=', $monthAhead);
             }
@@ -232,7 +241,6 @@ class ScheduleService
             $conferences = $conferences->get()->map(function ($conference) use($isOnlyLearner, $user, $lang_id) {
 
                 if($isOnlyLearner === true){
-                //     $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
                     $conference->is_learner = true;
                 }
                 else{
