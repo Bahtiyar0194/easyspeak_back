@@ -694,15 +694,28 @@ class ConferenceController extends Controller
     {
         $auth_user = auth()->user();
 
-        $conference = Conference::where('uuid', $request->uuid)
-        ->firstOrFail();
+        if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $conference = B2cConference::where('uuid', $request->uuid)
+            ->firstOrFail();
 
-        if(isset($conference) && $conference->operator_id === $auth_user->user_id){
-            $conference->delete();
-            return response()->json('Delete conference is success', 200);
+            if(isset($conference) && $conference->operator_id === $auth_user->user_id){
+                $conference->delete();
+                return response()->json('Delete conference is success', 200);
+            }
+
+            return response()->json('Delete conference is failed', 404);
         }
+        else{
+            $conference = Conference::where('uuid', $request->uuid)
+            ->firstOrFail();
 
-        return response()->json('Delete conference is failed', 404);
+            if(isset($conference) && $conference->operator_id === $auth_user->user_id){
+                $conference->delete();
+                return response()->json('Delete conference is success', 200);
+            }
+
+            return response()->json('Delete conference is failed', 404);
+        }
     }
 
     public function accept(Request $request)

@@ -248,6 +248,8 @@ class ConferenceService
                 'b2c_conferences.created_at',
                 'b2c_conferences.start_time',
                 'b2c_conferences.end_time',
+                'b2c_conferences.forced',
+                'b2c_conferences.operator_id',
                 'poster_file.target as poster_file',
                 'moderator.avatar as moderator_avatar',
                 'moderator.first_name as moderator_first_name',
