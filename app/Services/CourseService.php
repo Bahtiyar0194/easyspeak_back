@@ -262,13 +262,13 @@ class CourseService
             }
             else{
                 if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
-                    if($section_sort_num === 1 && $lesson->sort_num === 1){
-                        $available_status->is_available = true;
-                        $available_status->is_available_always = true;
-                    }
-                    else{
+                    // if($section_sort_num === 1 && $lesson->sort_num === 1){
+                    //     $available_status->is_available = true;
+                    //     $available_status->is_available_always = true;
+                    // }
+                    // else{
                         $available_status->is_available = false;
-                    }
+                    //}
                 }
                 else{
                     $conferenceLesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
