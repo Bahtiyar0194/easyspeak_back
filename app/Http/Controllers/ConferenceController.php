@@ -838,7 +838,8 @@ class ConferenceController extends Controller
         $rules = [
             'mode' => 'required|string',
             'bg_mode' => 'required|string',
-            'bg_image' => 'required|string'
+            'bg_image' => 'required|string',
+            'video_reflected' => 'required|boolean'
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -853,6 +854,7 @@ class ConferenceController extends Controller
         $findUser->conf_mode = e($request->mode);
         $findUser->conf_bg_mode = e($request->bg_mode);
         $findUser->conf_bg_image = e($request->bg_image);
+        $findUser->video_reflected = $request->video_reflected;
         $findUser->save();
 
         return response()->json('User settings change successful', 200);
