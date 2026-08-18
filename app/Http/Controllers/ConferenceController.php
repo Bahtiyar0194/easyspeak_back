@@ -185,6 +185,7 @@ class ConferenceController extends Controller
                 'course_levels_lang.level_name',
                 'groups.group_name',
                 'conferences.mentor_id',
+                'conferences.operator_id',
                 'groups.group_id',
                 'users.school_id',
                 'group_members.member_id'
@@ -203,6 +204,7 @@ class ConferenceController extends Controller
                 'b2c_conferences.end_time',
                 'b2c_conferences.participated',
                 'b2c_conferences.mentor_id',
+                'b2c_conferences.operator_id',
                 'b2c_conferences.topic',
                 'b2c_conferences.is_free'
             )
@@ -217,7 +219,7 @@ class ConferenceController extends Controller
 
         $allowed = false;
 
-        $isOwner = $auth_user->hasRole(['school_owner', 'school_admin']);
+        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         $conference->is_only_learner = $isOnlyLearner;
@@ -232,7 +234,7 @@ class ConferenceController extends Controller
                 $allowed = true;
             }
         
-            if ($conference->mentor_id == $auth_user->user_id) {
+            if ($conference->mentor_id == $auth_user->user_id || $conference->operator_id == $auth_user->user_id) {
                 $allowed = true;
             }
         
@@ -251,8 +253,15 @@ class ConferenceController extends Controller
                 $allowed = true;
             }
 
-            if ($conference->mentor_id == $auth_user->user_id) {
+            if ($conference->mentor_id == $auth_user->user_id || $conference->operator_id == $auth_user->user_id) {
                 $allowed = true;
+            }
+
+            if($isOnlyLearner && $conference->is_free === 1){
+                B2cConferenceMember::firstOrCreate([
+                    'conference_id' => $conference->conference_id,
+                    'member_id'     => $auth_user->user_id,
+                ]);
             }
 
             $isMember = B2cConferenceMember::where('conference_id', $conference->conference_id)
@@ -262,16 +271,10 @@ class ConferenceController extends Controller
             if($isMember) {
                 $allowed = true;
                 $conference->is_member = true;
-            }
 
-            if($isOnlyLearner && $conference->is_free === 1){
-                B2cConferenceMember::firstOrCreate([
-                    'conference_id' => $conference->conference_id,
-                    'member_id'     => $auth_user->user_id,
-                ]);
-
-                $allowed = true;
-                $conference->is_member = true;
+                $save_conference = B2cConference::find($conference->conference_id);
+                $save_conference->participated = $conference->participated + 1;
+                $save_conference->save();
             }
         }
         
