@@ -624,10 +624,12 @@ class ConferenceController extends Controller
         if($mode === 'current'){
             $start_time = date('Y-m-d H:i:s');
             $end_time = date('Y-m-d H:i:s', strtotime('+2 hour'));
+            $forced = true;
         }
         else{
             $start_time = $request->start_time;
             $end_time = Carbon::parse($request->start_time)->addHours(2);
+            $forced = false;
         }
 
         $validator = Validator::make($request->all(), $rules);
@@ -650,6 +652,7 @@ class ConferenceController extends Controller
             $new_conference->end_time = $end_time;
             $new_conference->mentor_id = $auth_user->user_id;
             $new_conference->operator_id = $auth_user->user_id;
+            $new_conference->forced = $forced;
 
             if(isset($request->is_free)){
                 $new_conference->is_free = 1;
@@ -681,8 +684,6 @@ class ConferenceController extends Controller
             $new_conference->levels()->attach($request->levels);
         }
         else{
-            $forced = true;
-
             $new_conference = $this->conferenceService->createConference($request->group_id, $request->lesson_id, $forced, $start_time, $end_time);
         }
 

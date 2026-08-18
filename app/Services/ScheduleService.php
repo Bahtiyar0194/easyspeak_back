@@ -220,12 +220,12 @@ class ScheduleService
             ->orderBy('b2c_conferences.start_time', 'asc')
             ->distinct();
 
-            if($isOnlyLearner){
-                $conferences->where(function($query) use($user) {
-                    $query->where('b2c_conference_members.member_id', '=', $user->user_id)
-                    ->orWhere('b2c_conferences.is_free', '=' , 1);
-                });
-            }
+            // if($isOnlyLearner){
+            //     $conferences->where(function($query) use($user) {
+            //         $query->where('b2c_conference_members.member_id', '=', $user->user_id)
+            //         ->orWhere('b2c_conferences.is_free', '=' , 1);
+            //     });
+            // }
 
             if($for_dashboard === true){
                 // Вывести и текущий урок за 2 часа
