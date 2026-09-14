@@ -65,7 +65,7 @@ Route::group([
         });
 
         Route::group(['prefix' => 'telegram'], function () {
-            Route::get('/callback', [AuthController::class, 'telegram_callback']);
+            Route::post('/callback', [AuthController::class, 'telegram_callback']);
         });
 
         Route::group(['middleware' => ['auth:sanctum']], function () {
