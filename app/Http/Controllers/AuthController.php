@@ -459,6 +459,7 @@ class AuthController extends Controller
                     'first_name'      => $telegram_data->last_name ?? '',
                     'last_name'       => $telegram_data->first_name ?? '',
                     'telegram_id'     => $telegram_data->id,
+                    'telegram_username' => $telegram_data->username ?? null,
                     'avatar'          => $telegram_data->photo_url ?? null,
                     'lang_id'         => $language->lang_id,
                     'current_role_id' => 5,
