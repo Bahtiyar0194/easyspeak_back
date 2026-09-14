@@ -35,5 +35,6 @@ return [
     'conference_has_already_ended' => 'Конференцияның уақыты бітті.',
     'conference_has_not_started_yet' => 'Конференцияның басталуы күтілуде...',
     'date_should_be_no_earlier_or_no_later_than_two_days' => 'Екі күннен ерте немесе кеш болмауы керек.',
-    'choose_a_voice' => 'Аудио файлды жасау үшін дауысты таңдаңыз.'
+    'choose_a_voice' => 'Аудио файлды жасау үшін дауысты таңдаңыз.',
+    'wrong_google_code' => 'Google-дан келген код жарамсыз немесе мерзімі өтіп кетті. Кіру әрекетін тағы бір рет қайталап көріңіз.'
 ];

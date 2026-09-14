@@ -25,6 +25,9 @@ use App\Http\Controllers\SpeechToTextController;
 use App\Http\Controllers\TextToSpeechController;
 use App\Http\Controllers\TelegramWebhookController;
 
+
+use Laravel\Socialite\Facades\Socialite;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -56,8 +59,17 @@ Route::group([
         Route::post('/new_password/{hash}', [AuthController::class, 'new_password']);
 
         Route::group(['prefix' => 'google'], function () {
-            Route::get('/login', [AuthController::class, 'google_login']);
+            Route::get('/url', function () {
+                return response()->json([
+                    'url' => Socialite::driver('google')->stateless()->redirect()->getTargetUrl()
+                ]);
+
+
+            });
+
+            Route::get('redirect', [AuthController::class, 'redirect_to_google']);
             Route::get('/callback', [AuthController::class, 'google_callback']);
+            Route::post('/exchange', [AuthController::class, 'exchange_google_code']);
         });
 
         Route::group(['middleware' => ['auth:sanctum']], function () {
@@ -79,6 +91,7 @@ Route::group([
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get', [DashboardController::class, 'get']);
+            Route::post('/save_quiz_result', [DashboardController::class, 'save_quiz_result']);
         });
     });
 
@@ -117,6 +130,7 @@ Route::group([
         Route::get('/get_schools_from_city/{location_id}', [SchoolController::class, 'get_schools_from_city']);
         Route::get('/get_logo/{logo_file}/{logo_variable}', [SchoolController::class, 'get_logo']);
         Route::get('/get_favicon/{school_id}/{file_name}', [SchoolController::class, 'get_favicon']);
+        Route::post('/get_school_by_domain', [SchoolController::class, 'get_school_by_domain']);
 
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [SchoolController::class, 'get_school_attributes']);

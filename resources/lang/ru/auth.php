@@ -36,5 +36,6 @@ return [
     'conference_has_already_ended' => 'Время конференции истекло.',
     'conference_has_not_started_yet' => 'Ожидается начало конференции...',
     'date_should_be_no_earlier_or_no_later_than_two_days' => 'Дата должна быть не раньше или не позже двух дней.',
-    'choose_a_voice' => 'Выберите голос для генерации аудиофайла.'
+    'choose_a_voice' => 'Выберите голос для генерации аудиофайла.',
+    'wrong_google_code' => 'Недействительный или истекший код от Google. Повторите попытку входа еще раз.'
 ];

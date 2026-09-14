@@ -7,12 +7,14 @@ use Validator;
 use Str;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
+use Illuminate\Support\Facades\Cache;
 
 use App\Models\User;
 use App\Models\UserRole;
 use App\Models\Language;
 use App\Models\School;
 use App\Models\Course;
+use App\Models\SiteConfiguration;
 use App\Models\TelegramToken;
 
 use Mail;
@@ -105,6 +107,8 @@ class AuthController extends Controller
 
         //$this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
 
+        $site_configuration = SiteConfiguration::find(1);
+
         $new_user = new User();
         $new_user->first_name = e($request->first_name);
         $new_user->last_name = e($request->last_name);
@@ -112,6 +116,7 @@ class AuthController extends Controller
         $new_user->phone = e($request->phone);
         $new_user->school_id = $school->school_id;
         $new_user->lang_id = $language->lang_id;
+        $new_user->free_club_lessons_count = isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3;
         $new_user->password = bcrypt($request->password);
         $new_user->status_type_id = 1;
 
@@ -144,21 +149,6 @@ class AuthController extends Controller
         $new_user_role->user_id = $new_user->user_id;
         $new_user_role->role_type_id = 5;
         $new_user_role->save();
-
-        if(isset($request->course)){
-            $course = Course::leftJoin('course_levels', 'courses.course_id', '=', 'course_levels.course_id')
-            ->select('course_levels.level_slug')
-            ->where('courses.course_name_slug', '=', $request->course)
-            ->where('course_levels.is_available_always', '=', 1)
-            ->first();
-
-            if(isset($course)){
-                $school->level = $course;
-            }
-            else{
-                return response()->json('Course level not found', 404);
-            }
-        }
 
         return response()->json($school, 200);
     }
@@ -306,28 +296,129 @@ class AuthController extends Controller
         }
     }
 
-    public function google_login()
+    public function redirect_to_google(Request $request)
     {
-        return response()->json(Socialite::driver('google')->stateless()->redirect()->getTargetUrl(), 200);
+        $request->validate([
+            'return_url' => 'required|url',
+            'school_id' => 'required',
+            'lang_tag' => 'required|string'
+        ]);
+
+        // Упаковываем return_url и school_id в state
+        $state_data = base64_encode(json_encode([
+            'return_url' => $request->query('return_url'),
+            'school_id' => $request->query('school_id'),
+            'lang_tag' => $request->query('lang_tag')
+        ]));
+
+        return Socialite::driver('google')
+            ->stateless()
+            ->with(['state' => $state_data])
+            ->redirect();
     }
 
-    public function google_callback()
+    public function google_callback(Request $request)
     {
-        $googleUser = Socialite::driver('google')->stateless()->user();
-        $user = User::updateOrCreate(
-            [
-                'email' => $googleUser->getEmail(),
-            ],
-            [
-                'name' => $googleUser->getName(),
-                'google_id' => $googleUser->getId(),
-                'avatar' => $googleUser->getAvatar(),
-            ]
-        );
+        $site_configuration = SiteConfiguration::find(1);
 
+        $state_data = json_decode(base64_decode($request->state), true);
+        
+        $return_url = $state_data['return_url'] ?? 'https://easyspeak.kz';
+        $school_id = $state_data['school_id'] ?? null;
+        $lang_tag = $state_data['lang_tag'] ?? 'ru';
+
+        $language = Language::where('lang_tag', '=', $lang_tag)->first();
+
+        if (!$school_id) {
+            return response()->json(['message' => 'Не указан ID школы'], 400);
+        }
+
+        try {
+            // Вход без передачи аргумента в user()
+            $google_user = Socialite::driver('google')
+            ->stateless()
+            ->user();
+
+            // Поиск пользователя
+            $user = User::where('school_id', $school_id)
+            ->where(function ($query) use ($google_user) {
+                $query->where('google_id', $google_user->getId())
+                ->orWhere('email', $google_user->getEmail());
+            })
+            ->first();
+
+            if ($user) {
+                if (!$user->google_id) {
+                    $user->update([
+                        'google_id' => $google_user->getId(),
+                    ]);
+                }
+
+                if(!$user->avatar){
+                    $user->update([
+                        'avatar' => $google_user->getAvatar(),
+                    ]);
+                }
+            } else {
+                $fullName = $google_user->getName();
+                $nameParts = explode(' ', $fullName, 2);
+
+                $user = User::create([
+                    'school_id'       => $school_id,
+                    'first_name'      => $google_user->user['given_name'] ?? ($nameParts[0] ?? ''),
+                    'last_name'       => $google_user->user['family_name'] ?? ($nameParts[1] ?? ''),
+                    'email'           => $google_user->getEmail(),
+                    'google_id'       => $google_user->getId(),
+                    'avatar'          => $google_user->getAvatar(),
+                    'lang_id'         => $language->lang_id,
+                    'current_role_id' => 5,
+                    'status_type_id'  => 1,
+                    'free_club_lessons_count' => isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3
+                ]);
+
+                $new_user_role = new UserRole();
+                $new_user_role->user_id = $user->user_id;
+                $new_user_role->role_type_id = 5;
+                $new_user_role->save();
+            }
+
+            $one_time_code = Str::random(40);
+            Cache::put('auth_code_'.$one_time_code, $user->user_id, now()->addSeconds(60));
+
+            return redirect()->away($return_url . '/auth/login?gcode=' . $one_time_code);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ошибка авторизации: '.$e->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function exchange_google_code(Request $request)
+    {
+        $request->validate([
+            'code' => 'required|string',
+            'lang' => 'required|string'
+        ]);
+
+        app()->setLocale($request->lang);
+
+        // Достаем ID пользователя и СРАЗУ удаляем код из кэша (одноразовость)
+        $user_id = Cache::pull('auth_code_'.$request->code);
+
+        if (!$user_id) {
+            return response()->json(['message' => trans('auth.wrong_google_code')], 401);
+        }
+
+        $user = User::findOrFail($user_id);
+        $school = School::findOrFail($user->school_id);
         $token = $user->createToken(Str::random(60))->plainTextToken;
 
-        return response()->json(['token' => $token], 200);
+        return response()->json([
+            'token' => $token,
+            'school_domain' => $school->school_domain
+        ]);
     }
 
     public function me(Request $request)

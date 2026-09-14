@@ -64,9 +64,32 @@ class SchoolController extends Controller{
         return response()->json($attributes, 200);
     }
 
-    public function get_schools_from_city(Request $request){
-        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+    public function get_school_by_domain(Request $request){
 
+        app()->setLocale($request->lang || 'ru');
+        
+        $validator = Validator::make($request->all(), [
+            'school_domain' => 'required',
+            'lang' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $school = School::where('school_domain', '=', $request->school_domain)
+        ->first();
+
+        if(!$school){
+            return response()->json(['school_domain' => [trans('auth.school_not_found')]], 422);
+        }
+
+        return response()->json([
+            'school_id' => $school->school_id
+        ], 200);
+    }
+
+    public function get_schools_from_city(Request $request){
         $schools = School::where('location_id', '=', $request->location_id)
         ->select(
             'school_id',

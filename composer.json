@@ -13,7 +13,7 @@
         "intervention/image": "^2.7",
         "laravel/framework": "^8.75",
         "laravel/sanctum": "^2.11",
-        "laravel/socialite": "^5.15",
+        "laravel/socialite": "^5.30",
         "laravel/tinker": "^2.5",
         "patrickschur/language-detection": "^5.3",
         "pbmedia/laravel-ffmpeg": "^7.8",

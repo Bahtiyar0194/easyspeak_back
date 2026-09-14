@@ -266,15 +266,18 @@ class ConferenceController extends Controller
 
             $isMember = B2cConferenceMember::where('conference_id', $conference->conference_id)
             ->where('member_id', $auth_user->user_id)
-            ->exists();
+            ->first();
 
-            if($isMember) {
+
+            if(isset($isMember)) {
                 $allowed = true;
                 $conference->is_member = true;
 
                 $save_conference = B2cConference::find($conference->conference_id);
                 $save_conference->participated = $conference->participated + 1;
                 $save_conference->save();
+
+                $isMember->update(['participated' => 1]);
             }
         }
         
@@ -733,7 +736,7 @@ class ConferenceController extends Controller
 
             if(isset($conference->conferences_remain) && $conference->conferences_remain <= 0){
                 return response()->json([
-                    'message' => 'limit_has_been_reached'
+                    'message' => $conference->is_free === 0 ? 'limit_has_been_reached' : 'free_limit_has_been_reached'
                 ], 400);
             }
 

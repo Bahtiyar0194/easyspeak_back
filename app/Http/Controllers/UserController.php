@@ -9,6 +9,7 @@ use App\Models\Group;
 use App\Models\Language;
 use App\Models\School;
 use App\Models\RoleType;
+use App\Models\SiteConfiguration;
 
 use Mail;
 use App\Mail\WelcomeMail;
@@ -346,6 +347,8 @@ class UserController extends Controller
             return response()->json($email_error, 422);
         }
 
+        $site_configuration = SiteConfiguration::find(1);
+
         $password = Str::random(8);
 
         $new_user = new User();
@@ -356,6 +359,7 @@ class UserController extends Controller
         $new_user->school_id = $auth_user->school_id;
         $new_user->current_role_id = $request->roles[0];
         $new_user->status_type_id = 4;
+        $new_user->free_club_lessons_count = isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3;
         $new_user->password = bcrypt($password);
         $new_user->save();
 

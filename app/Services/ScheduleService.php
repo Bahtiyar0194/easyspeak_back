@@ -193,6 +193,8 @@ class ScheduleService
 
                 $conference->members = $members;
 
+                $conference->is_member = $members->contains('user_id', $user->user_id);
+
                 //Идет ли конференция сейчас?
                 $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')), Carbon::parse($conference->end_time));
             
@@ -212,6 +214,7 @@ class ScheduleService
                 'b2c_conferences.created_at',
                 'b2c_conferences.start_time',
                 'b2c_conferences.end_time',
+                'b2c_conferences.is_free',
                 'poster_file.target as poster_file',
                 'moderator.avatar as moderator_avatar',
                 'moderator.first_name as moderator_first_name',
@@ -281,6 +284,8 @@ class ScheduleService
                 ->get();
 
                 $conference->members = $members;
+
+                $conference->is_member = $members->contains('user_id', $user->user_id);
 
                 //Идет ли конференция сейчас?
                 $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')), Carbon::parse($conference->end_time));

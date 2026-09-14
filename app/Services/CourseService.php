@@ -15,6 +15,7 @@ use App\Models\SubscriptionTypeLevel;
 use App\Models\Conference;
 use App\Models\B2cConference;
 use App\Models\B2cConferenceLevel;
+use App\Models\B2cConferenceMember;
 use App\Models\Language;
 use Carbon\Carbon;
 
@@ -318,6 +319,20 @@ class CourseService
         // 1. Ищем конференцию
         $conference = B2cConference::where('uuid', $uuid)->firstOrFail();
 
+        if($conference->is_free === 1){
+
+            $member_conferences = B2cConferenceMember::leftJoin('b2c_conferences', 'b2c_conference_members.conference_id', '=', 'b2c_conferences.conference_id')
+            ->where('b2c_conference_members.member_id', '=', $user_id)
+            ->where('b2c_conferences.is_free', '=', 1)
+            ->count();
+
+            $user = User::findOrFail($user_id);
+
+            $conference->conferences_remain = $user->free_club_lessons_count - $member_conferences;
+
+            return $conference;
+        }
+        
         $levels = $conference->levels()
             ->select('course_levels.level_id', 'course_levels.is_available_always')
             ->get();
