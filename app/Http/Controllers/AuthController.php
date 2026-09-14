@@ -444,7 +444,7 @@ class AuthController extends Controller
         try {
             // Поиск пользователя
             $user = User::where('school_id', $school_id)
-            ->where('telegram_id', $telegram_data['id'])
+            ->where('telegram_id', $telegram_data->id)
             ->first();
 
             if ($user) {
