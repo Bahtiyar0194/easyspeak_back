@@ -56,6 +56,7 @@ class User extends Authenticatable
         'email',
         'school_id',
         'google_id',
+        'telegram_id',
         'avatar',
         'lang_id',
         'status_type_id',
