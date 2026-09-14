@@ -431,7 +431,7 @@ class AuthController extends Controller
 
         $site_configuration = SiteConfiguration::find(1);
         
-        $telegram_data = $request->data;
+        $telegram_data = (object) $request->data;
         $school_id = $request->school_id ?? null;
         $lang_tag = $request->lang_tag ?? 'ru';
 
@@ -444,7 +444,7 @@ class AuthController extends Controller
         try {
             // Поиск пользователя
             $user = User::where('school_id', $school_id)
-            ->where('telegram_id', $telegram_data->id)
+            ->where('telegram_id', $telegram_data['id'])
             ->first();
 
             if ($user) {
