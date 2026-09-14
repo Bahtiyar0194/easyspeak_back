@@ -421,6 +421,73 @@ class AuthController extends Controller
         ]);
     }
 
+    public function telegram_callback(Request $request)
+    {
+        $request->validate([
+            'data' => 'required',
+            'school_id' => 'required|numeric',
+            'lang' => 'required|string'
+        ]);
+
+        $site_configuration = SiteConfiguration::find(1);
+        
+        $telegram_data = $request->data;
+        $school_id = $request->school_id ?? null;
+        $lang_tag = $request->lang_tag ?? 'ru';
+
+        $language = Language::where('lang_tag', '=', $lang_tag)->first();
+
+        if (!$school_id) {
+            return response()->json(['message' => 'Не указан ID школы'], 400);
+        }
+
+        try {
+            // Поиск пользователя
+            $user = User::where('school_id', $school_id)
+            ->where('telegram_id', $telegram_data->id)
+            ->first();
+
+            if ($user) {
+                if(!$user->avatar){
+                    $user->update([
+                        'avatar' => $telegram_data->photo_url ?? null,
+                    ]);
+                }
+            } else {
+                $user = User::create([
+                    'school_id'       => $school_id,
+                    'first_name'      => $telegram_data->last_name ?? '',
+                    'last_name'       => $telegram_data->first_name ?? '',
+                    'telegram_id'     => $telegram_data->id,
+                    'avatar'          => $telegram_data->photo_url ?? null,
+                    'lang_id'         => $language->lang_id,
+                    'current_role_id' => 5,
+                    'status_type_id'  => 1,
+                    'free_club_lessons_count' => isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3
+                ]);
+
+                $new_user_role = new UserRole();
+                $new_user_role->user_id = $user->user_id;
+                $new_user_role->role_type_id = 5;
+                $new_user_role->save();
+            }
+
+            $school = School::findOrFail($user->school_id);
+            $token = $user->createToken(Str::random(60))->plainTextToken;
+
+            return response()->json([
+                'token' => $token,
+                'school_domain' => $school->school_domain
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ошибка авторизации: '.$e->getMessage(),
+            ], 401);
+        }
+    }
+
     public function me(Request $request)
     {
         $user = auth()->user();

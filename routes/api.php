@@ -59,17 +59,13 @@ Route::group([
         Route::post('/new_password/{hash}', [AuthController::class, 'new_password']);
 
         Route::group(['prefix' => 'google'], function () {
-            Route::get('/url', function () {
-                return response()->json([
-                    'url' => Socialite::driver('google')->stateless()->redirect()->getTargetUrl()
-                ]);
-
-
-            });
-
             Route::get('redirect', [AuthController::class, 'redirect_to_google']);
             Route::get('/callback', [AuthController::class, 'google_callback']);
             Route::post('/exchange', [AuthController::class, 'exchange_google_code']);
+        });
+
+        Route::group(['prefix' => 'telegram'], function () {
+            Route::get('/callback', [AuthController::class, 'telegram_callback']);
         });
 
         Route::group(['middleware' => ['auth:sanctum']], function () {

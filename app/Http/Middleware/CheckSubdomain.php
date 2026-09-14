@@ -62,7 +62,7 @@ class CheckSubdomain
             ->first();
 
             $icons = FaviconType::where('icon_name', '=', 'android-icon')
-                ->get();
+            ->get();
 
             $manifest_icons = [];
 
