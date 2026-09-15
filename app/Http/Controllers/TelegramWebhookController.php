@@ -487,7 +487,7 @@ class TelegramWebhookController extends Controller
                                 // Отправляем данные методом POST на бэкенд
                                 const form = document.createElement('form');
                                 form.method = 'POST';
-                                form.action = '/api/auth/telegram/callback';
+                                form.action = '/api/v1/auth/telegram/callback';
 
                                 const fields = {
                                     ...data,
