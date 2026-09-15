@@ -441,4 +441,77 @@ class TelegramWebhookController extends Controller
             }
         }
     }
+
+    public function show_telegram_auth_hub(Request $request)
+    {
+        $school_id  = $request->query('school_id');
+        $return_url = $request->query('return_url');
+        $lang_tag = $request->query('lang_tag');
+        $bot_id     = explode(':', config('services.telegram.token'))[0];
+
+        if (!$school_id) {
+            return response('Не указан school_id', 400);
+        }
+
+        // Отдаем легкую HTML-страницу
+        return response()->make("
+            <!DOCTYPE html>
+            <html lang='ru'>
+            <head>
+                <meta charset='UTF-8'>
+                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                <title>Авторизация через Telegram</title>
+                <style>
+                    body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; background: #f4f6f8; }
+                    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+                </style>
+                <script src='https://telegram.org/js/telegram-widget.js?22' async></script>
+            </head>
+            <body>
+                <div class='card'>
+                    <p>Подключение к Telegram...</p>
+                </div>
+
+                <script>
+                    window.onload = function() {
+                        if (window.Telegram && window.Telegram.Login) {
+                            window.Telegram.Login.auth({
+                                bot_id: '{$bot_id}',
+                                request_access: 'write'
+                            }, function(data) {
+                                if (!data) {
+                                    window.location.href = '{$return_url}/auth/login?error=cancelled';
+                                    return;
+                                }
+                                
+                                // Отправляем данные методом POST на бэкенд
+                                const form = document.createElement('form');
+                                form.method = 'POST';
+                                form.action = '/api/auth/telegram/callback';
+
+                                const fields = {
+                                    ...data,
+                                    school_id: '{$school_id}',
+                                    return_url: '{$return_url}',
+                                    lang_tag: '{$lang_tag}'
+                                };
+
+                                for (const key in fields) {
+                                    const input = document.createElement('input');
+                                    input.type = 'hidden';
+                                    input.name = key;
+                                    input.value = fields[key];
+                                    form.appendChild(input);
+                                }
+
+                                document.body.appendChild(form);
+                                form.submit();
+                            });
+                        }
+                    };
+                </script>
+            </body>
+            </html>
+        ", 200, ['Content-Type' => 'text/html']);
+    }
 }

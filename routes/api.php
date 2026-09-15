@@ -61,12 +61,14 @@ Route::group([
         Route::group(['prefix' => 'google'], function () {
             Route::get('redirect', [AuthController::class, 'redirect_to_google']);
             Route::get('/callback', [AuthController::class, 'google_callback']);
-            Route::post('/exchange', [AuthController::class, 'exchange_google_code']);
         });
 
         Route::group(['prefix' => 'telegram'], function () {
+            Route::get('/redirect', [TelegramWebhookController::class, 'show_telegram_auth_hub']);
             Route::post('/callback', [AuthController::class, 'telegram_callback']);
         });
+
+        Route::post('/one_time_code', [AuthController::class, 'one_time_code']);
 
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/me', [AuthController::class, 'me']);

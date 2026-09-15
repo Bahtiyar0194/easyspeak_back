@@ -385,7 +385,7 @@ class AuthController extends Controller
             $one_time_code = Str::random(40);
             Cache::put('auth_code_'.$one_time_code, $user->user_id, now()->addSeconds(60));
 
-            return redirect()->away($return_url . '/auth/login?gcode=' . $one_time_code);
+            return redirect()->away($return_url . '/auth/login?otc=' . $one_time_code);
 
         } catch (\Throwable $e) {
             return response()->json([
@@ -395,7 +395,85 @@ class AuthController extends Controller
         }
     }
 
-    public function exchange_google_code(Request $request)
+    public function telegram_callback(Request $request)
+    {
+        $request->validate([
+            'school_id'  => 'required|numeric',
+            'lang_tag'   => 'required|string',
+            'return_url' => 'required',
+            'id'         => 'required',
+            'first_name' => 'required',
+            'hash'       => 'required',
+        ]);
+
+        $site_configuration = SiteConfiguration::find(1);
+        
+        $telegram_data = $request->only([
+            'id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date'
+        ]);
+
+        // 1. Проверка HMAC SHA256 подписи
+        if (!$this->check_telegram_hash($telegram_data, $request->hash)) {
+            return response()->json(['message' => 'Недействительная подпись Telegram'], 403);
+        }
+
+        $school_id = $request->school_id ?? null;
+        $lang_tag = $request->lang_tag ?? 'ru';
+        $return_url = $request->return_url;
+        $telegram_id = $request->id;
+
+        $language = Language::where('lang_tag', '=', $lang_tag)->first();
+
+        if (!$school_id) {
+            return response()->json(['message' => 'Не указан ID школы'], 400);
+        }
+
+        try {
+            // Поиск пользователя
+            $user = User::where('school_id', $school_id)
+            ->where('telegram_id', $telegram_id)
+            ->first();
+
+            if ($user) {
+                if(!$user->avatar){
+                    $user->update([
+                        'avatar' => $request->photo_url ?? null,
+                    ]);
+                }
+            } else {
+                $user = User::create([
+                    'school_id'         => $school_id,
+                    'first_name'        => $request->last_name ?? '',
+                    'last_name'         => $request->first_name ?? '',
+                    'telegram_id'       => $telegram_id,
+                    'telegram_username' => $request->username ?? null,
+                    'avatar'            => $request->photo_url ?? null,
+                    'lang_id'           => $language->lang_id,
+                    'current_role_id'   => 5,
+                    'status_type_id'    => 1,
+                    'free_club_lessons_count' => isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3
+                ]);
+
+                $new_user_role = new UserRole();
+                $new_user_role->user_id = $user->user_id;
+                $new_user_role->role_type_id = 5;
+                $new_user_role->save();
+            }
+
+            $one_time_code = Str::random(40);
+            Cache::put('auth_code_'.$one_time_code, $user->user_id, now()->addSeconds(60));
+
+            return redirect()->away($return_url . '/auth/login?otc=' . $one_time_code);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ошибка авторизации: '.$e->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function one_time_code(Request $request)
     {
         $request->validate([
             'code' => 'required|string',
@@ -419,74 +497,6 @@ class AuthController extends Controller
             'token' => $token,
             'school_domain' => $school->school_domain
         ]);
-    }
-
-    public function telegram_callback(Request $request)
-    {
-        $request->validate([
-            'data' => 'required',
-            'school_id' => 'required|numeric',
-            'lang' => 'required|string'
-        ]);
-
-        $site_configuration = SiteConfiguration::find(1);
-        
-        $telegram_data = (object) $request->data;
-        $school_id = $request->school_id ?? null;
-        $lang_tag = $request->lang_tag ?? 'ru';
-
-        $language = Language::where('lang_tag', '=', $lang_tag)->first();
-
-        if (!$school_id) {
-            return response()->json(['message' => 'Не указан ID школы'], 400);
-        }
-
-        try {
-            // Поиск пользователя
-            $user = User::where('school_id', $school_id)
-            ->where('telegram_id', $telegram_data->id)
-            ->first();
-
-            if ($user) {
-                if(!$user->avatar){
-                    $user->update([
-                        'avatar' => $telegram_data->photo_url ?? null,
-                    ]);
-                }
-            } else {
-                $user = User::create([
-                    'school_id'       => $school_id,
-                    'first_name'      => $telegram_data->last_name ?? '',
-                    'last_name'       => $telegram_data->first_name ?? '',
-                    'telegram_id'     => $telegram_data->id,
-                    'telegram_username' => $telegram_data->username ?? null,
-                    'avatar'          => $telegram_data->photo_url ?? null,
-                    'lang_id'         => $language->lang_id,
-                    'current_role_id' => 5,
-                    'status_type_id'  => 1,
-                    'free_club_lessons_count' => isset($site_configuration) ? $site_configuration->free_club_lessons_count : 3
-                ]);
-
-                $new_user_role = new UserRole();
-                $new_user_role->user_id = $user->user_id;
-                $new_user_role->role_type_id = 5;
-                $new_user_role->save();
-            }
-
-            $school = School::findOrFail($user->school_id);
-            $token = $user->createToken(Str::random(60))->plainTextToken;
-
-            return response()->json([
-                'token' => $token,
-                'school_domain' => $school->school_domain
-            ]);
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Ошибка авторизации: '.$e->getMessage(),
-            ], 401);
-        }
     }
 
     public function me(Request $request)
@@ -575,5 +585,24 @@ class AuthController extends Controller
     {
         auth()->user()->tokens()->delete();
         return response()->json('Logout successful', 200);
+    }
+
+    private function check_telegram_hash(array $data, string $hash): bool
+    {
+        $bot_token = config('services.telegram.token');
+        ksort($data);
+
+        $data_check_arr = [];
+        foreach ($data as $key => $value) {
+            if ($value !== null) {
+                $data_check_arr[] = $key . '=' . $value;
+            }
+        }
+
+        $data_check_string = implode("\n", $data_check_arr);
+        $secret_key = hash('sha256', $bot_token, true);
+        $calculated_hash = hash_hmac('sha256', $data_check_string, $secret_key);
+
+        return hash_equals($calculated_hash, $hash);
     }
 }
