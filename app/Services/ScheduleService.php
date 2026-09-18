@@ -120,7 +120,7 @@ class ScheduleService
 
             if($for_dashboard === true){
                 // Вывести и текущий урок за 2 часа
-                $threshold = Carbon::now()->subHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s');
+                $threshold = Carbon::now()->subHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
                 // На месяц вперед
 
                 $monthAhead = Carbon::now()->addMonth();
@@ -196,7 +196,7 @@ class ScheduleService
                 $conference->is_member = $members->contains('user_id', $user->user_id);
 
                 //Идет ли конференция сейчас?
-                $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')), Carbon::parse($conference->end_time));
+                $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(config('app.conference_before_minutes')), Carbon::parse($conference->end_time));
             
                 return $conference;
             });
@@ -215,6 +215,7 @@ class ScheduleService
                 'b2c_conferences.start_time',
                 'b2c_conferences.end_time',
                 'b2c_conferences.is_free',
+                'b2c_conferences.mentor_id',
                 'poster_file.target as poster_file',
                 'moderator.avatar as moderator_avatar',
                 'moderator.first_name as moderator_first_name',
@@ -226,7 +227,7 @@ class ScheduleService
 
             if($for_dashboard === true){
                 // Вывести и текущий урок за 2 часа
-                $threshold = Carbon::now()->subHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s');
+                $threshold = Carbon::now()->subHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
                 // На месяц вперед
 
                 $monthAhead = Carbon::now()->addMonth();
@@ -288,7 +289,7 @@ class ScheduleService
                 $conference->is_member = $members->contains('user_id', $user->user_id);
 
                 //Идет ли конференция сейчас?
-                $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')), Carbon::parse($conference->end_time));
+                $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(config('app.conference_before_minutes')), Carbon::parse($conference->end_time));
             
                 return $conference;
             });

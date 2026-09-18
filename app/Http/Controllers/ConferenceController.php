@@ -87,6 +87,7 @@ class ConferenceController extends Controller
                 'groups.group_id',
                 'groups.level_id',
                 'groups.group_name',
+                'groups.all_lessons_is_conference',
                 'course_levels_lang.level_name',
                 'courses_lang.course_name',
                 'courses.course_id'
@@ -122,11 +123,15 @@ class ConferenceController extends Controller
                 $group->sections = $sections;
 
                 foreach ($sections as $s => $section) {
-                    $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+                    $lessonsQuery = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
                     ->leftJoin('types_of_lessons_lang', 'types_of_lessons.lesson_type_id', '=', 'types_of_lessons_lang.lesson_type_id')
-                    ->where('lessons.section_id', '=', $section->section_id)
-                    ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
-                    ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
+                    ->where('lessons.section_id', '=', $section->section_id);
+
+                    if ((int)$group->all_lessons_is_conference === 0) {
+                        $lessonsQuery->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test']);
+                    }
+
+                    $lessons = $lessonsQuery->where('types_of_lessons_lang.lang_id', '=', $language->lang_id)
                     ->select(
                         'lessons.lesson_id',
                         'lessons.lesson_name',
@@ -291,7 +296,7 @@ class ConferenceController extends Controller
         }
     
         // Если конференция ещё не началась
-        if (now()->lessThan(Carbon::parse($conference->start_time)->subMinutes(env('CONFERENCE_BEFORE_MINUTES')))) {
+        if (now()->lessThan(Carbon::parse($conference->start_time)->subMinutes(config('app.conference_before_minutes')))) {
             return response()->json(['type' => 'pending', 'message' => trans('auth.conference_has_not_started_yet'), 'conference' => $conference], 200);
         }
 

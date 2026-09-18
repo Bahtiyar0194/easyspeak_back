@@ -255,6 +255,7 @@ class GroupController extends Controller
                 'groups.started_at',
                 'groups.current_price',
                 'groups.first_lesson_free',
+                'groups.all_lessons_is_conference',
                 'groups.is_legal',
                 'groups.mentor_id',
                 'groups.operator_id'
@@ -297,26 +298,47 @@ class GroupController extends Controller
 
         $group->schedule = $this->scheduleService->getSchedule($request, $auth_user->user_id, $language->lang_id, false, $group->group_id);
 
-        $days = [];
+        // 1. Собираем уникальные start_time для каждого выбранного дня недели
+        $selectedDays = [];
 
         foreach ($group->schedule as $conference) {
-            // Получаем номер дня недели
-            // Carbon::parse(...)->dayOfWeekIso возвращает:
-            // 1 = Пн, 2 = Вт, ..., 7 = Вс
-            $dayNum = Carbon::parse($conference->start_time)->dayOfWeekIso;
+            if ((int)$conference->moved === 0) {
+                $carbon = Carbon::parse($conference->start_time);
+                $dayNum = $carbon->dayOfWeekIso; // 1 (Пн) .. 7 (Вс)
 
-            if($conference->moved === 0){
-                // Добавляем, если нет
-                if (!in_array($dayNum, $days)) {
-                    $days[] = $dayNum;
+                // Сохраняем время (ЧЧ:ММ) для каждого найденного дня недели
+                if (!isset($selectedDays[$dayNum])) {
+                    $selectedDays[$dayNum] = $carbon->format('H:i');
                 }
             }
         }
 
-        // Сортируем
-        sort($days);
+        // 2. Формируем итоговый массив из всех 7 дней недели для фронтенда
+        $daysOfWeek = [
+            1 => ['id' => 1, 'name' => 'weekdays.monday.even'],
+            2 => ['id' => 2, 'name' => 'weekdays.tuesday.even'],
+            3 => ['id' => 3, 'name' => 'weekdays.wednesday.even'],
+            4 => ['id' => 4, 'name' => 'weekdays.thursday.even'],
+            5 => ['id' => 5, 'name' => 'weekdays.friday.even'],
+            6 => ['id' => 6, 'name' => 'weekdays.saturday.even'],
+            7 => ['id' => 7, 'name' => 'weekdays.sunday.even'],
+        ];
 
-        $group->days = $days;
+        $resultDays = [];
+
+        foreach ($daysOfWeek as $id => $dayData) {
+            $isSelected = isset($selectedDays[$id]);
+
+            $resultDays[] = [
+                'id'         => $dayData['id'],
+                'name'       => $dayData['name'],
+                'start_time' => $isSelected ? $selectedDays[$id] : '',
+                'selected'   => $isSelected,
+            ];
+        }
+
+        // Присваиваем результат
+        $group->days = $resultDays;
 
         return response()->json($group, 200);
     }
@@ -350,10 +372,38 @@ class GroupController extends Controller
         elseif ($request->step == 2) {
             $rules = [
                 'start_date' => 'required|date|after_or_equal:today',
-                'start_time' => 'required|date_format:H:i',
-                'selected_days' => 'required|string|min:3',
                 'step' => 'required|numeric',
             ];
+
+            $selected_days = json_decode($request->selected_days);
+
+            $selected_day = false;
+
+            foreach ($selected_days as $key => $day) {
+                if($day->selected === true){
+                    $selected_day = true;
+                    break;
+                }
+            }
+
+            if($selected_day === false){
+                $rules['selected_day'] = 'required';
+            }
+
+            if($selected_day === true){
+                $start_time = true;
+
+                foreach ($selected_days as $key => $day) {
+                    if($day->selected === true && $day->start_time == ''){
+                        $start_time = false;
+                        break;
+                    }
+                }
+
+                if($start_time === false){
+                    $rules['start_time'] = 'required|date_format:H:i';
+                }
+            }
 
             $validator = Validator::make($request->all(), $rules);
 
@@ -460,12 +510,13 @@ class GroupController extends Controller
                 $new_group->group_name = $request->group_name;
                 $new_group->group_description = $request->group_description;
                 $new_group->level_id = $level->level_id;
-                $new_group->started_at = $request->start_date.' '.$request->start_time.':00';
+                $new_group->started_at = $request->start_date.' 00:00:00';
                 $new_group->current_price = $request->lesson_price;
                 $new_group->first_lesson_free = isset($request->first_lesson_free) ? 1 : 0;
+                $new_group->all_lessons_is_conference = isset($request->all_lessons_is_conference) ? 1 : 0;
                 $new_group->save();
 
-                $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at, $request->selected_days);
+                $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at, $request->selected_days, $new_group->all_lessons_is_conference);
 
                 if(isset($request->first_lesson_free)){
                     //Ближайшая конференция
@@ -546,10 +597,38 @@ class GroupController extends Controller
         elseif ($request->step == 2) {
             $rules = [
                 'start_date' => 'required|date',
-                'start_time' => 'required|date_format:H:i',
-                'selected_days' => 'required|string|min:3',
                 'step' => 'required|numeric',
             ];
+
+            $selected_days = json_decode($request->selected_days);
+
+            $selected_day = false;
+
+            foreach ($selected_days as $key => $day) {
+                if($day->selected === true){
+                    $selected_day = true;
+                    break;
+                }
+            }
+
+            if($selected_day === false){
+                $rules['selected_day'] = 'required';
+            }
+
+            if($selected_day === true){
+                $start_time = true;
+
+                foreach ($selected_days as $key => $day) {
+                    if($day->selected === true && $day->start_time == ''){
+                        $start_time = false;
+                        break;
+                    }
+                }
+
+                if($start_time === false){
+                    $rules['start_time'] = 'required|date_format:H:i';
+                }
+            }
 
             $validator = Validator::make($request->all(), $rules);
 
@@ -653,13 +732,14 @@ class GroupController extends Controller
             $edit_group->group_name = $request->group_name;
             $edit_group->group_description = $request->group_description;
             $edit_group->level_id = $request->level_id;            
-            $edit_group->started_at = $request->start_date.' '.$request->start_time.':00';
+            $edit_group->started_at = $request->start_date.' 00:00:00';
             $edit_group->current_price = $request->lesson_price;
             $edit_group->first_lesson_free = isset($request->first_lesson_free) ? 1 : 0;
+            $edit_group->all_lessons_is_conference = isset($request->all_lessons_is_conference) ? 1 : 0;
             $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
 
-            $this->conferenceService->editConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at, $request->selected_days);
+            $this->conferenceService->editConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at, $request->selected_days, $edit_group->all_lessons_is_conference);
 
             if(isset($request->first_lesson_free)){
                 //Ближайшая конференция

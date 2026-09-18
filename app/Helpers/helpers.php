@@ -42,20 +42,23 @@ if (! function_exists('humanDate')) {
 }
 
 if (! function_exists('getNextDate')) {
-    function getNextDate(Carbon $current, array $days): Carbon
+    function getNextDate(Carbon $current, array $selectedDays): Carbon
     {
-        $hour = $current->hour;
-        $minute = $current->minute;
-        $second = $current->second;
+        return collect($selectedDays)
+        ->map(function ($day) use ($current) {
+            // Carbon::next() принимает как имя ("Tuesday"), так и номер дня недели ISO (1..7)
+            $nextDate = $current->copy()->next($day['id']);
 
-        return collect($days)
-            ->map(function ($day) use ($current, $hour, $minute, $second) {
-                return $current->copy()
-                    ->next($day)
-                    ->setTime($hour, $minute, $second);
-            })
-            ->sort()
-            ->first();
+            // Если задано персональное время для этого дня — устанавливаем его
+            if (!empty($day['start_time'])) {
+                [$hour, $minute] = explode(':', $day['start_time']);
+                $nextDate->setTime((int)$hour, (int)$minute, 0);
+            }
+
+            return $nextDate;
+        })
+        ->sort()
+        ->first();
     }
 }
 ?>

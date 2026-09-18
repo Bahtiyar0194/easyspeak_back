@@ -11,6 +11,7 @@ use App\Models\Group;
 use App\Models\GroupMember;
 use Str;
 use Carbon\Carbon;
+use DB;
 
 use App\Services\CourseService;
 use App\Services\SchoolService;
@@ -44,108 +45,68 @@ class ConferenceService
         return $conference;
     }
 
-    public function editConference($group_id, $lesson_id, $start_time, $end_time){
-        $group = Group::findOrFail($group_id);
+    public function createConferences($group_id, $level_id, $start_time, $selected_days, $all_lessons_is_conference){
+        $schedule = $this->generateScheduleDates($level_id, $start_time, $selected_days, $all_lessons_is_conference);
 
-        $conference = Conference::where('group_id', '=', $group_id)
-        ->where('lesson_id', '=', $lesson_id)
-        ->where('forced', '=', 0)
-        ->first();
-
-        if(isset($conference)){
-            $conference->operator_id = auth()->user()->user_id;
-            $conference->mentor_id = $group->mentor_id;
-            $conference->start_time = $start_time;
-            $conference->end_time = $end_time;
-            $conference->save();
+        foreach ($schedule as $item) {
+            $this->createConference(
+                $group_id,
+                $item['lesson_id'],
+                false,
+                $item['start_time'],
+                $item['end_time']
+            );
         }
     }
 
-    public function createConferences($group_id, $level_id, $start_time, $selected_days)
+    public function editConferences($group_id, $level_id, $start_time, $selected_days, $all_lessons_is_conference)
     {
-        $days = json_decode($selected_days);
-        $current = Carbon::parse($start_time);
+        DB::transaction(function () use ($group_id, $level_id, $start_time, $selected_days, $all_lessons_is_conference) {
+            
+            $group = Group::findOrFail($group_id);
+            $operatorId = auth()->user()->user_id;
 
-        // Если стартовый день не выбран — смещаем на ближайший выбранный
-        if (!in_array($current->dayOfWeekIso, $days)) {
-            $current = getNextDate($current, $days);
-        }
+            $schedule = $this->generateScheduleDates($level_id, $start_time, $selected_days, $all_lessons_is_conference);
+            $newLessonIds = array_column($schedule, 'lesson_id');
 
-        $sections = CourseSection::where('level_id', '=', $level_id)
-            ->select('section_id')
-            ->orderBy('section_id', 'asc')
-            ->get();
+            // 1. Удаляем устаревшие незафиксированные конференции
+            Conference::where('group_id', $group_id)
+                ->where('forced', 0)
+                ->whereNotIn('lesson_id', $newLessonIds)
+                ->delete();
 
-        foreach ($sections as $s => $section) {
-
-            $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-                ->where('lessons.section_id', '=', $section->section_id)
-                ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
-                ->select('lessons.lesson_id', 'lessons.sort_num')
-                ->distinct()
-                ->orderBy('lessons.sort_num', 'asc')
-                ->get();
-
-            $forced = false;
-
-            foreach ($lessons as $key => $lesson) {
-
-                // Создаём конференцию
-                $new_conference = $this->createConference(
-                    $group_id,
-                    $lesson->lesson_id,
-                    $forced,
-                    $current->format('Y-m-d H:i:s'),
-                    $current->copy()->addHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s')
-                );
-
-                // Получаем следующую дату
-                $current = getNextDate($current, $days);
-            }
-        }
-    }
-
-
-    public function editConferences($group_id, $level_id, $start_time, $selected_days){
-        $days = json_decode($selected_days);
-        $current = Carbon::parse($start_time);
-
-        // Если стартовый день не выбран — смещаем на ближайший выбранный
-        if (!in_array($current->dayOfWeekIso, $days)) {
-            $current = getNextDate($current, $days);
-        }
-
-        $sections = CourseSection::where('level_id', '=', $level_id)
-        ->select(
-            'section_id'
-        )
-        ->orderBy('section_id', 'asc')
-        ->get();
-
-        foreach ($sections as $s => $section) {
-            $lessons = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
-            ->where('lessons.section_id', '=', $section->section_id)
-            ->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test'])
-            ->select(
-                'lessons.lesson_id',
-                'lessons.sort_num'
-            )
-            ->distinct()
-            ->orderBy('lessons.sort_num', 'asc')
-            ->get();
-
-            foreach ($lessons as $key => $lesson) {
-                $edit_conference = $this->editConference(
-                    $group_id, 
-                    $lesson->lesson_id, 
-                    $current->format('Y-m-d H:i:s'),
-                    $current->copy()->addHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s')
-                );
+            // 2. Обновляем существующие или создаем новые
+            foreach ($schedule as $item) {
                 
-                // Получаем следующую дату
-                $current = getNextDate($current, $days);
+                // Ищем существующую запись
+                $conference = Conference::where('group_id', $group_id)
+                    ->where('lesson_id', $item['lesson_id'])
+                    ->where('forced', 0)
+                    ->first();
+
+                if ($conference) {
+                    // Если существует — просто обновляем время и участников
+                    $conference->update([
+                        'operator_id' => $operatorId,
+                        'mentor_id'   => $group->mentor_id,
+                        'start_time'  => $item['start_time'],
+                        'end_time'    => $item['end_time'],
+                    ]);
+                } else {
+                    // Если нет — создаем с новым UUID без дефисов
+                    Conference::create([
+                        'uuid'        => str_replace('-', '', (string) Str::uuid()),
+                        'group_id'    => $group_id,
+                        'lesson_id'   => $item['lesson_id'],
+                        'forced'      => 0,
+                        'operator_id' => $operatorId,
+                        'mentor_id'   => $group->mentor_id,
+                        'start_time'  => $item['start_time'],
+                        'end_time'    => $item['end_time'],
+                    ]);
+                }
             }
-        }
+        });
     }
 
     public function getCurrentConferences($request){
@@ -187,7 +148,7 @@ class ConferenceService
             ->where('courses_lang.lang_id', '=', $language->lang_id)
             ->where('course_levels_lang.lang_id', '=', $language->lang_id)
             // Доступ за 10 минут до начала
-            ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
+            ->where('conferences.start_time', '<=', Carbon::now()->addMinutes(config('app.conference_before_minutes')))
             ->where('conferences.end_time', '>=', now())
             ->distinct();
 
@@ -255,7 +216,7 @@ class ConferenceService
                 'moderator.first_name as moderator_first_name',
                 'moderator.last_name as moderator_last_name',
             )
-            ->where('b2c_conferences.start_time', '<=', Carbon::now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES')))
+            ->where('b2c_conferences.start_time', '<=', Carbon::now()->addMinutes(config('app.conference_before_minutes')))
             ->where('b2c_conferences.end_time', '>=', now())
             ->distinct();
 
@@ -304,6 +265,68 @@ class ConferenceService
         }
 
         return $current_conferences;
+    }
+
+
+    /**
+     * Генерирует массив Carbon дат для каждого урока курса.
+     */
+    private function generateScheduleDates(int $levelId, string $startTime, string $selectedDaysJson, int $all_lessons_is_conference): array
+    {
+        $rawDays = json_decode($selectedDaysJson, true);
+        $selectedDays = collect($rawDays)->where('selected', true)->values()->toArray();
+
+        if (empty($selectedDays)) {
+            throw new \Exception("Не выбрано ни одного дня недели.");
+        }
+
+        $current = Carbon::parse($startTime);
+        $selectedDayIds = array_column($selectedDays, 'id');
+
+        if (!in_array($current->dayOfWeekIso, $selectedDayIds)) {
+            $current = getNextDate($current, $selectedDays);
+        } else {
+            $todayConfig = collect($selectedDays)->firstWhere('id', $current->dayOfWeekIso);
+            if (!empty($todayConfig['start_time'])) {
+                [$hour, $minute] = explode(':', $todayConfig['start_time']);
+                $current->setTime((int)$hour, (int)$minute, 0);
+            }
+        }
+
+        // 1. Начинаем сборку запроса
+        $lessonsQuery = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+            ->join('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+            ->where('course_sections.level_id', '=', $levelId);
+
+        // 2. Применяем условный фильтр по типам уроков
+        if ((int)$all_lessons_is_conference === 0) {
+            $lessonsQuery->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test']);
+        }
+
+        // 3. Выбираем нужные поля (добавляем section_id и sort_num для корректного orderBy + distinct)
+        $lessons = $lessonsQuery
+            ->select('lessons.lesson_id', 'course_sections.section_id', 'lessons.sort_num')
+            ->distinct()
+            ->orderBy('course_sections.section_id', 'asc')
+            ->orderBy('lessons.sort_num', 'asc')
+            ->get();
+
+        $schedule = [];
+
+        foreach ($lessons as $lesson) {
+            $start = $current->copy();
+            $end = $start->copy()->addHours((int) config('app.conference_hour', 2));
+
+            $schedule[] = [
+                'lesson_id'  => $lesson->lesson_id,
+                'start_time' => $start->format('Y-m-d H:i:s'),
+                'end_time'   => $end->format('Y-m-d H:i:s'),
+            ];
+
+            $current = getNextDate($current, $selectedDays);
+        }
+
+        return $schedule;
     }
 }
 ?>

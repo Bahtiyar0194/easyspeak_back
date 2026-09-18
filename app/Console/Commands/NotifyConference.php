@@ -43,9 +43,8 @@ class NotifyConference extends Command
      */
     public function handle()
     {
-
-        $from = now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES'))->startOfMinute();
-        $to = now()->addMinutes(env('CONFERENCE_BEFORE_MINUTES'))->endOfMinute();
+        $from = now()->addMinutes(config('app.conference_before_minutes'))->startOfMinute();
+        $to = now()->addMinutes(config('app.conference_before_minutes'))->endOfMinute();
 
         Conference::whereBetween('start_time', [$from, $to])
             ->where('notification_sent', 0)
@@ -136,7 +135,7 @@ class NotifyConference extends Command
 
         return trans('app.bot.conference.reminder.now', [
             'name' => $member->first_name,
-            'time' => env('CONFERENCE_BEFORE_MINUTES')
+            'time' => config('app.conference_before_minutes')
         ]);
     }
 

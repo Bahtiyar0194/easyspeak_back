@@ -4,6 +4,7 @@ use App\Models\Language;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\Conference;
+use App\Models\B2cConference;
 use App\Models\Course;
 use App\Models\CourseLevel;
 
@@ -13,14 +14,17 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 use App\Services\ScheduleService;
+use App\Services\SchoolService;
 
 class ScheduleController extends Controller
 {
     protected $scheduleService;
+    protected $schoolService;
 
-    public function __construct(Request $request, ScheduleService $scheduleService)
+    public function __construct(Request $request, ScheduleService $scheduleService, SchoolService $schoolService)
     {
         $this->scheduleService = $scheduleService;
+        $this->schoolService = $schoolService;
         app()->setLocale($request->header('Accept-Language'));
     }
 
@@ -109,6 +113,7 @@ class ScheduleController extends Controller
 
     public function update(Request $request)
     {
+        $auth_user = auth()->user();
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
@@ -117,78 +122,98 @@ class ScheduleController extends Controller
             'start_time' => 'required|date_format:H:i',
         ];
 
+        if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $rules['conf_topic'] = 'required|string';
+        }
+
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        $conference = Conference::where('uuid', '=', $request->uuid)
-        ->first();
+        $conference = $this->schoolService->isAiSchoolDomain($auth_user->school_id) ? 
+        B2cConference::where('uuid', '=', $request->uuid)->first() : 
+        Conference::where('uuid', '=', $request->uuid)->first();
 
         if(isset($conference)){
-            $referenceDate = Carbon::parse($conference->start_time)->toDateString();
-            $requestDate = Carbon::parse($request->start_date)->toDateString();
+            if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+                $conference->topic = $request->conf_topic;
 
-            $diffInDays = Carbon::parse($conference->start_time)->diffInDays($request->start_date.' '.$request->start_time);
-
-            // Создаем допустимый диапазон: от -2 до +2 дней
-            $minDate = Carbon::parse($referenceDate)->subDays(2);
-            $maxDate = Carbon::parse($referenceDate)->addDays(2);
-
-            if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
-                if ($requestDate < $minDate->toDateString()) {
-                    return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+                if(isset($request->conf_topic_description)){
+                    $conference->topic_description = $request->conf_topic_description;
                 }
-            }
-            else{
-                if ($requestDate < $minDate->toDateString() || $requestDate > $maxDate->toDateString()) {
-                    return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
-                }
-            }
 
-            if(isset($request->mentor_only_for_this_lesson) && $request->mentor_only_for_this_lesson == 0){
-                $conferences = Conference::where('start_time', '>=', $conference->start_time)
-                ->where('group_id', '=', $conference->group_id)
-                ->get();
-
-                if(count($conferences) > 0){
-                    foreach ($conferences as $key => $value) {
-                        $c = Conference::find($value->conference_id);
-                        $c->mentor_id = $request->mentor_id;
-                        $c->save();
-                    }
-                }
-            }
-            else{
                 $conference->mentor_id = $request->mentor_id;
-            }
-
-            if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
-
-                $conferences = Conference::where('start_time', '>=', $conference->start_time)
-                ->where('group_id', '=', $conference->group_id)
-                ->get();
-
-                if(count($conferences) > 0){
-                    foreach ($conferences as $key => $value) {
-                        $c = Conference::find($value->conference_id);
-                        if($referenceDate < $requestDate){
-                            $c->start_time = Carbon::parse($c->start_time)->addDays($diffInDays);
-                            $c->end_time = Carbon::parse($c->end_time)->addDays($diffInDays);
-                        }
-                        elseif($referenceDate > $requestDate){
-                            $c->start_time = Carbon::parse($c->start_time)->subDays($diffInDays);
-                            $c->end_time = Carbon::parse($c->end_time)->subDays($diffInDays);
-                        }
-                        $c->save();
-                    }
-                }
+                $conference->operator_id = $auth_user->user_id;
+                $conference->is_free = isset($request->is_free) ? 1 : 0;
+                $conference->start_time = $request->start_date.' '.$request->start_time;
+                $conference->end_time = Carbon::parse($conference->start_time)->addHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
             }
             else{
-                $conference->start_time = $request->start_date.' '.$request->start_time;
-                $conference->end_time = Carbon::parse($conference->start_time)->addHours(env('CONFERENCE_HOUR'))->format('Y-m-d H:i:s');
-                $conference->moved = 1;
+                $referenceDate = Carbon::parse($conference->start_time)->toDateString();
+                $requestDate = Carbon::parse($request->start_date)->toDateString();
+
+                $diffInDays = Carbon::parse($conference->start_time)->diffInDays($request->start_date.' '.$request->start_time);
+
+                // Создаем допустимый диапазон: от -2 до +2 дней
+                $minDate = Carbon::parse($referenceDate)->subDays(2);
+                $maxDate = Carbon::parse($referenceDate)->addDays(2);
+
+                if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
+                    if ($requestDate < $minDate->toDateString()) {
+                        return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+                    }
+                }
+                else{
+                    if ($requestDate < $minDate->toDateString() || $requestDate > $maxDate->toDateString()) {
+                        return response()->json(['start_date' => trans('auth.date_should_be_no_earlier_or_no_later_than_two_days')], 422);
+                    }
+                }
+
+                if(isset($request->mentor_only_for_this_lesson) && $request->mentor_only_for_this_lesson == 0){
+                    $conferences = Conference::where('start_time', '>=', $conference->start_time)
+                    ->where('group_id', '=', $conference->group_id)
+                    ->get();
+
+                    if(count($conferences) > 0){
+                        foreach ($conferences as $key => $value) {
+                            $c = Conference::find($value->conference_id);
+                            $c->mentor_id = $request->mentor_id;
+                            $c->save();
+                        }
+                    }
+                }
+                else{
+                    $conference->mentor_id = $request->mentor_id;
+                }
+
+                if(isset($request->date_shift_by_week) && $request->date_shift_by_week == 1){
+
+                    $conferences = Conference::where('start_time', '>=', $conference->start_time)
+                    ->where('group_id', '=', $conference->group_id)
+                    ->get();
+
+                    if(count($conferences) > 0){
+                        foreach ($conferences as $key => $value) {
+                            $c = Conference::find($value->conference_id);
+                            if($referenceDate < $requestDate){
+                                $c->start_time = Carbon::parse($c->start_time)->addDays($diffInDays);
+                                $c->end_time = Carbon::parse($c->end_time)->addDays($diffInDays);
+                            }
+                            elseif($referenceDate > $requestDate){
+                                $c->start_time = Carbon::parse($c->start_time)->subDays($diffInDays);
+                                $c->end_time = Carbon::parse($c->end_time)->subDays($diffInDays);
+                            }
+                            $c->save();
+                        }
+                    }
+                }
+                else{
+                    $conference->start_time = $request->start_date.' '.$request->start_time;
+                    $conference->end_time = Carbon::parse($conference->start_time)->addHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
+                    $conference->moved = 1;
+                }
             }
 
             $conference->save();
