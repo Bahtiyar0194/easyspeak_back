@@ -302,7 +302,7 @@ class GroupController extends Controller
         $selectedDays = [];
 
         foreach ($group->schedule as $conference) {
-            if ((int)$conference->moved === 0) {
+            if ((int)$conference->moved === 0 && $conference->start_time >= now()) {
                 $carbon = Carbon::parse($conference->start_time);
                 $dayNum = $carbon->dayOfWeekIso; // 1 (Пн) .. 7 (Вс)
 
@@ -739,7 +739,14 @@ class GroupController extends Controller
             $edit_group->status_type_id = 1; //$isOwner ? 1 : 16;
             $edit_group->save();
 
-            $this->conferenceService->editConferences($edit_group->group_id, $edit_group->level_id, $edit_group->started_at, $request->selected_days, $edit_group->all_lessons_is_conference);
+            $this->conferenceService->editConferences(
+                $edit_group->group_id, 
+                $edit_group->level_id, 
+                $edit_group->started_at, 
+                $request->selected_days, 
+                $edit_group->all_lessons_is_conference,
+                isset($request->only_future)
+            );
 
             if(isset($request->first_lesson_free)){
                 //Ближайшая конференция

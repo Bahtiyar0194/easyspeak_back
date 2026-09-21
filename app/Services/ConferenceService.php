@@ -59,33 +59,113 @@ class ConferenceService
         }
     }
 
-    public function editConferences($group_id, $level_id, $start_time, $selected_days, $all_lessons_is_conference)
-    {
-        DB::transaction(function () use ($group_id, $level_id, $start_time, $selected_days, $all_lessons_is_conference) {
-            
+    public function editConferences(
+        $group_id, 
+        $level_id, 
+        $start_time, 
+        $selected_days, 
+        $all_lessons_is_conference, 
+        $only_future = false
+    ) {
+        DB::transaction(function () use (
+            $group_id, 
+            $level_id, 
+            $start_time, 
+            $selected_days, 
+            $all_lessons_is_conference, 
+            $only_future
+        ) {
             $group = Group::findOrFail($group_id);
             $operatorId = auth()->user()->user_id;
+            $now = Carbon::now();
 
-            $schedule = $this->generateScheduleDates($level_id, $start_time, $selected_days, $all_lessons_is_conference);
-            $newLessonIds = array_column($schedule, 'lesson_id');
+            if ($only_future) {
+                // === РЕЖИМ 1: Изменения только для будущих уроков ===
 
-            // 1. Удаляем устаревшие незафиксированные конференции
-            Conference::where('group_id', $group_id)
-                ->where('forced', 0)
-                ->whereNotIn('lesson_id', $newLessonIds)
-                ->delete();
+                // 1. Находим крайний пройденный урок (по максимальной секции и sort_num)
+                $lastConference = Conference::join('lessons', 'conferences.lesson_id', '=', 'lessons.lesson_id')
+                    ->join('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+                    ->where('conferences.group_id', $group_id)
+                    ->where('conferences.start_time', '<=', $now->format('Y-m-d H:i:s'))
+                    ->orderBy('course_sections.section_id', 'desc')
+                    ->orderBy('lessons.sort_num', 'desc')
+                    ->select('course_sections.section_id', 'lessons.sort_num')
+                    ->first();
 
-            // 2. Обновляем существующие или создаем новые
+                // 2. Запрашиваем все уроки уровня с учетом нового значения $all_lessons_is_conference
+                $futureLessonsQuery = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+                    ->join('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+                    ->where('course_sections.level_id', '=', $level_id);
+
+                if ((int)$all_lessons_is_conference === 0) {
+                    $futureLessonsQuery->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test']);
+                }
+
+                // 3. Отсекаем все, что было ДО (или РАВНО) последнему пройденному уроку
+                if ($lastConference) {
+                    $lastSectionId = $lastConference->section_id;
+                    $lastSortNum   = $lastConference->sort_num;
+
+                    $futureLessonsQuery->where(function ($query) use ($lastSectionId, $lastSortNum) {
+                        $query->where('course_sections.section_id', '>', $lastSectionId)
+                            ->orWhere(function ($q) use ($lastSectionId, $lastSortNum) {
+                                $q->where('course_sections.section_id', '=', $lastSectionId)
+                                ->where('lessons.sort_num', '>', $lastSortNum);
+                            });
+                    });
+                }
+
+                $futureLessonIds = $futureLessonsQuery->pluck('lessons.lesson_id')->toArray();
+
+                // Если будущих уроков не осталось — завершаем
+                if (empty($futureLessonIds)) {
+                    return;
+                }
+
+                // 4. Точка отсчета для предстоящих уроков
+                $newStartDate = Carbon::parse($start_time)->isPast() ? $now->format('Y-m-d H:i:s') : $start_time;
+
+                // 5. Генерируем даты только для оставшихся уроков
+                $schedule = $this->generateScheduleDates(
+                    $level_id, 
+                    $newStartDate, 
+                    $selected_days, 
+                    $all_lessons_is_conference, 
+                    $futureLessonIds
+                );
+
+                // 6. Удаляем только нефиксированные будущие конференции
+                Conference::where('group_id', $group_id)
+                    ->where('forced', 0)
+                    ->where('start_time', '>', $now->format('Y-m-d H:i:s'))
+                    ->delete();
+
+            } else {
+                // === РЕЖИМ 2: Полный пересчет всего расписания с самого начала ===
+
+                $schedule = $this->generateScheduleDates(
+                    $level_id, 
+                    $start_time, 
+                    $selected_days, 
+                    $all_lessons_is_conference
+                );
+
+                $newLessonIds = array_column($schedule, 'lesson_id');
+
+                Conference::where('group_id', $group_id)
+                    ->where('forced', 0)
+                    ->whereNotIn('lesson_id', $newLessonIds)
+                    ->delete();
+            }
+
+            // 7. Записываем / обновляем новые даты в базе
             foreach ($schedule as $item) {
-                
-                // Ищем существующую запись
                 $conference = Conference::where('group_id', $group_id)
                     ->where('lesson_id', $item['lesson_id'])
                     ->where('forced', 0)
                     ->first();
 
                 if ($conference) {
-                    // Если существует — просто обновляем время и участников
                     $conference->update([
                         'operator_id' => $operatorId,
                         'mentor_id'   => $group->mentor_id,
@@ -93,7 +173,6 @@ class ConferenceService
                         'end_time'    => $item['end_time'],
                     ]);
                 } else {
-                    // Если нет — создаем с новым UUID без дефисов
                     Conference::create([
                         'uuid'        => str_replace('-', '', (string) Str::uuid()),
                         'group_id'    => $group_id,
@@ -271,8 +350,13 @@ class ConferenceService
     /**
      * Генерирует массив Carbon дат для каждого урока курса.
      */
-    private function generateScheduleDates(int $levelId, string $startTime, string $selectedDaysJson, int $all_lessons_is_conference): array
-    {
+    private function generateScheduleDates(
+        int $levelId, 
+        string $startTime, 
+        string $selectedDaysJson, 
+        int $all_lessons_is_conference,
+        array $targetLessonIds = [] // Добавили параметр для фильтрации конкретных уроков
+    ): array {
         $rawDays = json_decode($selectedDaysJson, true);
         $selectedDays = collect($rawDays)->where('selected', true)->values()->toArray();
 
@@ -293,17 +377,19 @@ class ConferenceService
             }
         }
 
-        // 1. Начинаем сборку запроса
         $lessonsQuery = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
             ->join('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
             ->where('course_sections.level_id', '=', $levelId);
 
-        // 2. Применяем условный фильтр по типам уроков
         if ((int)$all_lessons_is_conference === 0) {
             $lessonsQuery->whereIn('types_of_lessons.lesson_type_slug', ['conference', 'file_test']);
         }
 
-        // 3. Выбираем нужные поля (добавляем section_id и sort_num для корректного orderBy + distinct)
+        // Если передан список конкретных ID уроков (например, только не прошедшие)
+        if (!empty($targetLessonIds)) {
+            $lessonsQuery->whereIn('lessons.lesson_id', $targetLessonIds);
+        }
+
         $lessons = $lessonsQuery
             ->select('lessons.lesson_id', 'course_sections.section_id', 'lessons.sort_num')
             ->distinct()
