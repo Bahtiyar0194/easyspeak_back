@@ -632,14 +632,14 @@ class ConferenceController extends Controller
             $rules['start_time'] = 'required|date|after_or_equal:now';
         }
 
-        if($mode === 'current'){
-            $start_time = date('Y-m-d H:i:s');
-            $end_time = date('Y-m-d H:i:s', strtotime('+2 hour'));
+        if ($mode === 'current') {
+            $now = Carbon::now();
+            $start_time = $now->toDateTimeString();
+            $end_time = $now->copy()->addMinutes(config('app.conference_minute'))->toDateTimeString();
             $forced = true;
-        }
-        else{
+        } else {
             $start_time = $request->start_time;
-            $end_time = Carbon::parse($request->start_time)->addHours(2);
+            $end_time = Carbon::parse($request->start_time)->addMinutes(config('app.conference_minute'))->toDateTimeString();
             $forced = false;
         }
 

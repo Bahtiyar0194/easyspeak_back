@@ -133,6 +133,7 @@ return [
     */
 
     'conference_hour' => env('CONFERENCE_HOUR', 2),
+    'conference_minute' => env('CONFERENCE_MINUTE', 120),
     'conference_before_minutes' => env('CONFERENCE_BEFORE_MINUTES', 5),
 
     /*

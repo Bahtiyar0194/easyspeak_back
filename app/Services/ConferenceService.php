@@ -401,7 +401,7 @@ class ConferenceService
 
         foreach ($lessons as $lesson) {
             $start = $current->copy();
-            $end = $start->copy()->addHours((int) config('app.conference_hour', 2));
+            $end = $start->copy()->addMinutes(config('app.conference_minute'))->toDateTimeString();
 
             $schedule[] = [
                 'lesson_id'  => $lesson->lesson_id,

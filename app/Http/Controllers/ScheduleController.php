@@ -148,7 +148,7 @@ class ScheduleController extends Controller
                 $conference->operator_id = $auth_user->user_id;
                 $conference->is_free = isset($request->is_free) ? 1 : 0;
                 $conference->start_time = $request->start_date.' '.$request->start_time;
-                $conference->end_time = Carbon::parse($conference->start_time)->addHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
+                $conference->end_time = Carbon::parse($conference->start_time)->addMinutes(config('app.conference_minute'))->toDateTimeString();
             }
             else{
                 $referenceDate = Carbon::parse($conference->start_time)->toDateString();
@@ -211,7 +211,7 @@ class ScheduleController extends Controller
                 }
                 else{
                     $conference->start_time = $request->start_date.' '.$request->start_time;
-                    $conference->end_time = Carbon::parse($conference->start_time)->addHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
+                    $conference->end_time = Carbon::parse($conference->start_time)->addMinutes(config('app.conference_minute'))->toDateTimeString();
                     $conference->moved = 1;
                 }
             }
