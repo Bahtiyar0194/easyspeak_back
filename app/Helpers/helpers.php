@@ -45,20 +45,23 @@ if (! function_exists('getNextDate')) {
     function getNextDate(Carbon $current, array $selectedDays): Carbon
     {
         return collect($selectedDays)
-        ->map(function ($day) use ($current) {
-            // Carbon::next() принимает как имя ("Tuesday"), так и номер дня недели ISO (1..7)
-            $nextDate = $current->copy()->next($day['id']);
+            ->map(function ($day) use ($current) {
+                // Если id = 7 (Воскресенье по ISO), превращаем его в 0 для Carbon
+                $dayOfWeek = (int) $day['id'] % 7;
 
-            // Если задано персональное время для этого дня — устанавливаем его
-            if (!empty($day['start_time'])) {
-                [$hour, $minute] = explode(':', $day['start_time']);
-                $nextDate->setTime((int)$hour, (int)$minute, 0);
-            }
+                // Carbon::next(0..6) работает без ошибок
+                $nextDate = $current->copy()->next($dayOfWeek);
 
-            return $nextDate;
-        })
-        ->sort()
-        ->first();
+                // Если задано персональное время для этого дня — устанавливаем его
+                if (!empty($day['start_time'])) {
+                    [$hour, $minute] = explode(':', $day['start_time']);
+                    $nextDate->setTime((int)$hour, (int)$minute, 0);
+                }
+
+                return $nextDate;
+            })
+            ->sort()
+            ->first();
     }
 }
 ?>

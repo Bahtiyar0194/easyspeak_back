@@ -65,21 +65,21 @@ class ConferenceService
         $start_time, 
         $selected_days, 
         $all_lessons_is_conference, 
-        $only_future = false
+        $schedule_option
     ) {
         DB::transaction(function () use (
             $group_id, 
             $level_id, 
             $start_time, 
             $selected_days, 
-            $all_lessons_is_conference, 
-            $only_future
+            $all_lessons_is_conference,
+            $schedule_option
         ) {
             $group = Group::findOrFail($group_id);
             $operatorId = auth()->user()->user_id;
             $now = Carbon::now();
 
-            if ($only_future) {
+            if ($schedule_option === 'only_future') {
                 // === РЕЖИМ 1: Изменения только для будущих уроков ===
 
                 // 1. Находим крайний пройденный урок (по максимальной секции и sort_num)
@@ -401,7 +401,7 @@ class ConferenceService
 
         foreach ($lessons as $lesson) {
             $start = $current->copy();
-            $end = $start->copy()->addMinutes(config('app.conference_minute'))->toDateTimeString();
+            $end = $start->copy()->addMinutes(config('app.conference_minute'));
 
             $schedule[] = [
                 'lesson_id'  => $lesson->lesson_id,

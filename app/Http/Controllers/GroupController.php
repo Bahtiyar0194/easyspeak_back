@@ -745,7 +745,7 @@ class GroupController extends Controller
                 $edit_group->started_at, 
                 $request->selected_days, 
                 $edit_group->all_lessons_is_conference,
-                isset($request->only_future)
+                $request->schedule_option
             );
 
             if(isset($request->first_lesson_free)){
