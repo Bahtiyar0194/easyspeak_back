@@ -714,7 +714,7 @@ class ConferenceController extends Controller
                 return response()->json('Delete conference is success', 200);
             }
 
-            return response()->json('Delete conference is failed', 404);
+            return response()->json('Delete conference is failed', 403);
         }
         else{
             $conference = Conference::where('uuid', $request->uuid)

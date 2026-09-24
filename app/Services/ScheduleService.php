@@ -64,6 +64,7 @@ class ScheduleService
                 'courses_lang.course_name',
                 'course_levels_lang.level_name',
                 'conferences.mentor_id',
+                'conferences.operator_id',
                 'groups.group_name',
                 'groups.group_id',
                 'groups.current_price'
@@ -216,6 +217,7 @@ class ScheduleService
                 'b2c_conferences.end_time',
                 'b2c_conferences.is_free',
                 'b2c_conferences.mentor_id',
+                'b2c_conferences.operator_id',
                 'poster_file.target as poster_file',
                 'moderator.avatar as moderator_avatar',
                 'moderator.first_name as moderator_first_name',
