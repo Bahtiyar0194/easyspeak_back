@@ -2196,7 +2196,10 @@ class TaskController extends Controller
         $task_sentences = $this->taskService->getTaskSentences($find_task->task_id, $language, $task_options);
 
         foreach ($task_sentences as $sentence) {
-            $missing_words = MissingWord::where('task_sentence_id', $sentence->task_sentence_id)
+            // 1. Разбиваем предложение на массив слов по пробелу
+            $words = explode(' ', $sentence->sentence);
+
+            $missing_words_query = MissingWord::where('task_sentence_id', $sentence->task_sentence_id)
                 ->select(
                     'missing_words.missing_word_id',
                     'missing_words.word_position',
@@ -2204,10 +2207,27 @@ class TaskController extends Controller
                 );
 
             if ($task_options->find_word_option == 'with_hints') {
-                $missing_words = $missing_words->orderBy('word_position', 'asc');
-            } 
+                $missing_words_query->orderBy('word_position', 'asc');
+            }
 
-            $sentence->missingWords = $missing_words->get();
+            // 2. Получаем и фильтруем коллекцию
+            $sentence->missingWords = $missing_words_query->get()->filter(function ($missing_word) use ($words) {
+                $position = $missing_word->word_position;
+
+                // Если позиция null — оставляем запись без изменений
+                if (is_null($position)) {
+                    $missing_word->word = null;
+                    return true;
+                }
+
+                // Если позиция указана — проверяем существование индекса
+                if ($position >= 0 && isset($words[$position])) {
+                    $missing_word->word = $words[$position];
+                    return true; // Оставляем запись
+                }
+
+                return false; // Исключаем записи с выходящими за границы индексами
+            })->values();
         }
 
         $task_materials = $this->taskService->getTaskMaterials($find_task->task_id);
