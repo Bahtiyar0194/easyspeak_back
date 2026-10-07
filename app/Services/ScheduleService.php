@@ -158,7 +158,6 @@ class ScheduleService
 
                 $conference->is_gone = now() > $conference->end_time;
 
-            
                 $conference->date = Carbon::parse($conference->start_time)
                     ->translatedFormat('Y-m-d');
 
@@ -168,7 +167,6 @@ class ScheduleService
                 $conference->time = Carbon::parse($conference->start_time)
                     ->translatedFormat('H:i');
 
-                    
                 $conference->time_end = Carbon::parse($conference->end_time)
                     ->translatedFormat('H:i');
         
@@ -198,7 +196,7 @@ class ScheduleService
 
                 //Идет ли конференция сейчас?
                 $conference->is_active = now()->between(Carbon::parse($conference->start_time)->subMinutes(config('app.conference_before_minutes')), Carbon::parse($conference->end_time));
-            
+                
                 return $conference;
             });
         }
