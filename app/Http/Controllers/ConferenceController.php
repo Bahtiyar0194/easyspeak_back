@@ -252,6 +252,10 @@ class ConferenceController extends Controller
                 $allowed = true;
                 $conference->is_member = true;
             }
+
+            if(isset($conference->is_bought_status)){
+                $allowed = $conference->is_bought_status->is_bought;
+            }
         }
         else{
             if($isOwner){
