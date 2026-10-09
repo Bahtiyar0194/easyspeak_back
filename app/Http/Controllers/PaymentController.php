@@ -395,14 +395,14 @@ class PaymentController extends Controller
 
                 'submerchant_1' => [
                     'PublicId' => $apiPublicIdSubMerchantOne,
-                    'Amount' => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', ''),
-                    'Comission' => 100 - $school->comission_fee
+                    'Amount' => number_format(($amount / 100) * (100 - $school->commission_fee), 2, '.', ''),
+                    'Comission' => 100 - $school->commission_fee
                 ],
 
                 'submerchant_2' => [
                     'PublicId' => $apiPublicIdSubMerchantTwo,
-                    'Amount' => number_format(($amount / 100) * $school->comission_fee, 2, '.', ''),
-                    'Comission' => $school->comission_fee
+                    'Amount' => number_format(($amount / 100) * $school->commission_fee, 2, '.', ''),
+                    'Comission' => $school->commission_fee
                 ],
             ]);
 
@@ -419,11 +419,11 @@ class PaymentController extends Controller
                 'Splits' => [
                     [
                         "PublicId" => $apiPublicIdSubMerchantOne,
-                        "Amount" => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', '')
+                        "Amount" => number_format(($amount / 100) * (100 - $school->commission_fee), 2, '.', '')
                     ],
                     [
                         "PublicId" => $apiPublicIdSubMerchantTwo,
-                        "Amount" => number_format(($amount / 100) * $school->comission_fee, 2, '.', '')
+                        "Amount" => number_format(($amount / 100) * $school->commission_fee, 2, '.', '')
                     ]
                 ],
                 'JsonData' => json_encode([
