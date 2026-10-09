@@ -395,12 +395,14 @@ class PaymentController extends Controller
 
                 'submerchant_1' => [
                     'PublicId' => $apiPublicIdSubMerchantOne,
-                    'Amount' => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', '')
+                    'Amount' => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', ''),
+                    'Comission' => 100 - $school->comission_fee
                 ],
 
                 'submerchant_2' => [
                     'PublicId' => $apiPublicIdSubMerchantTwo,
-                    'Amount' => number_format(($amount / 100) * $school->comission_fee, 2, '.', '')
+                    'Amount' => number_format(($amount / 100) * $school->comission_fee, 2, '.', ''),
+                    'Comission' => $school->comission_fee
                 ],
             ]);
 

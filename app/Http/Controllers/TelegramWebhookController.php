@@ -135,7 +135,7 @@ class TelegramWebhookController extends Controller
 
             $callback = $update['callback_query'];
             $chatId = $callback['message']['chat']['id'];
-            $userName = $callback['message']['from']['username'];
+            $userName = $callback['message']['from']['username'] ?? null;
             $messageId = $callback['message']['message_id'];
             $data = $callback['data'];
 
@@ -309,8 +309,8 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        $chatId = $update['message']['chat']['id'];
-        $userName = $update['message']['from']['username'];
+        $chatId = data_get($update, 'message.chat.id');
+        $userName = $update['message']['from']['username'] ?? null;
         $text = trim($update['message']['text'] ?? '');
         [$cmd, $payload] = array_pad(explode(' ', $text, 2), 2, null);
 
