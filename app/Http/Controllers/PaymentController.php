@@ -386,6 +386,24 @@ class PaymentController extends Controller
             $apiPublicIdSubMerchantOne = $school->tiptop_public_id;
             $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_PUBLIC_ID');
 
+
+            info('TipTop', [
+                'marketplace' => [
+                    'PublicId' => $apiPublicIdMarketplace,
+                    'Amount' => number_format(($amount), 2, '.', '')
+                ],
+
+                'submerchant_1' => [
+                    'PublicId' => $apiPublicIdSubMerchantOne,
+                    'Amount' => number_format(($amount / 100) * (100 - $school->comission_fee), 2, '.', '')
+                ],
+
+                'submerchant_2' => [
+                    'PublicId' => $apiPublicIdSubMerchantTwo,
+                    'Amount' => number_format(($amount / 100) * $school->comission_fee, 2, '.', '')
+                ],
+            ]);
+
             $response = Http::withBasicAuth($apiPublicIdMarketplace, $apiSecretKeyMarketplace)
             ->withHeaders([
                 'Content-Type' => 'application/json',
