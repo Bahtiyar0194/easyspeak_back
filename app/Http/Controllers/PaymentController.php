@@ -384,7 +384,7 @@ class PaymentController extends Controller
             $apiSecretKeyMarketplace = env('TIPTOPPAY_SECRET_KEY_MARKETPLACE');
 
             $apiPublicIdSubMerchantOne = $school->tiptop_public_id;
-            $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_PUBLIC_ID');
+            $apiPublicIdSubMerchantTwo = env('TIPTOPPAY_SUBMERCHANT_PUBLIC_ID');
 
 
             info('TipTop', [
