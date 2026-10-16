@@ -391,9 +391,14 @@ class ConferenceService
         }
 
         $lessons = $lessonsQuery
-            ->select('lessons.lesson_id', 'course_sections.section_id', 'lessons.sort_num')
+            ->select(
+                'lessons.lesson_id', 
+                'course_sections.section_id', 
+                'course_sections.sort_num', 
+                'lessons.sort_num'
+            )
             ->distinct()
-            ->orderBy('course_sections.section_id', 'asc')
+            ->orderBy('course_sections.sort_num', 'asc')
             ->orderBy('lessons.sort_num', 'asc')
             ->get();
 

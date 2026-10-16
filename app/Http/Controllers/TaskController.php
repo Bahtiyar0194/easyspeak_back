@@ -156,10 +156,11 @@ class TaskController extends Controller
                 ->where('course_sections.level_id', '=', $level->level_id)
                 ->select(
                     'course_sections.section_id',
+                    'course_sections.sort_num',
                     'course_sections.section_name'
                 )
                 ->distinct()
-                ->orderBy('course_sections.section_id', 'asc')
+                ->orderBy('course_sections.sort_num', 'asc')
                 ->get();
 
                 $level->sections = $sections;

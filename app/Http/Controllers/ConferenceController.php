@@ -114,10 +114,11 @@ class ConferenceController extends Controller
                 $sections = CourseSection::where('course_sections.level_id', '=', $group->level_id)
                 ->select(
                     'course_sections.section_id',
+                    'course_sections.sort_num',
                     'course_sections.section_name'
                 )
                 ->distinct()
-                ->orderBy('course_sections.section_id', 'asc')
+                ->orderBy('course_sections.sort_num', 'asc')
                 ->get();
 
                 $group->sections = $sections;
