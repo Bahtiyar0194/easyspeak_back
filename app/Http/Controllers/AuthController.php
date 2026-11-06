@@ -20,16 +20,17 @@ use App\Models\TelegramToken;
 use Mail;
 use App\Mail\PasswordRecoveryMail;
 
-use App\Services\TwilioWhatsAppService;
+use App\Services\GreenApiService;
+
 
 class AuthController extends Controller
 {
-    protected $twilioWhatsAppService;
+    protected $greenApiService;
 
-    public function __construct(Request $request, TwilioWhatsAppService $twilioWhatsAppService)
+    public function __construct(Request $request, GreenApiService $greenApiService)
     {
         //app()->setLocale($request->header('Accept-Language'));
-        $this->twilioWhatsAppService = $twilioWhatsAppService;
+        $this->greenApiService = $greenApiService;
     }
 
     public function register(Request $request)
@@ -105,7 +106,7 @@ class AuthController extends Controller
             return response()->json(['registration_failed' => 'First registration: true or false'], 422);
         }
 
-        //$this->twilioWhatsAppService->sendMessage('register_template', [$request->first_name], $request->phone);
+        //$this->greenApiService->sendMessage($request->phone, 'Здравствуйте '.$request->first_name.'! Рады привествовать вас на сайте https://easyspeak.kz');
 
         $site_configuration = SiteConfiguration::find(1);
 

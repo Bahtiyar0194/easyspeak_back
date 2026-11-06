@@ -40,4 +40,10 @@ return [
     'telegram' => [
         'token' => env('TELEGRAM_BOT_TOKEN'),
     ],
+
+    'greenapi' => [
+        'instance_id' => env('GREEN_API_INSTANCE_ID'),
+        'api_token' => env('GREEN_API_TOKEN'),
+        'api_url' => env('GREEN_API_URL')
+    ],
 ];

@@ -240,7 +240,7 @@ class ConferenceController extends Controller
                 $allowed = true;
             }
         
-            if ($conference->mentor_id == $auth_user->user_id || $conference->operator_id == $auth_user->user_id) {
+            if($conference->mentor_id == $auth_user->user_id || $conference->operator_id == $auth_user->user_id) {
                 $allowed = true;
             }
         
@@ -249,8 +249,7 @@ class ConferenceController extends Controller
             ->where('member_id', $auth_user->user_id)
             ->exists();
 
-            if ($isMember) {
-                $allowed = true;
+            if($isMember) {
                 $conference->is_member = true;
             }
 

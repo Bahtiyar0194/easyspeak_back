@@ -170,7 +170,7 @@ class GroupController extends Controller
                 'operator.first_name as operator_first_name',
                 'operator.last_name as operator_last_name',
                 'operator.avatar as operator_avatar',
-                DB::raw('(SELECT COUNT(*) FROM group_members WHERE group_members.group_id = groups.group_id) as members_count'),
+                DB::raw('(SELECT COUNT(*) FROM group_members WHERE group_members.group_id = groups.group_id AND group_members.status_type_id = 1) as members_count'),
                 'types_of_status.color as status_color',
                 'types_of_status_lang.status_type_name'
             )
