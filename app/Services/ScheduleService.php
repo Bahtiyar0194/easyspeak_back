@@ -144,7 +144,7 @@ class ScheduleService
                         
                         $query->$method(function ($subQuery) use ($user) {
                             $subQuery->where('conferences.mentor_id', '=', $user->user_id)
-                                    ->orWhere('group_members.member_id', '=', $user->user_id);
+                            ->orWhere('group_members.member_id', '=', $user->user_id);
                         });
                     }
                 });
