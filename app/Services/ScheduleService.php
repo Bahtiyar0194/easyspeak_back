@@ -131,16 +131,30 @@ class ScheduleService
 
             if ($isOwner || $isMentor || $isLearner) {
                 $conferences->where(function ($query) use ($isOwner, $isMentor, $isLearner, $user) {
+                    
+                    // Если пользователь — владелец, он видит всю школу
                     if ($isOwner) {
-                        $query->orWhere('mentor.school_id', '=', $user->school_id);
+                        $query->where('mentor.school_id', '=', $user->school_id);
                     }
+
+                    // Если ментор или ученик, добавляем их персональные условия
                     if ($isMentor || $isLearner) {
-                        $query->orWhere('conferences.mentor_id', '=', $user->user_id)
-                        ->orWhere('group_members.member_id', '=', $user->user_id);
+                        // Используем метод с замыканием, чтобы orWhere не конфликтовал с условием владельца (если $isOwner тоже true)
+                        $method = $isOwner ? 'orWhere' : 'where';
+                        
+                        $query->$method(function ($subQuery) use ($user) {
+                            $subQuery->where('conferences.mentor_id', '=', $user->user_id)
+                                    ->orWhere('group_members.member_id', '=', $user->user_id);
+                        });
                     }
                 });
-            }
 
+                // Статус применяем ТОЛЬКО для менторов/учеников, либо выносим его правильно,
+                // чтобы он не ломал выборку владельца (если это требуется по бизнес-логике):
+                if (!$isOwner) {
+                    $conferences->where('group_members.status_type_id', '=', 1);
+                }
+            }
 
             $conferences = $conferences->get()->map(function ($conference) use($isOnlyLearner, $user) {
 
