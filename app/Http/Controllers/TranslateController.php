@@ -14,7 +14,7 @@ class TranslateController extends Controller
 
         if(isset($transcription) && $transcription == 'true'){ 
             $responseTranscription = Http::withToken(env('OPENAI_API_KEY'))->post(env('OPENAI_API_URL').'/chat/completions', [
-                'model' => 'gpt-4-turbo',
+                'model' => 'gpt-6-astra',
                 'messages' => [
                     [
                         'role' => 'system',
@@ -26,7 +26,7 @@ class TranslateController extends Controller
         }
 
         $responseRu = Http::withToken(env('OPENAI_API_KEY'))->post(env('OPENAI_API_URL').'/chat/completions', [
-            'model' => 'gpt-4-turbo',
+            'model' => 'gpt-6-astra',
             'messages' => [
                 [
                     'role' => 'system',
@@ -37,7 +37,7 @@ class TranslateController extends Controller
         ]);
 
         $responseKk = Http::withToken(env('OPENAI_API_KEY'))->post(env('OPENAI_API_URL').'/chat/completions', [
-            'model' => 'gpt-4-turbo',
+            'model' => 'gpt-6-astra',
             'messages' => [
                 [
                     'role' => 'system',
