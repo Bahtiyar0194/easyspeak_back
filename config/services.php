@@ -46,4 +46,11 @@ return [
         'api_token' => env('GREEN_API_TOKEN'),
         'api_url' => env('GREEN_API_URL')
     ],
+
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'url' => env('OPENAI_API_URL'),
+        // Модель для проверки ответов в задании «Ответь на вопросы»
+        'answer_check_model' => env('OPENAI_ANSWER_CHECK_MODEL', 'gpt-4o'),
+    ],
 ];

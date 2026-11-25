@@ -32,7 +32,6 @@ use App\Tasks\ChooseTheRightAnswerTaskHandler;
 use App\Tasks\PronunciationCheckTaskHandler;
 
 use DB;
-use Http;
 
 use Illuminate\Http\Request;
 
@@ -261,123 +260,18 @@ class TaskController extends Controller
     }
 
     public function change_task_result(Request $request){
-        $completed_task = CompletedTask::findOrFail($request->completed_task_id);
+        $completed_task = CompletedTask::leftJoin('users as learner', 'learner.user_id', '=', 'completed_tasks.learner_id')
+        ->where('learner.school_id', '=', auth()->user()->school_id)
+        ->select('completed_tasks.*')
+        ->findOrFail($request->completed_task_id);
+
         $answers = json_decode($request->answers);
 
         return $this->taskService->changeTaskResult($completed_task->completed_task_id, $answers);
     }
 
     public function check_answers(Request $request){
-        
-        $auth_user = auth()->user();
-        $task = Task::findOrFail($request->task_id);
-
-        $task_result = [];
-        $questions = json_decode($request->questions);
-
-        foreach ($questions as $key => $question) {
-            if (strlen(trim($question->userInput)) > 0) {
-                if($question->checking_by == 'by_ai' || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
-                    $prompt = "Question: {$question->sentence}\nLearner answer: {$question->userInput}";
-    
-                    $response = Http::withHeaders([
-                        'Authorization' => 'Bearer ' . env('OPENAI_API_KEY'),
-                        'Content-Type' => 'application/json',
-                    ])->post(env('OPENAI_API_URL').'/chat/completions', [
-                        'model' => 'gpt-4o', // или 'gpt-3.5-turbo'
-                        'messages' => [
-                            [
-                                'role' => 'system',
-                                'content' => <<<EOT
-                                    You are an English language examiner. Your task is to evaluate a student's answer to a basic question (A1–A2 level).
-
-                                    For each answer, assess:
-                                    - whether it is grammatically and semantically correct
-                                    - whether it matches the expected structure
-
-                                    Respond strictly in JSON format:
-                                    {
-                                    "grade": 1 or 0,
-                                    "comment": "A short comment, max 1-2 sentence. The correct answer to the question should be as an example. Mark the correct answer in the comment with the <b> tag and give recommendations if there are similar correction options."
-                                    }
-
-                                    Do not add any extra text before or after the JSON.
-
-                                    If the answer is grammatically correct and logical, return 1. A learner's partially correct answer won't do.
-                                    EOT,
-                            ],
-                            [
-                                'role' => 'user',
-                                'content' => $prompt,
-                            ],
-                        ],
-                        'temperature' => 0,
-                    ]);
-    
-                    if ($response->successful()) {
-                        $answer = $response['choices'][0]['message']['content'] ?? '';
-
-
-                        // Пытаемся вытащить JSON
-                        if (preg_match('/\{.*\}/s', $answer, $matches)) {
-                            $jsonAnswer = $matches[0];
-
-                            $parsed = json_decode($jsonAnswer, true);
-
-                            if (json_last_error() === JSON_ERROR_NONE) {
-                                $grade = $parsed['grade'] ?? null;
-                                $comment = $parsed['comment'] ?? null;
-
-                                if (isset($grade)) {
-                                    array_push($task_result, [
-                                        'question_id' => $question->sentence_id,
-                                        'is_correct' => $grade,
-                                        'right_answer' => ($grade === 1 || $grade === '1') ? "<p class='font-medium mb-0 text-success underline'>{$question->userInput}</p>" : null,
-                                        'user_answer' => ($grade === 0 || $grade === '0') ? "<p class='font-medium mb-0 text-danger underline'>{$question->userInput}</p>" : null,
-                                        'comment' => $comment,
-                                    ]);
-                                } else {
-                                    array_push($task_result, [
-                                        'question_id' => $question->sentence_id,
-                                        'user_answer' => $question->userInput,
-                                    ]);
-                                }
-                            } else {
-                                array_push($task_result, [
-                                    'question_id' => $question->sentence_id,
-                                    'user_answer' => $question->userInput,
-                                ]);
-                            }
-                        } else {
-                            array_push($task_result, [
-                                'question_id' => $question->sentence_id,
-                                'user_answer' => $question->userInput,
-                            ]);
-                        }
-                    }
-                    else{
-                        array_push($task_result, [
-                            'question_id' => $question->sentence_id,
-                            'user_answer' => $question->userInput,
-                        ]);
-                    }
-                }
-                else{
-                    array_push($task_result, [
-                        'question_id' => $question->sentence_id,
-                        'user_answer' => $question->userInput,
-                    ]);
-                }
-            }
-            else{
-                array_push($task_result, [
-                    'question_id' => $question->sentence_id,
-                    'is_correct' => 0
-                ]);
-            }
-        }
-
-        return $this->taskService->saveTaskResult($task->task_id, $task->lesson_id, json_decode(json_encode($task_result)));
+        return app(AnswerTheQuestionsTaskHandler::class)->checkAnswers($request);
     }
 
     public function get_task_results(Request $request)
@@ -387,14 +281,35 @@ class TaskController extends Controller
     
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
-    
-        // Получаем параметры лимита на страницу
-        $per_page = $request->per_page ?: 10;
-    
-        // Получаем параметры сортировки
-        $sortKey = $request->input('sort_key', 'completed_tasks.created_at');
-        $sortDirection = $request->input('sort_direction', 'asc');
-    
+
+        // Результаты учеников видят только сотрудники школы
+        if (!$auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])) {
+            return response()->json('Access denied', 403);
+        }
+
+        // Получаем параметры лимита на страницу (не больше 100)
+        $per_page = min(max((int) $request->per_page ?: 10, 1), 100);
+
+        // Сортировка только по разрешённым колонкам: ключ приходит с клиента.
+        // lessons_lang.lesson_name — ключ фронтенда, такой таблицы в запросе нет
+        $sortable = [
+            'tasks_lang.task_name' => 'tasks_lang.task_name',
+            'tasks.task_slug' => 'tasks.task_slug',
+            'types_of_tasks_lang.task_type_name' => 'types_of_tasks_lang.task_type_name',
+            'lessons_lang.lesson_name' => 'lessons.lesson_name',
+            'lessons.lesson_name' => 'lessons.lesson_name',
+            'course_sections.section_name' => 'course_sections.section_name',
+            'course_levels_lang.level_name' => 'course_levels_lang.level_name',
+            'courses_lang.course_name' => 'courses_lang.course_name',
+            'groups.group_name' => 'groups.group_name',
+            'learner_last_name' => 'learner_last_name',
+            'mentor_last_name' => 'mentor_last_name',
+            'completed_tasks.created_at' => 'completed_tasks.created_at',
+            'completed_tasks.is_completed' => 'completed_tasks.is_completed',
+        ];
+        $sortKey = $sortable[$request->input('sort_key')] ?? 'completed_tasks.created_at';
+        $sortDirection = strtolower((string) $request->input('sort_direction')) === 'desc' ? 'desc' : 'asc';
+
         // Строим основной запрос
         $query = CompletedTask::leftJoin('tasks', 'tasks.task_id', '=', 'completed_tasks.task_id')
             ->leftJoin('tasks_lang', 'tasks_lang.task_id', '=', 'tasks.task_id')
@@ -520,10 +435,6 @@ class TaskController extends Controller
             $query->whereIn('completed_tasks.mentor_id', $mentors_id);
         }
 
-        if (!empty($lesson_id)) {
-            $query->where('lessons.lesson_id', '=', $lesson_id);
-        }
-
         // Фильтрация по дате создания
         if ($created_at_from && $created_at_to) {
             $query->whereBetween('completed_tasks.created_at', [$created_at_from . ' 00:00:00', $created_at_to . ' 23:59:59']);
@@ -534,8 +445,11 @@ class TaskController extends Controller
         }
 
         
-        if (!empty($is_completed)) {
-            $query->where('completed_tasks.is_completed', '=', $is_completed);
+        // Фронтенд отправляет «не проверено» как '0' в кавычках, чтобы обойти empty('0')
+        $is_completed = trim((string) $is_completed, "'\" ");
+
+        if (in_array($is_completed, ['0', '1'], true)) {
+            $query->where('completed_tasks.is_completed', '=', (int) $is_completed);
         }
     
         // Сортировка

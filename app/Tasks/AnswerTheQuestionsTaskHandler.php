@@ -4,6 +4,7 @@ namespace App\Tasks;
 
 use App\Models\Task;
 use App\Models\TaskQuestion;
+use App\Services\AiAnswerChecker;
 use App\Services\SchoolService;
 use App\Services\TaskService;
 use Illuminate\Http\Request;
@@ -19,13 +20,114 @@ use Illuminate\Http\Request;
  */
 class AnswerTheQuestionsTaskHandler extends TaskHandler
 {
+    /** Максимальная длина ответа ученика, остальное обрезается */
+    const MAX_ANSWER_LENGTH = 1000;
+
     /** @var SchoolService */
     protected $schoolService;
 
-    public function __construct(TaskService $taskService, SchoolService $schoolService)
+    /** @var AiAnswerChecker */
+    protected $aiAnswerChecker;
+
+    public function __construct(TaskService $taskService, SchoolService $schoolService, AiAnswerChecker $aiAnswerChecker)
     {
         parent::__construct($taskService);
         $this->schoolService = $schoolService;
+        $this->aiAnswerChecker = $aiAnswerChecker;
+    }
+
+    /**
+     * Проверить ответы ученика и сохранить результат.
+     *
+     * questions: [{task_question_id, userInput}]. Текст вопроса и способ проверки (checking_by)
+     * берутся из БД, а не из запроса: иначе ученик мог подменить вопрос или способ проверки.
+     * Пустой ответ — неверный; by_ai (или ИИ-школа) — оценка модели; иначе ответ ждёт ментора.
+     */
+    public function checkAnswers(Request $request)
+    {
+        $auth_user = auth()->user();
+
+        $task = Task::where('task_type_id', '=', $this->taskTypeId())->findOrFail($request->task_id);
+
+        // До обращения к OpenAI: не участник группы не должен расходовать запросы
+        [$allowed] = $this->taskService->resolveResultMentor($task->task_id, $auth_user);
+
+        if (!$allowed) {
+            return $this->taskService->notMemberResponse();
+        }
+
+        $answers = [];
+
+        foreach ($this->decodeJsonArray($request, 'questions') as $submitted) {
+            if (isset($submitted->task_question_id)) {
+                $answers[$submitted->task_question_id] = trim(mb_substr((string) ($submitted->userInput ?? ''), 0, self::MAX_ANSWER_LENGTH));
+            }
+        }
+
+        // Только вопросы этого задания, в порядке отправки
+        $questions = TaskQuestion::leftJoin('sentences', 'task_questions.question_id', '=', 'sentences.sentence_id')
+            ->where('task_questions.task_id', '=', $task->task_id)
+            ->whereIn('task_questions.task_question_id', array_keys($answers))
+            ->select(
+                'task_questions.task_question_id',
+                'task_questions.question_id',
+                'task_questions.checking_by',
+                'sentences.sentence'
+            )
+            ->get()
+            ->keyBy('task_question_id');
+
+        $check_all_by_ai = $this->schoolService->isAiSchoolDomain($auth_user->school_id);
+        $to_ai = [];
+
+        foreach ($answers as $task_question_id => $answer) {
+            $question = $questions->get($task_question_id);
+
+            if ($question && $answer !== '' && ($question->checking_by === 'by_ai' || $check_all_by_ai)) {
+                $to_ai[$task_question_id] = ['question' => (string) $question->sentence, 'answer' => $answer];
+            }
+        }
+
+        $grades = $this->aiAnswerChecker->checkMany($to_ai);
+
+        $task_result = [];
+
+        foreach ($answers as $task_question_id => $answer) {
+            $question = $questions->get($task_question_id);
+
+            if (!$question) {
+                continue;
+            }
+
+            $task_result[] = $this->answerResult($question->question_id, $answer, $grades[$task_question_id] ?? null);
+        }
+
+        return $this->taskService->saveTaskResult($task->task_id, $task->lesson_id, json_decode(json_encode($task_result)));
+    }
+
+    /**
+     * Результат по одному вопросу в формате task_answers.
+     * user_answer без оценки хранится как текст; обёрнутый в HTML — экранируется (выводится через v-html).
+     */
+    protected function answerResult($question_id, string $answer, ?array $grade): array
+    {
+        if ($answer === '') {
+            return ['question_id' => $question_id, 'is_correct' => 0];
+        }
+
+        if ($grade === null) {
+            return ['question_id' => $question_id, 'user_answer' => $answer];
+        }
+
+        $escaped = e($answer);
+
+        return [
+            'question_id' => $question_id,
+            'is_correct' => $grade['grade'],
+            'right_answer' => $grade['grade'] === 1 ? "<p class='font-medium mb-0 text-success underline'>{$escaped}</p>" : null,
+            'user_answer' => $grade['grade'] === 0 ? "<p class='font-medium mb-0 text-danger underline'>{$escaped}</p>" : null,
+            'comment' => $grade['comment'],
+        ];
     }
 
     protected function taskTypeId(): int

@@ -21,6 +21,7 @@ use App\Models\Block;
 use App\Models\UploadConfiguration;
 use App\Models\MaterialType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManagerStatic as Image;
 
@@ -264,12 +265,70 @@ class TaskService
         }
     }
 
+    /**
+     * Кто проверяет результат задания пользователя.
+     *
+     * Возвращает [может_сдавать, mentor_id]:
+     * сотрудник школы — сам себе ментор; уровень «доступен всегда» или ИИ-школа — без ментора;
+     * иначе — ментор активной группы ученика по уровню задания. Не участник группы — [false, null].
+     */
+    public function resolveResultMentor($task_id, $auth_user): array
+    {
+        if($auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])){
+            return [true, $auth_user->user_id];
+        }
+
+        $level = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+        ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+        ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+        ->select(
+            'course_levels.is_available_always'
+        )
+        ->where('tasks.task_id', '=', $task_id)
+        ->first();
+
+        if($level->is_available_always === 1 || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            return [true, null];
+        }
+
+        $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
+        ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
+        ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
+        ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
+        ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
+        ->where('tasks.task_id', '=', $task_id)
+        ->where('group_members.member_id', '=', $auth_user->user_id)
+        ->where('group_members.status_type_id', '=', 1)
+        ->select(
+            'groups.mentor_id',
+        )
+        ->first();
+
+        if(!isset($is_member)){
+            return [false, null];
+        }
+
+        return [true, $is_member->mentor_id];
+    }
+
+    public function notMemberResponse()
+    {
+        return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
+    }
+
     public function saveTaskResult($task_id, $lesson_id, $task_result){
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
         $is_completed = true;
 
         if(count($task_result) > 0){
+            // Проверяем право сдавать задание до удаления прежнего результата
+            [$allowed, $mentor_id] = $this->resolveResultMentor($task_id, $auth_user);
+
+            if(!$allowed){
+                return $this->notMemberResponse();
+            }
+
             // Удаляем старые результаты выполнения задания
             CompletedTask::where('task_id', '=', $task_id)
             ->where('learner_id', '=', $auth_user->user_id)
@@ -278,45 +337,6 @@ class TaskService
             $new_completed_task = new CompletedTask();
             $new_completed_task->task_id = $task_id;
             $new_completed_task->learner_id = $auth_user->user_id;
-
-            if($auth_user->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])){
-                $mentor_id = $auth_user->user_id;
-            }
-            else{
-                $level = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
-                ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
-                ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
-                ->select(
-                    'course_levels.is_available_always'
-                )
-                ->where('tasks.task_id', '=', $task_id)
-                ->first();
-
-                if($level->is_available_always === 1 || $this->schoolService->isAiSchoolDomain($auth_user->school_id)){
-                    $mentor_id = null;
-                }
-                else{
-                    $is_member = Task::leftJoin('lessons', 'lessons.lesson_id', '=', 'tasks.lesson_id')
-                    ->leftJoin('course_sections', 'course_sections.section_id', '=', 'lessons.section_id')
-                    ->leftJoin('course_levels', 'course_levels.level_id', '=', 'course_sections.level_id')
-                    ->leftJoin('groups', 'groups.level_id', '=', 'course_levels.level_id')
-                    ->leftJoin('group_members', 'group_members.group_id', '=', 'groups.group_id')
-                    ->where('tasks.task_id', '=', $task_id)
-                    ->where('group_members.member_id', '=', $auth_user->user_id)
-                    ->where('group_members.status_type_id', '=', 1)
-                    ->select(
-                        'groups.mentor_id',
-                    )
-                    ->first();
-            
-                    if(!isset($is_member)){
-                        // Если пользователь не является участником группы, возвращаем ошибку
-                        return response()->json(['not_a_member' => [trans('auth.you_are_not_a_member_of_group')]], 422);
-                    }
-
-                    $mentor_id = $is_member->mentor_id;
-                }
-            } 
 
             foreach ($task_result as $key => $result) {
                 if(!isset($result->is_correct)){
@@ -424,42 +444,49 @@ class TaskService
         $auth_user = auth()->user();
         $is_completed = true;
 
-        if(count($answers) > 0){
+        if(is_array($answers) && count($answers) > 0){
 
             foreach ($answers as $key => $answer) {
-                if($answer->is_correct === null){
+                if(($answer->is_correct ?? null) === null){
                     return response()->json(trans('auth.rate_the_unverified_answers'), 422);
                 }
             }
 
             foreach ($answers as $key => $answer) {
-                if($answer->is_correct === 0 && $answer->comment === null){
+                if($answer->is_correct === 0 && ($answer->comment ?? null) === null){
                     return response()->json(trans('auth.please_comment_on_all_incorrect_answers'), 422);
                 }
             }
 
-            foreach ($answers as $key => $answer) {
-                $task_answer = TaskAnswer::findOrFail($answer->task_answer_id);
+            DB::transaction(function () use ($answers, $completed_task_id) {
+                foreach ($answers as $key => $answer) {
+                    // Ответ должен принадлежать этому результату, иначе можно было изменить чужой
+                    $task_answer = TaskAnswer::where('completed_task_id', '=', $completed_task_id)
+                    ->findOrFail($answer->task_answer_id ?? null);
 
-                $task_answer->is_correct = $answer->is_correct;
+                    // Текст ответа берём из БД (а не из запроса) и экранируем: он выводится через v-html
+                    $user_answer = e($task_answer->user_answer);
 
-                if($answer->is_correct === 1){
-                    $task_answer->right_answer = "<p class='font-medium mb-0 text-success underline'>{$answer->user_answer}</p>";
-                    $task_answer->user_answer = null;
-                    $task_answer->comment = null;
+                    $task_answer->is_correct = $answer->is_correct;
+
+                    if($answer->is_correct === 1){
+                        $task_answer->right_answer = "<p class='font-medium mb-0 text-success underline'>{$user_answer}</p>";
+                        $task_answer->user_answer = null;
+                        $task_answer->comment = null;
+                    }
+                    else{
+                        $task_answer->right_answer = null;
+                        $task_answer->user_answer = "<p class='font-medium mb-0 text-danger underline'>{$user_answer}</p>";
+                        $task_answer->comment = $answer->comment;
+                    }
+
+                    $task_answer->save();
                 }
-                else{
-                    $task_answer->right_answer = null;
-                    $task_answer->user_answer = "<p class='font-medium mb-0 text-danger underline'>{$answer->user_answer}</p>";
-                    $task_answer->comment = $answer->comment;
-                }
 
-                $task_answer->save();
-            }
-
-            $completed_task = CompletedTask::findOrFail($completed_task_id);
-            $completed_task->is_completed = true;
-            $completed_task->save();
+                $completed_task = CompletedTask::findOrFail($completed_task_id);
+                $completed_task->is_completed = true;
+                $completed_task->save();
+            });
 
             return response()->json('success', 200);
         }
