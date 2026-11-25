@@ -106,9 +106,9 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [MediaController::class, 'get_attributes']);
             Route::post('/get', [MediaController::class, 'get_files']);
-            Route::post('/add', [MediaController::class, 'add_file'])->middleware('check_roles');
-            Route::post('/replace/{file_id}', [MediaController::class, 'replace_file'])->middleware('check_roles');
-            Route::post('/convert/{file_id}', [MediaController::class, 'convert_file'])->middleware('check_roles');
+            Route::post('/add', [MediaController::class, 'add_file'])->middleware('check_roles:17');
+            Route::post('/replace/{file_id}', [MediaController::class, 'replace_file'])->middleware('check_roles:17');
+            Route::post('/convert/{file_id}', [MediaController::class, 'convert_file'])->middleware('check_roles:17');
 
             Route::get('/get/file_info/{file_id}', [MediaController::class, 'get_file_info']);
             Route::get('/get_hls_video/{file_name}', [MediaController::class, 'get_hls_video']);
@@ -145,7 +145,7 @@ Route::group([
         'prefix' => 'conferences'
     ], function ($router) {
         Route::group(['middleware' => ['auth:sanctum']], function () {
-            Route::post('/create', [ConferenceController::class, 'create'])->middleware('check_roles');
+            Route::post('/create', [ConferenceController::class, 'create'])->middleware('check_roles:27');
             Route::post('/delete/{uuid}', [ConferenceController::class, 'delete']);
             Route::get('/get_attributes', [ConferenceController::class, 'get_attributes']);
             Route::get('/get_current_conferences', [ConferenceController::class, 'get_current_conferences']);
@@ -175,8 +175,8 @@ Route::group([
             Route::get('/get/{user_id}', [UserController::class, 'get_user']);
             Route::get('/get_roles', [UserController::class, 'get_roles']);
             Route::get('/get_user_attributes', [UserController::class, 'get_user_attributes']);
-            Route::post('/invite', [UserController::class, 'invite_user'])->middleware('check_roles'); 
-            Route::post('/update', [UserController::class, 'update_user'])->middleware('check_roles');
+            Route::post('/invite', [UserController::class, 'invite_user'])->middleware('check_roles:1'); 
+            Route::post('/update', [UserController::class, 'update_user'])->middleware('check_roles:2');
         });
     });
 
@@ -186,10 +186,10 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_group_attributes', [GroupController::class, 'get_group_attributes']);
             Route::post('/get', [GroupController::class, 'get_groups']);
-            Route::post('/create', [GroupController::class, 'create'])->middleware('check_roles');
+            Route::post('/create', [GroupController::class, 'create'])->middleware('check_roles:3');
             Route::get('/get/{group_id}', [GroupController::class, 'get_group']);
-            Route::post('/update/{group_id}', [GroupController::class, 'update'])->middleware('check_roles');
-            Route::post('/save_payments', [GroupController::class, 'save_payments'])->middleware('check_roles');
+            Route::post('/update/{group_id}', [GroupController::class, 'update'])->middleware('check_roles:4');
+            Route::post('/save_payments', [GroupController::class, 'save_payments'])->middleware('check_roles:31');
         });
     });
 
@@ -223,12 +223,12 @@ Route::group([
             Route::post('/get_level_grade', [CourseController::class, 'get_level_grade']);
             Route::post('/get_lesson_grade', [CourseController::class, 'get_lesson_grade']);
 
-            Route::post('/{course_slug}/{level_slug}/add_section', [CourseController::class, 'add_section'])->middleware('check_roles');
-            Route::post('/{course_slug}/{level_slug}/{section_id}/add_lesson', [CourseController::class, 'add_lesson'])->middleware('check_roles');
-            Route::post('/add_material/{lesson_id}', [CourseController::class, 'add_material'])->middleware('check_roles');
-            Route::post('/edit_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'edit_material'])->middleware('check_roles');
-            Route::post('/order_materials/{lesson_id}', [CourseController::class, 'order_materials'])->middleware('check_roles');
-            Route::post('/delete_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'delete_material'])->middleware('check_roles');
+            Route::post('/{course_slug}/{level_slug}/add_section', [CourseController::class, 'add_section'])->middleware('check_roles:15');
+            Route::post('/{course_slug}/{level_slug}/{section_id}/add_lesson', [CourseController::class, 'add_lesson'])->middleware('check_roles:7');
+            Route::post('/add_material/{lesson_id}', [CourseController::class, 'add_material'])->middleware('check_roles:17');
+            Route::post('/edit_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'edit_material'])->middleware('check_roles:24');
+            Route::post('/order_materials/{lesson_id}', [CourseController::class, 'order_materials'])->middleware('check_roles:20');
+            Route::post('/delete_material/{lesson_id}/{lesson_material_id}', [CourseController::class, 'delete_material'])->middleware('check_roles:23');
 
             Route::post('/promo/find', [CourseController::class, 'find_promo_code']);
         });
@@ -241,10 +241,10 @@ Route::group([
             Route::get('/get_dictionary_attributes', [DictionaryController::class, 'get_dictionary_attributes']);
             Route::post('/get', [DictionaryController::class, 'get_words']);
             Route::get('/get/{word_id}', [DictionaryController::class, 'get_word']);
-            Route::post('/add', [DictionaryController::class, 'add'])->middleware('check_roles');
-            Route::post('/update/{word_id}', [DictionaryController::class, 'update'])->middleware('check_roles');
+            Route::post('/add', [DictionaryController::class, 'add'])->middleware('check_roles:9');
+            Route::post('/update/{word_id}', [DictionaryController::class, 'update'])->middleware('check_roles:10');
 
-            Route::post('/add_lesson_dictionary/{lesson_id}', [DictionaryController::class, 'add_lesson_dictionary'])->middleware('check_roles');
+            Route::post('/add_lesson_dictionary/{lesson_id}', [DictionaryController::class, 'add_lesson_dictionary'])->middleware('check_roles:13');
             Route::get('/get_lesson_dictionary/{lesson_id}', [DictionaryController::class, 'get_lesson_dictionary']);
         });
     });
@@ -256,8 +256,8 @@ Route::group([
             Route::get('/get_sentence_attributes', [SentenceController::class, 'get_sentence_attributes']);
             Route::post('/get', [SentenceController::class, 'get_sentences']);
             Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
-            Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
-            Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
+            Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles:11');
+            Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles:12');
         });
     });
 
@@ -267,72 +267,72 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_task_attributes', [TaskController::class, 'get_task_attributes']);
             Route::get('/get_lesson_tasks/{lesson_id}', [TaskController::class, 'get_lesson_tasks']);
-            Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles');
-            Route::post('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles');
-            Route::post('/save_result/{task_id}', [TaskController::class, 'save_task_result'])->middleware('check_roles');
-            Route::post('/change_result/{completed_task_id}', [TaskController::class, 'change_task_result'])->middleware('check_roles');
-            Route::post('/check_answers/{task_id}', [TaskController::class, 'check_answers'])->middleware('check_roles');
+            Route::post('/order/{lesson_id}', [TaskController::class, 'order'])->middleware('check_roles:19');
+            Route::post('/delete_task/{lesson_id}/{task_id}', [TaskController::class, 'delete_task'])->middleware('check_roles:22');
+            Route::post('/save_result/{task_id}', [TaskController::class, 'save_task_result'])->middleware('check_roles:25');
+            Route::post('/change_result/{completed_task_id}', [TaskController::class, 'change_task_result'])->middleware('check_roles:26');
+            Route::post('/check_answers/{task_id}', [TaskController::class, 'check_answers'])->middleware('check_roles:25');
             Route::post('/get_task_results', [TaskController::class, 'get_task_results']);
 
-            Route::post('/create/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles');
-            Route::post('/edit/missing_letters/{task_id}', [TaskController::class, 'edit_missing_letters_task'])->middleware('check_roles');
+            Route::post('/create/missing_letters/{lesson_id}', [TaskController::class, 'create_missing_letters_task'])->middleware('check_roles:13');
+            Route::post('/edit/missing_letters/{task_id}', [TaskController::class, 'edit_missing_letters_task'])->middleware('check_roles:14');
             Route::get('/get/missing_letters/{task_id}', [TaskController::class, 'get_missing_letters_task']);
 
-            Route::post('/create/match_words_by_pictures/{lesson_id}', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles');
-            Route::post('/edit/match_words_by_pictures/{task_id}', [TaskController::class, 'edit_match_words_by_pictures_task'])->middleware('check_roles');
+            Route::post('/create/match_words_by_pictures/{lesson_id}', [TaskController::class, 'create_match_words_by_pictures_task'])->middleware('check_roles:13');
+            Route::post('/edit/match_words_by_pictures/{task_id}', [TaskController::class, 'edit_match_words_by_pictures_task'])->middleware('check_roles:14');
             Route::get('/get/match_words_by_pictures/{task_id}', [TaskController::class, 'get_match_words_by_pictures_task']);
 
-            Route::post('/create/form_a_sentence_out_of_the_words/{lesson_id}', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
-            Route::post('/edit/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'edit_form_a_sentence_out_of_the_words_task'])->middleware('check_roles');
+            Route::post('/create/form_a_sentence_out_of_the_words/{lesson_id}', [TaskController::class, 'create_form_a_sentence_out_of_the_words_task'])->middleware('check_roles:13');
+            Route::post('/edit/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'edit_form_a_sentence_out_of_the_words_task'])->middleware('check_roles:14');
             Route::get('/get/form_a_sentence_out_of_the_words/{task_id}', [TaskController::class, 'get_form_a_sentence_out_of_the_words_task']);
 
-            Route::post('/create/learning_words/{lesson_id}', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles');
-            Route::post('/edit/learning_words/{task_id}', [TaskController::class, 'edit_learning_words_task'])->middleware('check_roles');
+            Route::post('/create/learning_words/{lesson_id}', [TaskController::class, 'create_learning_words_task'])->middleware('check_roles:13');
+            Route::post('/edit/learning_words/{task_id}', [TaskController::class, 'edit_learning_words_task'])->middleware('check_roles:14');
             Route::get('/get/learning_words/{task_id}', [TaskController::class, 'get_learning_words_task']);
 
-            Route::post('/create/form_a_word_out_of_the_letters/{lesson_id}', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
-            Route::post('/edit/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'edit_form_a_word_out_of_the_letters_task'])->middleware('check_roles');
+            Route::post('/create/form_a_word_out_of_the_letters/{lesson_id}', [TaskController::class, 'create_form_a_word_out_of_the_letters_task'])->middleware('check_roles:13');
+            Route::post('/edit/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'edit_form_a_word_out_of_the_letters_task'])->middleware('check_roles:14');
             Route::get('/get/form_a_word_out_of_the_letters/{task_id}', [TaskController::class, 'get_form_a_word_out_of_the_letters_task']);
 
-            Route::post('/create/fill_in_the_blanks_in_the_sentence/{lesson_id}', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
-            Route::post('/edit/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'edit_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles');
+            Route::post('/create/fill_in_the_blanks_in_the_sentence/{lesson_id}', [TaskController::class, 'create_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles:13');
+            Route::post('/edit/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'edit_fill_in_the_blanks_in_the_sentence_task'])->middleware('check_roles:14');
             Route::get('/get/fill_in_the_blanks_in_the_sentence/{task_id}', [TaskController::class, 'get_fill_in_the_blanks_in_the_sentence_task']);
 
-            Route::post('create/match_same_words/{lesson_id}', [TaskController::class, 'create_match_same_words_task'])->middleware('check_roles');
-            Route::post('edit/match_same_words/{task_id}', [TaskController::class, 'edit_match_same_words_task'])->middleware('check_roles');
+            Route::post('create/match_same_words/{lesson_id}', [TaskController::class, 'create_match_same_words_task'])->middleware('check_roles:13');
+            Route::post('edit/match_same_words/{task_id}', [TaskController::class, 'edit_match_same_words_task'])->middleware('check_roles:14');
             Route::get('get/match_same_words/{task_id}', [TaskController::class, 'get_match_same_words_task']);
 
-            Route::post('/create/find_an_extra_word/{lesson_id}', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles');
-            Route::post('/edit/find_an_extra_word/{task_id}', [TaskController::class, 'edit_find_an_extra_word_task'])->middleware('check_roles');
+            Route::post('/create/find_an_extra_word/{lesson_id}', [TaskController::class, 'create_find_an_extra_word_task'])->middleware('check_roles:13');
+            Route::post('/edit/find_an_extra_word/{task_id}', [TaskController::class, 'edit_find_an_extra_word_task'])->middleware('check_roles:14');
             Route::get('/get/find_an_extra_word/{task_id}', [TaskController::class, 'get_find_an_extra_word_task']);
 
-            Route::post('/create/right_or_wrong/{lesson_id}', [TaskController::class, 'create_right_or_wrong_task'])->middleware('check_roles');
-            Route::post('/edit/right_or_wrong/{task_id}', [TaskController::class, 'edit_right_or_wrong_task'])->middleware('check_roles');
+            Route::post('/create/right_or_wrong/{lesson_id}', [TaskController::class, 'create_right_or_wrong_task'])->middleware('check_roles:13');
+            Route::post('/edit/right_or_wrong/{task_id}', [TaskController::class, 'edit_right_or_wrong_task'])->middleware('check_roles:14');
             Route::get('/get/right_or_wrong/{task_id}', [TaskController::class, 'get_right_or_wrong_task']);
 
-            Route::post('/create/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles');
-            Route::post('/edit/match_sentences_with_materials/{task_id}', [TaskController::class, 'edit_match_sentences_with_materials_task'])->middleware('check_roles');
+            Route::post('/create/match_sentences_with_materials/{lesson_id}', [TaskController::class, 'create_match_sentences_with_materials_task'])->middleware('check_roles:13');
+            Route::post('/edit/match_sentences_with_materials/{task_id}', [TaskController::class, 'edit_match_sentences_with_materials_task'])->middleware('check_roles:14');
             Route::get('/get/match_sentences_with_materials/{task_id}', [TaskController::class, 'get_match_sentences_with_materials_task']);
 
-            Route::post('/create/find_the_stressed_syllable/{lesson_id}', [TaskController::class, 'create_find_the_stressed_syllable_task'])->middleware('check_roles');
-            Route::post('/edit/find_the_stressed_syllable/{task_id}', [TaskController::class, 'edit_find_the_stressed_syllable_task'])->middleware('check_roles');
+            Route::post('/create/find_the_stressed_syllable/{lesson_id}', [TaskController::class, 'create_find_the_stressed_syllable_task'])->middleware('check_roles:13');
+            Route::post('/edit/find_the_stressed_syllable/{task_id}', [TaskController::class, 'edit_find_the_stressed_syllable_task'])->middleware('check_roles:14');
             Route::get('/get/find_the_stressed_syllable/{task_id}', [TaskController::class, 'get_find_the_stressed_syllable_task']);
 
-            Route::post('/create/answer_the_questions/{lesson_id}', [TaskController::class, 'create_answer_the_questions_task'])->middleware('check_roles');
-            Route::post('/edit/answer_the_questions/{task_id}', [TaskController::class, 'edit_answer_the_questions_task'])->middleware('check_roles');
+            Route::post('/create/answer_the_questions/{lesson_id}', [TaskController::class, 'create_answer_the_questions_task'])->middleware('check_roles:13');
+            Route::post('/edit/answer_the_questions/{task_id}', [TaskController::class, 'edit_answer_the_questions_task'])->middleware('check_roles:14');
             Route::get('/get/answer_the_questions/{task_id}', [TaskController::class, 'get_answer_the_questions_task']);
 
-            Route::post('/create/pronunciation_check/{lesson_id}', [TaskController::class, 'create_pronunciation_check_task'])->middleware('check_roles');
-            Route::post('/edit/pronunciation_check/{task_id}', [TaskController::class, 'edit_pronunciation_check_task'])->middleware('check_roles');
+            Route::post('/create/pronunciation_check/{lesson_id}', [TaskController::class, 'create_pronunciation_check_task'])->middleware('check_roles:13');
+            Route::post('/edit/pronunciation_check/{task_id}', [TaskController::class, 'edit_pronunciation_check_task'])->middleware('check_roles:14');
             Route::get('/get/pronunciation_check/{task_id}', [TaskController::class, 'get_pronunciation_check_task']);
 
-            Route::post('/create/choose_the_right_answer/{lesson_id}', [TaskController::class, 'create_choose_the_right_answer_task'])->middleware('check_roles');
-            Route::post('/edit/choose_the_right_answer/{task_id}', [TaskController::class, 'edit_choose_the_right_answer_task'])->middleware('check_roles');
+            Route::post('/create/choose_the_right_answer/{lesson_id}', [TaskController::class, 'create_choose_the_right_answer_task'])->middleware('check_roles:13');
+            Route::post('/edit/choose_the_right_answer/{task_id}', [TaskController::class, 'edit_choose_the_right_answer_task'])->middleware('check_roles:14');
             Route::get('/get/choose_the_right_answer/{task_id}', [TaskController::class, 'get_choose_the_right_answer_task']);
 
             // Route::get('/get/{sentence_id}', [SentenceController::class, 'get_sentence']);
-            // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles');
-            // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles');
+            // Route::post('/add', [SentenceController::class, 'add'])->middleware('check_roles:11');
+            // Route::post('/update/{sentence_id}', [SentenceController::class, 'update'])->middleware('check_roles:12');
         });
     });
 
@@ -345,7 +345,7 @@ Route::group([
             Route::post('/school/handle', [PaymentController::class, 'school_handle']);
             Route::post('/lesson/handle', [PaymentController::class, 'lesson_handle']);
             Route::post('/course_level/handle', [PaymentController::class, 'level_handle']);
-            Route::post('/accept_payment/{payment_id}', [PaymentController::class, 'accept_payment'])->middleware('check_roles');
+            Route::post('/accept_payment/{payment_id}', [PaymentController::class, 'accept_payment'])->middleware('check_roles:30');
         });
 
         Route::post('/tiptop/handle3ds', [PaymentController::class, 'tiptop_handle3ds']);

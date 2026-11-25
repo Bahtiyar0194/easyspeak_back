@@ -9,42 +9,36 @@ use App\Models\OperationRole;
 
 class CheckRoles{
     /**
-     * Handle an incoming request.
+     * Проверяет, что у пользователя есть роль, которой разрешена операция маршрута.
+     *
+     * Номер операции задаётся в маршруте: ->middleware('check_roles:13').
+     * Значение operation_type_id из запроса намеренно не используется — его присылает клиент
+     * и может подставить любую операцию, разрешённую его роли.
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
+     * @param  string  ...$operation_type_ids
      * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
      */
-    public function handle(Request $request, Closure $next){
+    public function handle(Request $request, Closure $next, ...$operation_type_ids){
+
+        if(empty($operation_type_ids)){
+            return response()->json('Operation type is not configured for this route', 403);
+        }
 
         $user = auth()->user();
 
-        $operation_type_id = $request->operation_type_id;
+        $role_type_ids = UserRole::where('user_id', $user->user_id)
+        ->pluck('role_type_id');
 
-        if(isset($operation_type_id)){
-            $role_found = false;
+        $role_found = OperationRole::whereIn('operation_type_id', $operation_type_ids)
+        ->whereIn('role_type_id', $role_type_ids)
+        ->exists();
 
-            $userRoles = UserRole::where('user_id', $user->user_id)->get();
-
-            foreach ($userRoles as $role) {
-                $findOperationRole = OperationRole::where('operation_type_id', $operation_type_id)
-                ->where('role_type_id', $role->role_type_id)
-                ->first();
-
-                if(isset($findOperationRole)){
-                    $role_found = true;
-                    break;
-                }
-            }
-
-            if($role_found === false){
-                return response()->json('Role not found', 403);
-            }
-
-            return $next($request);
+        if($role_found === false){
+            return response()->json('Role not found', 403);
         }
-        else{
-            return response()->json('Operation type id is required', 403);
-        }
+
+        return $next($request);
     }
 }
