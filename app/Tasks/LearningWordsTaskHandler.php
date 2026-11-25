@@ -2,68 +2,39 @@
 
 namespace App\Tasks;
 
-use App\Models\Task;
 use App\Models\TaskWord;
 use Illuminate\Http\Request;
 
 /**
  * «Изучение слов»: к каждому слову ученик выбирает перевод из вариантов.
- *
- * Шаги: 1 — выбор слов (минимум 2, нужны варианты ответа), 2 — опции, 3 — материалы и сохранение.
+ * Минимум 2 слова — из других слов задания строятся неверные варианты.
  */
-class LearningWordsTaskHandler extends TaskHandler
+class LearningWordsTaskHandler extends WordsTaskHandler
 {
     protected function taskTypeId(): int
     {
         return 4;
     }
 
-    protected function stepsCount(): int
+    protected function minWords(): int
     {
-        return 3;
+        return 2;
     }
 
-    protected function stepRules(int $step): array
+    protected function optionsRules(): array
     {
-        if ($step === 1) {
-            return [
-                'words_count' => 'required|numeric|min:2',
-                'words' => 'required',
-            ];
-        }
-
-        if ($step === 2) {
-            return array_merge($this->baseOptionsRules(), [
-                'show_audio_button' => 'required|boolean',
-                'play_audio_at_the_begin' => 'required|boolean',
-                'play_audio_with_the_correct_answer' => 'required|boolean',
-                'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
-                'show_image' => 'required|boolean',
-                'show_word' => 'required|boolean',
-                'show_transcription' => 'required|boolean',
-                'options_num' => 'required|numeric',
-                'seconds_per_word' => 'required|numeric|min:3',
-                'in_the_main_lang' => 'required|boolean',
-            ]);
-        }
-
-        return [];
-    }
-
-    protected function validateStep(int $step, Request $request): ?array
-    {
-        return $step === 1 ? $this->emptyJsonArrayError($request, 'words') : null;
-    }
-
-    protected function store(Task $task, Request $request, bool $is_edit): void
-    {
-        if ($is_edit) {
-            TaskWord::where('task_id', $task->task_id)->delete();
-        }
-
-        foreach ($this->decodeJsonArray($request, 'words') as $word) {
-            $this->saveTaskWord($task, $word->word_id);
-        }
+        return [
+            'show_audio_button' => 'required|boolean',
+            'play_audio_at_the_begin' => 'required|boolean',
+            'play_audio_with_the_correct_answer' => 'required|boolean',
+            'play_error_sound_with_the_incorrect_answer' => 'required|boolean',
+            'show_image' => 'required|boolean',
+            'show_word' => 'required|boolean',
+            'show_transcription' => 'required|boolean',
+            'options_num' => 'required|numeric',
+            'seconds_per_word' => 'required|numeric|min:3',
+            'in_the_main_lang' => 'required|boolean',
+        ];
     }
 
     public function show(Request $request): array
