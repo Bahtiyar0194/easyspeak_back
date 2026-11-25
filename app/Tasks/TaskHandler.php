@@ -122,12 +122,22 @@ abstract class TaskHandler
     /** Ошибки правил и дополнительной проверки шага объединяются, как при Validator::after() */
     protected function runStepValidation(int $step, Request $request): ?array
     {
-        $validator = Validator::make($request->all(), $this->stepRules($step));
+        $validator = Validator::make($this->validationData($step, $request), $this->stepRules($step));
 
         $errors = $validator->fails() ? $validator->errors()->toArray() : [];
         $errors = array_merge($errors, $this->validateStep($step, $request) ?? []);
 
         return $errors ?: null;
+    }
+
+    /**
+     * Данные для правил шага. Переопределяется, если правила проверяют
+     * декодированный JSON (например questions.*.answers). Сам запрос не меняется —
+     * store() читает исходные JSON-поля.
+     */
+    protected function validationData(int $step, Request $request): array
+    {
+        return $request->all();
     }
 
     /** Декодировать JSON-поле запроса в массив (пустой массив, если не массив) */
