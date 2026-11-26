@@ -120,12 +120,11 @@ class ScheduleService
             }
 
             if($for_dashboard === true){
-                // Вывести и текущий урок за 2 часа
-                $threshold = Carbon::now()->subHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
-                // На месяц вперед
-
+                // Ещё не закончившиеся уроки (в т.ч. идущий сейчас) на месяц вперёд.
+                // Раньше отбирали «начался не раньше 2 часов назад» — и прошедший
+                // урок висел в «Ближайших» ещё до 2 часов после начала
                 $monthAhead = Carbon::now()->addMonth();
-                $conferences->where('conferences.start_time', '>=', $threshold)
+                $conferences->where('conferences.end_time', '>=', now())
                 ->where('conferences.start_time', '<=', $monthAhead);
             }
 
@@ -171,6 +170,10 @@ class ScheduleService
                 $conference->end_time_formatted = humanDate($conference->end_time, null);
 
                 $conference->is_gone = now() > $conference->end_time;
+
+                // Сколько секунд до конца урока (0 — уже закончился). Клиент отсчитывает
+                // от момента загрузки — не зависит от часового пояса и часов устройства
+                $conference->ends_in_seconds = max(0, now()->diffInSeconds(Carbon::parse($conference->end_time), false));
 
                 $conference->date = Carbon::parse($conference->start_time)
                     ->translatedFormat('Y-m-d');
@@ -240,13 +243,10 @@ class ScheduleService
 
 
             if($for_dashboard === true){
-                // Вывести и текущий урок за 2 часа
-                $threshold = Carbon::now()->subHours(config('app.conference_hour'))->format('Y-m-d H:i:s');
-                // На месяц вперед
-
+                // Ещё не закончившиеся уроки (в т.ч. идущий сейчас) на месяц вперёд
                 $monthAhead = Carbon::now()->addMonth();
 
-                $conferences->where('b2c_conferences.start_time', '>=', $threshold)
+                $conferences->where('b2c_conferences.end_time', '>=', now())
                 ->where('b2c_conferences.start_time', '<=', $monthAhead);
             }
 
@@ -274,6 +274,10 @@ class ScheduleService
                 $conference->end_time_formatted = humanDate($conference->end_time, null);
 
                 $conference->is_gone = now() > $conference->end_time;
+
+                // Сколько секунд до конца урока (0 — уже закончился). Клиент отсчитывает
+                // от момента загрузки — не зависит от часового пояса и часов устройства
+                $conference->ends_in_seconds = max(0, now()->diffInSeconds(Carbon::parse($conference->end_time), false));
 
             
                 $conference->date = Carbon::parse($conference->start_time)
