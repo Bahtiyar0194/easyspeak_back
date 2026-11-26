@@ -402,6 +402,17 @@ class ConferenceController extends Controller
                 )
                 ->get();
 
+                // Результаты всех участников по всем заданиям одним пакетом
+                $pairs = [];
+
+                foreach ($tasks as $t) {
+                    foreach ($members as $member) {
+                        $pairs[] = [$t->task_id, $member->user_id];
+                    }
+                }
+
+                $results = $this->taskService->getTaskResults($pairs);
+
                 foreach ($tasks as $t) {
                     $t->learners = collect($members->map(function ($member) {
                         return clone $member;
@@ -410,7 +421,7 @@ class ConferenceController extends Controller
                     $completed_learners_tasks = 0;
 
                     foreach ($t->learners as $learner) {
-                        $task_result = $this->taskService->getTaskResult($t->task_id, $learner->user_id);
+                        $task_result = $results[$this->taskService->taskResultKey($t->task_id, $learner->user_id)];
                         $learner->task_result = $task_result;
                         if($learner->task_result->completed === true){
                             $completed_learners_tasks++;
@@ -494,6 +505,17 @@ class ConferenceController extends Controller
                 ->where('conference_id', $conference->conference_id)
                 ->get();
 
+                // Результаты всех участников по всем заданиям одним пакетом
+                $pairs = [];
+
+                foreach ($tasks as $t) {
+                    foreach ($members as $member) {
+                        $pairs[] = [$t->task_id, $member->user_id];
+                    }
+                }
+
+                $results = $this->taskService->getTaskResults($pairs);
+
                 foreach ($tasks as $t) {
                     $t->learners = collect($members->map(function ($member) {
                         return clone $member;
@@ -504,7 +526,7 @@ class ConferenceController extends Controller
                     $completed_learners_tasks = 0;
 
                     foreach ($t->learners as $learner) {
-                        $task_result = $this->taskService->getTaskResult($t->task_id, $learner->user_id);
+                        $task_result = $results[$this->taskService->taskResultKey($t->task_id, $learner->user_id)];
                         $learner->task_result = $task_result;
                         if($learner->task_result->completed === true){
                             $completed_learners_tasks++;
@@ -556,9 +578,13 @@ class ConferenceController extends Controller
             else{
 
                 if(count($tasks) > 0){
+                    $results = $this->taskService->getTaskResults(collect($tasks)->map(function ($task) use ($auth_user) {
+                        return [$task->task_id, $auth_user->user_id];
+                    })->all());
+
                     foreach ($tasks as $key => $task) {
                         $task->launched = true;
-                        $task->task_result = $this->taskService->getTaskResult($task->task_id, $auth_user->user_id);
+                        $task->task_result = $results[$this->taskService->taskResultKey($task->task_id, $auth_user->user_id)];
 
                         if($task->task_result->completed === false){
                             $task->to_complete = true;

@@ -459,8 +459,12 @@ class TaskController extends Controller
         $completed_tasks = $query->paginate($per_page)->onEachSide(1);
     
         // Добавляем результаты задач
-        $completed_tasks->getCollection()->transform(function ($task) {
-            $task->task_result = $this->taskService->getTaskResult($task->task_id, $task->learner_id);
+        $results = $this->taskService->getTaskResults($completed_tasks->getCollection()->map(function ($task) {
+            return [$task->task_id, $task->learner_id];
+        })->all());
+
+        $completed_tasks->getCollection()->transform(function ($task) use ($results) {
+            $task->task_result = $results[$this->taskService->taskResultKey($task->task_id, $task->learner_id)];
 
             return $task;
         });

@@ -129,142 +129,221 @@ class TaskService
         return $progress;
     }
 
+    /** Результат задания ученика (см. getTaskResults) */
     public function getTaskResult($task_id, $learner_id){
-        $completed_task = CompletedTask::leftJoin('tasks', 'completed_tasks.task_id', '=', 'tasks.task_id')
-        ->leftJoin('types_of_tasks', 'tasks.task_type_id', '=', 'types_of_tasks.task_type_id')
-        ->where('completed_tasks.task_id', '=', $task_id)
-        ->where('completed_tasks.learner_id', '=', $learner_id)
-        ->select(
-            'completed_tasks.completed_task_id',
-            'completed_tasks.learner_id',
-            'completed_tasks.mentor_id',
-            'completed_tasks.is_completed',
-            'types_of_tasks.auto_result'
-        )
-        ->first();
+        return $this->getTaskResults([[$task_id, $learner_id]])[$this->taskResultKey($task_id, $learner_id)];
+    }
 
-        // Получаем результаты выполнения задания
+    public function taskResultKey($task_id, $learner_id): string
+    {
+        return $task_id . ':' . $learner_id;
+    }
+
+    /**
+     * Результаты для набора пар [task_id, learner_id] — ключ результата taskResultKey().
+     *
+     * Загрузка за фиксированное число запросов на весь набор (не больше 5), а не по запросу
+     * на каждый ответ: выполнения, ответы, слова, предложения/вопросы, фразовые вопросы.
+     */
+    public function getTaskResults(array $pairs): array
+    {
+        $results = [];
+
+        foreach ($pairs as $pair) {
+            $results[$this->taskResultKey($pair[0], $pair[1])] = null;
+        }
+
+        if (count($results) === 0) {
+            return $results;
+        }
+
+        $task_ids = array_values(array_unique(array_column($pairs, 0)));
+        $learner_ids = array_values(array_filter(array_unique(array_column($pairs, 1)), function ($id) {
+            return $id !== null;
+        }));
+
+        // Выполнения заданий: по одному на пару (saveTaskResult удаляет прежние)
+        $completed_tasks = collect();
+
+        if (count($learner_ids) > 0) {
+            $completed_tasks = CompletedTask::leftJoin('tasks', 'completed_tasks.task_id', '=', 'tasks.task_id')
+            ->leftJoin('types_of_tasks', 'tasks.task_type_id', '=', 'types_of_tasks.task_type_id')
+            ->whereIn('completed_tasks.task_id', $task_ids)
+            ->whereIn('completed_tasks.learner_id', $learner_ids)
+            ->select(
+                'completed_tasks.completed_task_id',
+                'completed_tasks.task_id',
+                'completed_tasks.learner_id',
+                'completed_tasks.mentor_id',
+                'completed_tasks.is_completed',
+                'types_of_tasks.auto_result'
+            )
+            ->orderBy('completed_tasks.completed_task_id', 'asc')
+            ->get()
+            // Запрос по task_id и learner_id по отдельности захватывает и лишние пары — оставляем запрошенные
+            ->filter(function ($completed_task) use ($results) {
+                return array_key_exists($this->taskResultKey($completed_task->task_id, $completed_task->learner_id), $results);
+            })
+            ->unique(function ($completed_task) {
+                return $this->taskResultKey($completed_task->task_id, $completed_task->learner_id);
+            });
+        }
+
+        $answers = collect();
+
+        if ($completed_tasks->isNotEmpty()) {
+            $answers = TaskAnswer::whereIn('completed_task_id', $completed_tasks->pluck('completed_task_id'))
+            ->orderBy('task_answer_id', 'asc')
+            ->get();
+
+            $this->attachAnswerRelations($answers);
+        }
+
+        $answers = $answers->groupBy('completed_task_id');
+
+        foreach ($completed_tasks as $completed_task) {
+            $key = $this->taskResultKey($completed_task->task_id, $completed_task->learner_id);
+
+            // task_id нужен только для сопоставления — в ответе его не было
+            $completed_task->makeHidden('task_id');
+
+            $results[$key] = $this->buildTaskResult($completed_task, $answers->get($completed_task->completed_task_id, collect()));
+        }
+
+        foreach ($results as $key => $result) {
+            if ($result === null) {
+                $results[$key] = $this->buildTaskResult(null, collect());
+            }
+        }
+
+        return $results;
+    }
+
+    /** Подгрузить к ответам слово, предложение и вопрос — по запросу на вид, а не на ответ */
+    protected function attachAnswerRelations($answers): void
+    {
+        $word_ids = $answers->pluck('word_id')->filter()->unique()->values();
+        $sentence_ids = $answers->pluck('sentence_id')->merge($answers->pluck('question_id'))->filter()->unique()->values();
+        $phrase_question_ids = $answers->pluck('phrase_question_id')->filter()->unique()->values();
+
+        $words = collect();
+
+        if ($word_ids->isNotEmpty()) {
+            $words = Dictionary::whereIn('dictionary.word_id', $word_ids)
+            ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
+            ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
+            ->select(
+                'dictionary.word_id',
+                'dictionary.word',
+                'image_file.target as image_file',
+                'audio_file.target as audio_file'
+            )
+            ->get()
+            ->keyBy('word_id')
+            ->each(function ($word) {
+                $word->makeHidden('word_id');
+            });
+        }
+
+        $sentences = collect();
+
+        if ($sentence_ids->isNotEmpty()) {
+            $sentences = Sentence::whereIn('sentences.sentence_id', $sentence_ids)
+            ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
+            ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
+            ->select(
+                'sentences.sentence_id',
+                'sentences.sentence',
+                'image_file.target as image_file',
+                'audio_file.target as audio_file'
+            )
+            ->get()
+            ->keyBy('sentence_id')
+            ->each(function ($sentence) {
+                $sentence->makeHidden('sentence_id');
+            });
+        }
+
+        $phrase_questions = $phrase_question_ids->isNotEmpty()
+            ? PhraseQuestion::whereIn('question_id', $phrase_question_ids)->get()->keyBy('question_id')
+            : collect();
+
+        foreach ($answers as $answer) {
+            if(isset($answer->word_id)){
+                $answer->word = $words->get($answer->word_id);
+            }
+
+            if(isset($answer->sentence_id)){
+                $answer->sentence = $sentences->get($answer->sentence_id);
+            }
+
+            if(isset($answer->question_id)){
+                $answer->question = $sentences->get($answer->question_id);
+            }
+
+            if(isset($answer->phrase_question_id)){
+                $answer->question = $phrase_questions->get($answer->phrase_question_id);
+            }
+        }
+    }
+
+    /** Собрать результат задания из выполнения и ответов (связи уже подгружены) */
+    protected function buildTaskResult($completed_task, $task_answers)
+    {
         $task_result = new \stdClass();
 
-        if(!isset($completed_task)){
+        if(!isset($completed_task) || count($task_answers) === 0){
             $task_result->percentage = 0;
             $task_result->completed = false;
             return $task_result;
         }
-        else{
-            $task_answers = TaskAnswer::where('completed_task_id', '=', $completed_task->completed_task_id)
-            ->get();
-    
-            if(count($task_answers) > 0){
-                $correct_answers = [];
-                $partly_correct_answers = [];
-                $incorrect_answers = [];
-                $unverified_answers = [];
-                $correct_answers_count = 0;
-                $partly_correct_answers_count = 0;
-                $incorrect_answers_count = 0;
-                $unverified_answers_count = 0;
 
-                $percentage_for_phrase_answers = 0;
-    
-                foreach ($task_answers as $key => $answer) {
-                    if($answer->is_correct === 1){
-                        if(isset($answer->partly_progress) && $answer->partly_progress < 100){
-                            array_push($partly_correct_answers, $answer);
-                            $partly_correct_answers_count++;
-                        }
-                        else{
-                            array_push($correct_answers, $answer);
-                            $correct_answers_count++;
-                        }
-                    }
-                    elseif($answer->is_correct === 0){
-                        array_push($incorrect_answers, $answer);
-                        $incorrect_answers_count++;
-                    }
-                    else{
-                        array_push($unverified_answers, $answer);
-                        $unverified_answers_count++;
-                    }
+        $correct_answers = [];
+        $partly_correct_answers = [];
+        $incorrect_answers = [];
+        $unverified_answers = [];
+        $percentage_for_phrase_answers = 0;
 
-                    if($answer->partly_progress >= 0){
-                        $percentage_for_phrase_answers += $answer->partly_progress;
-                    }
-                    
-    
-                    if(isset($answer->word_id)){
-                        $word = Dictionary::where('word_id', '=', $answer->word_id)
-                        ->leftJoin('files as image_file', 'dictionary.image_file_id', '=', 'image_file.file_id')
-                        ->leftJoin('files as audio_file', 'dictionary.audio_file_id', '=', 'audio_file.file_id')
-                        ->select(
-                            'dictionary.word',
-                            'image_file.target as image_file',
-                            'audio_file.target as audio_file'
-                        )
-                        ->first();
-    
-                        $answer->word = $word;
-                    }
-    
-                    if(isset($answer->sentence_id)){
-                        $sentence = Sentence::where('sentence_id', '=', $answer->sentence_id)
-                        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
-                        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
-                        ->select(
-                            'sentences.sentence',
-                            'image_file.target as image_file',
-                            'audio_file.target as audio_file'
-                        )
-                        ->first();
-                        $answer->sentence = $sentence;
-                    }
-    
-                    if(isset($answer->question_id)){
-                        $question = Sentence::where('sentence_id', '=', $answer->question_id)
-                        ->leftJoin('files as image_file', 'sentences.image_file_id', '=', 'image_file.file_id')
-                        ->leftJoin('files as audio_file', 'sentences.audio_file_id', '=', 'audio_file.file_id')
-                        ->select(
-                            'sentences.sentence',
-                            'image_file.target as image_file',
-                            'audio_file.target as audio_file'
-                        )
-                        ->first();
-                        $answer->question = $question;
-                    }
-
-                    if(isset($answer->phrase_question_id)){
-                        $question = PhraseQuestion::where('question_id', '=', $answer->phrase_question_id)
-                        ->first();
-
-                        $answer->question = $question;
-                    }
+        foreach ($task_answers as $answer) {
+            if($answer->is_correct === 1){
+                if(isset($answer->partly_progress) && $answer->partly_progress < 100){
+                    $partly_correct_answers[] = $answer;
                 }
-
-                if($percentage_for_phrase_answers > 0){
-                    $percentage_for_phrase_answers = round(($percentage_for_phrase_answers / count($task_answers)), 2);
+                else{
+                    $correct_answers[] = $answer;
                 }
-    
-                $task_result->completed_task = $completed_task;
-                $task_result->correct_answers_count = $correct_answers_count;
-                $task_result->partly_correct_answers_count = $partly_correct_answers_count;
-                $task_result->incorrect_answers_count = $incorrect_answers_count;
-                $task_result->unverified_answers_count = $unverified_answers_count;
-                $task_result->answers = [
-                    'correct_answers' => $correct_answers, 
-                    'partly_correct_answers' => $partly_correct_answers,
-                    'incorrect_answers' => $incorrect_answers, 
-                    'unverified_answers' => $unverified_answers
-                ];
-                $task_result->completed = count($unverified_answers) > 0 ? false : true;
-                $task_result->percentage = $percentage_for_phrase_answers > 0 ? $percentage_for_phrase_answers : round(($correct_answers_count / count($task_answers)) * 100, 2);
-                return $task_result;
+            }
+            elseif($answer->is_correct === 0){
+                $incorrect_answers[] = $answer;
             }
             else{
-                $task_result->percentage = 0;
-                $task_result->completed = false;
-                return $task_result;
+                $unverified_answers[] = $answer;
+            }
+
+            if($answer->partly_progress >= 0){
+                $percentage_for_phrase_answers += $answer->partly_progress;
             }
         }
+
+        if($percentage_for_phrase_answers > 0){
+            $percentage_for_phrase_answers = round(($percentage_for_phrase_answers / count($task_answers)), 2);
+        }
+
+        $task_result->completed_task = $completed_task;
+        $task_result->correct_answers_count = count($correct_answers);
+        $task_result->partly_correct_answers_count = count($partly_correct_answers);
+        $task_result->incorrect_answers_count = count($incorrect_answers);
+        $task_result->unverified_answers_count = count($unverified_answers);
+        $task_result->answers = [
+            'correct_answers' => $correct_answers,
+            'partly_correct_answers' => $partly_correct_answers,
+            'incorrect_answers' => $incorrect_answers,
+            'unverified_answers' => $unverified_answers
+        ];
+        $task_result->completed = count($unverified_answers) > 0 ? false : true;
+        $task_result->percentage = $percentage_for_phrase_answers > 0 ? $percentage_for_phrase_answers : round((count($correct_answers) / count($task_answers)) * 100, 2);
+
+        return $task_result;
     }
 
     /**
@@ -576,11 +655,14 @@ class TaskService
         ->orderBy('tasks.sort_num', 'asc')
         ->get();
 
-        if($get_result === true){
-            if(count($tasks) > 0){
-                foreach ($tasks as $key => $task) {
-                    $task->task_result = $this->getTaskResult($task->task_id, $auth_user->user_id);
-                }
+        if($get_result === true && count($tasks) > 0){
+            // Результаты всех заданий урока одним пакетом
+            $results = $this->getTaskResults($tasks->map(function ($task) use ($auth_user) {
+                return [$task->task_id, $auth_user->user_id];
+            })->all());
+
+            foreach ($tasks as $task) {
+                $task->task_result = $results[$this->taskResultKey($task->task_id, $auth_user->user_id)];
             }
         }
 

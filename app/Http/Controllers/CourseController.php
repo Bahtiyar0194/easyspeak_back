@@ -846,8 +846,12 @@ class CourseController extends Controller
         $completedTasksCount = 0;
         $completedTasksPercent = 0;
 
+        $results = $this->taskService->getTaskResults($lesson->tasks->map(function ($task) use ($request) {
+            return [$task->task_id, $request->user_id];
+        })->all());
+
         foreach ($lesson->tasks as $key => $task) {
-            $task->task_result = $this->taskService->getTaskResult($task->task_id, $request->user_id);
+            $task->task_result = $results[$this->taskService->taskResultKey($task->task_id, $request->user_id)];
 
             if ($task->task_result && $task->task_result->completed === true) {
                 $completedTasksCount++;
