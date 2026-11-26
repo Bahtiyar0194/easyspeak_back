@@ -188,15 +188,98 @@ class ConferenceService
         });
     }
 
+    /**
+     * Какие конференции школы видит пользователь (B2B). Запрос должен содержать
+     * join'ы mentor (users) и group_members — как в getCurrentConferences.
+     */
+    protected function applyConferenceAccess($query, $auth_user): void
+    {
+        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
+        $isMentor = $auth_user->hasRole(['mentor']);
+        $isLearner = $auth_user->hasRole(['learner']);
+
+        if ($isOwner || $isMentor || $isLearner) {
+            $query->where(function ($query) use ($isOwner, $isMentor, $isLearner, $auth_user) {
+                if ($isOwner) {
+                    $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
+                }
+                if ($isMentor || $isLearner) {
+                    $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
+                    ->orWhere('group_members.member_id', '=', $auth_user->user_id)
+                    ->where('group_members.status_type_id', '=', 1);
+                }
+            });
+        }
+    }
+
+    /**
+     * Лёгкий статус для опроса с клиента (меню, дашборд, страница конференций).
+     * Те же условия доступа и то же окно, что у getCurrentConferences
+     * (за N минут до начала — до конца), но без загрузки участников и т.п.
+     *
+     * live    — идёт ли прямо сейчас (start_time <= now <= end_time) хотя бы одна;
+     * current — ключи «текущих» конференций (uuid|start_time). Клиент сравнивает
+     *           их с прошлым ответом и перезагружает список, только если они изменились.
+     */
+    public function getLiveStatus($request): array
+    {
+        $auth_user = auth()->user();
+        $now = now();
+        $openFrom = Carbon::now()->addMinutes(config('app.conference_before_minutes'));
+
+        if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+            $query = Conference::leftJoin('groups', 'conferences.group_id', '=', 'groups.group_id')
+            ->leftJoin('group_members', 'groups.group_id', '=', 'group_members.group_id')
+            ->leftJoin('users as mentor', 'conferences.mentor_id', '=', 'mentor.user_id')
+            ->leftJoin('course_levels', 'groups.level_id', '=', 'course_levels.level_id')
+            ->leftJoin('course_levels_lang', 'course_levels.level_id', '=', 'course_levels_lang.level_id')
+            ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
+            ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+            // Как в списке текущих: конференция без перевода курса в нём не показывается
+            ->where('courses_lang.lang_id', '=', optional($language)->lang_id)
+            ->where('course_levels_lang.lang_id', '=', optional($language)->lang_id)
+            ->where('conferences.start_time', '<=', $openFrom)
+            ->where('conferences.end_time', '>=', $now)
+            ->select('conferences.uuid', 'conferences.start_time')
+            ->distinct();
+
+            $this->applyConferenceAccess($query, $auth_user);
+        }
+        else{
+            $query = B2cConference::leftJoin('b2c_conference_members', 'b2c_conferences.conference_id', '=', 'b2c_conference_members.conference_id')
+            ->where('b2c_conferences.start_time', '<=', $openFrom)
+            ->where('b2c_conferences.end_time', '>=', $now)
+            ->select('b2c_conferences.uuid', 'b2c_conferences.start_time')
+            ->distinct();
+
+            if($auth_user->hasOnlyRoles(['learner'])){
+                $query->where(function($query) use($auth_user) {
+                    $query->where('b2c_conference_members.member_id', '=', $auth_user->user_id)
+                    ->orWhere('b2c_conferences.is_free', '=' , 1);
+                });
+            }
+        }
+
+        $conferences = $query->get();
+
+        return [
+            'live' => $conferences->contains(function ($conference) use ($now) {
+                return Carbon::parse($conference->start_time)->lte($now);
+            }),
+            'current' => $conferences->map(function ($conference) {
+                return $conference->uuid . '|' . $conference->start_time;
+            })->sort()->values()->all(),
+        ];
+    }
+
     public function getCurrentConferences($request){
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         // Получаем текущего аутентифицированного пользователя
         $auth_user = auth()->user();
 
-        $isOwner = $auth_user->hasRole(['super_admin', 'school_owner', 'school_admin']);
-        $isMentor = $auth_user->hasRole(['mentor']);
-        $isLearner = $auth_user->hasRole(['learner']);
         $isOnlyLearner = $auth_user->hasOnlyRoles(['learner']);
 
         if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
@@ -231,18 +314,7 @@ class ConferenceService
             ->where('conferences.end_time', '>=', now())
             ->distinct();
 
-            if ($isOwner || $isMentor || $isLearner) {
-                $current_conferences->where(function ($query) use ($isOwner, $isMentor, $isLearner, $auth_user) {
-                    if ($isOwner) {
-                        $query->orWhere('mentor.school_id', '=', $auth_user->school_id);
-                    }
-                    if ($isMentor || $isLearner) {
-                        $query->orWhere('conferences.mentor_id', '=', $auth_user->user_id)
-                        ->orWhere('group_members.member_id', '=', $auth_user->user_id)
-                        ->where('group_members.status_type_id', '=', 1);
-                    }
-                });
-            }        
+            $this->applyConferenceAccess($current_conferences, $auth_user);
 
             $current_conferences = $current_conferences->get()->map(function ($conference) use($isOnlyLearner, $auth_user) {
 

@@ -153,6 +153,15 @@ class ConferenceController extends Controller
         return response()->json($attributes, 200);
     }
 
+    /**
+     * Лёгкий опрос с клиента: идёт ли конференция (точка в меню) и ключи текущих
+     * конференций — по их изменению дашборд и страница конференций обновляют списки
+     */
+    public function live_status(Request $request)
+    {
+        return response()->json($this->conferenceService->getLiveStatus($request), 200);
+    }
+
     public function get_current_conferences(Request $request)
     {
         $current_conferences = $this->conferenceService->getCurrentConferences($request);
