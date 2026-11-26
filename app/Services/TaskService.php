@@ -37,11 +37,13 @@ class TaskService
 {
     protected $uploadFileService;
     protected $schoolService;
+    protected $htmlSanitizer;
 
-    public function __construct(UploadFileService $uploadFileService, SchoolService $schoolService)
+    public function __construct(UploadFileService $uploadFileService, SchoolService $schoolService, HtmlSanitizer $htmlSanitizer)
     {
         $this->uploadFileService = $uploadFileService;
         $this->schoolService = $schoolService;
+        $this->htmlSanitizer = $htmlSanitizer;
     }
 
     //Добавить задание
@@ -321,7 +323,7 @@ class TaskService
         $auth_user = auth()->user();
         $is_completed = true;
 
-        if(count($task_result) > 0){
+        if(is_array($task_result) && count($task_result) > 0){
             // Проверяем право сдавать задание до удаления прежнего результата
             [$allowed, $mentor_id] = $this->resolveResultMentor($task_id, $auth_user);
 
@@ -358,16 +360,21 @@ class TaskService
                     $new_task_answer->is_correct = $result->is_correct;
                 }
     
+                // Разметку ответов строит клиент, а выводится она через v-html — чистим.
+                // Непроверенный user_answer (без is_correct) — простой текст: фронтенд выводит его
+                // как текст, а changeTaskResult экранирует при проверке
                 if(isset($result->right_answer)){
-                    $new_task_answer->right_answer = $result->right_answer;
+                    $new_task_answer->right_answer = $this->htmlSanitizer->clean((string) $result->right_answer);
                 }
 
                 if(isset($result->user_answer)){
-                    $new_task_answer->user_answer = $result->user_answer;
+                    $new_task_answer->user_answer = isset($result->is_correct)
+                        ? $this->htmlSanitizer->clean((string) $result->user_answer)
+                        : $result->user_answer;
                 }
 
                 if(isset($result->comment)){
-                    $new_task_answer->comment = $result->comment;
+                    $new_task_answer->comment = $this->htmlSanitizer->clean((string) $result->comment);
                 }
 
                 if(isset($result->word_id)){
@@ -388,10 +395,6 @@ class TaskService
 
                 if(isset($result->progress)){
                     $new_task_answer->partly_progress = $result->progress;
-                }
-
-                if(isset($result->comment)){
-                    $new_task_answer->comment = $result->comment;
                 }
                 
 
@@ -477,7 +480,8 @@ class TaskService
                     else{
                         $task_answer->right_answer = null;
                         $task_answer->user_answer = "<p class='font-medium mb-0 text-danger underline'>{$user_answer}</p>";
-                        $task_answer->comment = $answer->comment;
+                        // Комментарий ментора видит ученик через v-html
+                        $task_answer->comment = $this->htmlSanitizer->clean((string) $answer->comment);
                     }
 
                     $task_answer->save();
