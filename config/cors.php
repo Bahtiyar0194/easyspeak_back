@@ -25,7 +25,8 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => ['Content-Range', 'Accept-Ranges'],
+    // Retry-After — чтобы клиент при 429 знал, сколько ждать (расписание и др.)
+    'exposed_headers' => ['Content-Range', 'Accept-Ranges', 'Retry-After'],
 
     'max_age' => 0,
 

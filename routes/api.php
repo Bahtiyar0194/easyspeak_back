@@ -164,6 +164,7 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [ScheduleController::class, 'get_schedule_attributes']);
             Route::post('/get', [ScheduleController::class, 'get_schedule']);
+            Route::post('/month_counts', [ScheduleController::class, 'get_month_counts']);
             Route::post('/update/{uuid}', [ScheduleController::class, 'update']);
         });
     });

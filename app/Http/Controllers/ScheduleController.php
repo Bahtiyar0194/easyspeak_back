@@ -100,15 +100,50 @@ class ScheduleController extends Controller
         return response()->json($attributes, 200);
     }
 
+    /**
+     * Расписание. Календарь передаёт период from/to (по началу урока, [from, to))
+     * и грузит его помесячно; без периода — всё расписание, как раньше.
+     */
     public function get_schedule(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after:from',
+        ]);
+
+        if($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
         $auth_user = auth()->user();
         $for_dashboard = false;
 
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $conferences = $this->scheduleService->getSchedule($request, $auth_user->user_id, $language->lang_id, $for_dashboard, null);
+        $from = $request->filled('from') ? Carbon::parse($request->from) : null;
+        $to = $request->filled('to') ? Carbon::parse($request->to) : null;
+
+        $conferences = $this->scheduleService->getSchedule($request, $auth_user->user_id, $language->lang_id, $for_dashboard, null, $from, $to);
         return response()->json($conferences, 200);
+    }
+
+    /** Количество уроков по месяцам года (режим «Год» в календаре), с теми же фильтрами */
+    public function get_month_counts(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'year' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        if($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $auth_user = auth()->user();
+        $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
+
+        $counts = $this->scheduleService->getMonthCounts($request, $auth_user->user_id, $language->lang_id, (int) $request->year);
+
+        return response()->json($counts, 200);
     }
 
     public function update(Request $request)
