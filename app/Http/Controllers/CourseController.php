@@ -105,6 +105,12 @@ class CourseController extends Controller
                 $level->completed_percent = count($sections) > 0
                 ? $levelCompletedPercent / count($sections)
                 : 0;
+
+                // Для карточки уровня: сколько в нём разделов и уроков
+                $level->sections_count = count($sections);
+                $level->lessons_count = $sections->sum(function ($section) {
+                    return count($section->lessons);
+                });
             }
         }
 
@@ -143,7 +149,7 @@ class CourseController extends Controller
 
             $lessons = $this->courseService->getLessons($section->section_id, $language->lang_id);
 
-            foreach ($lessons as $l => $lesson) {    
+            foreach ($lessons as $l => $lesson) {
                 $lesson_progress = LessonProgress::where('lesson_id', $lesson->lesson_id)
                 ->where('learner_id', $auth_user->user_id)
                 ->first();
@@ -151,6 +157,10 @@ class CourseController extends Controller
                 if(isset($lesson_progress)){
                     $sectionCompletedPercent += $lesson_progress->progress;
                 }
+
+                // Для «Продолжить»: прогресс урока и порядок раздела
+                $lesson->progress = isset($lesson_progress) ? (float) $lesson_progress->progress : 0;
+                $lesson->section_sort_num = $section->sort_num;
 
                 $lesson_materials = LessonMaterial::where('lesson_id', '=', $lesson->lesson_id)
                 ->get();
@@ -172,11 +182,23 @@ class CourseController extends Controller
         ? $levelCompletedPercent / count($sections)
         : 0;
 
+        // «Продолжить» ведёт сразу в первый незавершённый урок уровня
+        $next_lesson = null;
+        foreach ($sections as $section) {
+            foreach ($section->lessons as $lesson) {
+                if ($lesson->progress < 100) {
+                    $next_lesson = $this->courseService->lessonLinkInfo($lesson, $level->is_available_always);
+                    break 2;
+                }
+            }
+        }
+
         $data = new \stdClass();
         $data->course = $course;
         $data->level = $level;
         $data->sections = $sections;
-        
+        $data->next_lesson = $next_lesson;
+
         return response()->json($data, 200);
     }
 
@@ -282,6 +304,10 @@ class CourseController extends Controller
         $data->section = $section;
 
         $lesson = Lesson::leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+        ->leftJoin('types_of_lessons_lang', function ($join) use ($language) {
+            $join->on('types_of_lessons_lang.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+                ->where('types_of_lessons_lang.lang_id', '=', $language->lang_id);
+        })
         ->leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
         ->leftJoin('course_levels', 'course_sections.level_id', '=', 'course_levels.level_id')
         ->where('course_levels.level_id', '=', $level->level_id)
@@ -293,15 +319,24 @@ class CourseController extends Controller
             'lessons.sort_num',
             'lessons.lesson_name',
             'lessons.lesson_description',
-            'types_of_lessons.lesson_type_slug'
+            'types_of_lessons.lesson_type_slug',
+            // Тип урока показывается в шапке, но раньше не отдавался
+            'types_of_lessons_lang.lesson_type_name'
         )
         ->first();
+
+        if (!$lesson) {
+            return response()->json(['error' => 'Lesson not found'], 404);
+        }
 
         $lesson->available_status = $this->courseService->lessonAvailableStatus($lesson, $level->is_available_always, $section->sort_num);
 
         $lesson->materials = $this->courseService->getLessonMaterials($lesson->lesson_id, $language);
 
         $data->lesson = $lesson;
+
+        // Соседние уроки уровня — кнопки «Предыдущий / Следующий урок»
+        $data->neighbors = $this->courseService->lessonNeighbors($lesson->lesson_id, $level);
         
         return response()->json($data, 200);
     }

@@ -18,6 +18,7 @@ use App\Models\B2cConferenceLevel;
 use App\Models\B2cConferenceMember;
 use App\Models\Language;
 use Carbon\Carbon;
+use DB;
 
 use App\Services\SchoolService;
 
@@ -45,6 +46,30 @@ class CourseService
         ->distinct()
         ->orderBy('courses.course_id', 'asc')
         ->get();
+
+        // Ученику: уровень, над которым он работал последним, и его прогресс
+        $user = auth('sanctum')->user();
+        if ($user) {
+            foreach ($courses as $course) {
+                $last = LessonProgress::leftJoin('lessons', 'lesson_progress.lesson_id', '=', 'lessons.lesson_id')
+                    ->leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+                    ->leftJoin('course_levels', 'course_sections.level_id', '=', 'course_levels.level_id')
+                    ->where('lesson_progress.learner_id', $user->user_id)
+                    ->where('course_levels.course_id', $course->course_id)
+                    ->orderBy('lesson_progress.updated_at', 'desc')
+                    ->value('course_levels.level_id');
+
+                if ($last) {
+                    $course->current_level = [
+                        'level_name' => DB::table('course_levels_lang')
+                            ->where('level_id', $last)
+                            ->where('lang_id', $language->lang_id)
+                            ->value('level_name'),
+                        'completed_percent' => round($this->levelCompletedPercent($last, $user->user_id)),
+                    ];
+                }
+            }
+        }
 
         return $courses;
     }
@@ -169,7 +194,8 @@ class CourseService
         $sections = CourseSection::where('level_id', '=', $level_id)
         ->select(
             'section_id',
-            'section_name'
+            'section_name',
+            'sort_num'
         )
         ->orderBy('sort_num', 'asc')
         ->get();
@@ -296,6 +322,18 @@ class CourseService
                         }
                         else{
                             $available_status->is_available = false;
+
+                            // Когда откроется: ближайший урок с учителем по этой
+                            // теме у группы ученика
+                            $opensAt = Conference::leftJoin('group_members', 'conferences.group_id', '=', 'group_members.group_id')
+                                ->where('conferences.lesson_id', '=', $conferenceLesson->lesson_id)
+                                ->where('group_members.member_id', '=', $auth_user->user_id)
+                                ->where('group_members.status_type_id', '=', 1)
+                                ->where('conferences.start_time', '>', now())
+                                ->orderBy('conferences.start_time', 'asc')
+                                ->value('conferences.start_time');
+
+                            $available_status->opens_at = $opensAt ? Carbon::parse($opensAt)->toIso8601String() : null;
                         }
 
                         if($lesson->lesson_type_slug === 'conference' || $lesson->lesson_type_slug === 'file_test'){
@@ -357,6 +395,95 @@ class CourseService
         }
 
         return null;
+    }
+
+    /** Все уроки уровня по порядку: раздел за разделом, урок за уроком */
+    public function levelLessonSequence($level_id)
+    {
+        return Lesson::leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+            ->leftJoin('types_of_lessons', 'lessons.lesson_type_id', '=', 'types_of_lessons.lesson_type_id')
+            ->where('course_sections.level_id', '=', $level_id)
+            ->select(
+                'lessons.lesson_id',
+                'lessons.section_id',
+                'lessons.sort_num',
+                'lessons.lesson_name',
+                'types_of_lessons.lesson_type_slug',
+                'course_sections.sort_num as section_sort_num'
+            )
+            ->orderBy('course_sections.sort_num', 'asc')
+            ->orderBy('lessons.sort_num', 'asc')
+            ->get();
+    }
+
+    /** Краткие сведения об уроке для ссылки: доступен ли и когда откроется */
+    public function lessonLinkInfo($lesson, $is_available_always): array
+    {
+        $status = $this->lessonAvailableStatus($lesson, $is_available_always, $lesson->section_sort_num);
+
+        return [
+            'lesson_id' => $lesson->lesson_id,
+            'section_id' => $lesson->section_id,
+            'lesson_name' => $lesson->lesson_name,
+            'is_available' => $status->is_available === true,
+            'opens_at' => $status->opens_at ?? null,
+        ];
+    }
+
+    /** Предыдущий и следующий урок в пределах уровня (через границы разделов) */
+    public function lessonNeighbors($lesson_id, $level): array
+    {
+        $sequence = $this->levelLessonSequence($level->level_id)->values();
+        $index = $sequence->search(function ($item) use ($lesson_id) {
+            return (int) $item->lesson_id === (int) $lesson_id;
+        });
+
+        if ($index === false) {
+            return ['prev' => null, 'next' => null];
+        }
+
+        $prev = $index > 0 ? $sequence[$index - 1] : null;
+        $next = $index < $sequence->count() - 1 ? $sequence[$index + 1] : null;
+
+        return [
+            'prev' => $prev ? $this->lessonLinkInfo($prev, $level->is_available_always) : null,
+            'next' => $next ? $this->lessonLinkInfo($next, $level->is_available_always) : null,
+        ];
+    }
+
+    /**
+     * Прогресс уровня так же, как на странице уровня: среднее по разделам,
+     * раздел — среднее по его урокам. Два запроса вместо цикла по урокам
+     */
+    public function levelCompletedPercent($level_id, $user_id): float
+    {
+        $lessons = Lesson::leftJoin('course_sections', 'lessons.section_id', '=', 'course_sections.section_id')
+            ->where('course_sections.level_id', '=', $level_id)
+            ->select('lessons.lesson_id', 'lessons.section_id')
+            ->get();
+
+        $sectionIds = CourseSection::where('level_id', $level_id)->pluck('section_id');
+        if ($sectionIds->isEmpty()) {
+            return 0;
+        }
+
+        $progress = LessonProgress::where('learner_id', $user_id)
+            ->whereIn('lesson_id', $lessons->pluck('lesson_id'))
+            ->pluck('progress', 'lesson_id');
+
+        $total = 0;
+        foreach ($sectionIds as $sectionId) {
+            $sectionLessons = $lessons->where('section_id', $sectionId);
+            if ($sectionLessons->count() === 0) {
+                continue;
+            }
+            $sum = $sectionLessons->sum(function ($l) use ($progress) {
+                return (float) ($progress[$l->lesson_id] ?? 0);
+            });
+            $total += $sum / $sectionLessons->count();
+        }
+
+        return $total / $sectionIds->count();
     }
 
     public function getLessons($section_id, $language_id){
