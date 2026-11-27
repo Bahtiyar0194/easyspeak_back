@@ -305,7 +305,15 @@ class ConferenceController extends Controller
         }
         
         if (!$allowed) {
-            return response()->json(['type' => 'error', 'message' => 'Access denied'], 403);
+            // Ученик группы, но урок не оплачен (и не бесплатный) — говорим
+            // именно это, а не общий «доступ только для участников»
+            $reason = !empty($conference->is_member)
+                && isset($conference->is_bought_status)
+                && $conference->is_bought_status->is_bought === false
+                ? 'not_bought'
+                : 'access_denied';
+
+            return response()->json(['type' => 'error', 'message' => 'Access denied', 'reason' => $reason], 403);
         }
         
         // Если конференция уже закончилась

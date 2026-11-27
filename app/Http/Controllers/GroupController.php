@@ -519,38 +519,18 @@ class GroupController extends Controller
 
                 $this->conferenceService->createConferences($new_group->group_id, $new_group->level_id, $new_group->started_at, $request->selected_days, $new_group->all_lessons_is_conference);
 
-                if(isset($request->first_lesson_free)){
-                    //Ближайшая конференция
-                    $firstLesson = Conference::select('lesson_id')
-                    ->where('group_id', $new_group->group_id)
-                    ->where('start_time', '>=', date(now()))
-                    ->orderBy('start_time', 'asc')
-                    ->first();
-                }
-
                 foreach ($group_members as $member) {
                     $new_member = new GroupMember();
                     $new_member->group_id = $new_group->group_id;
                     $new_member->member_id = $member->user_id;
                     $new_member->save();
 
-                    if(isset($firstLesson)){
-                        $exists = BoughtLesson::where('lesson_id', $firstLesson->lesson_id)
-                        ->where('learner_id', $member->user_id)
-                        ->exists();
-
-                        if (!$exists) {
-                            $new_bought_lesson = new BoughtLesson();
-                            $new_bought_lesson->learner_id = $member->user_id;
-                            $new_bought_lesson->lesson_id = $firstLesson->lesson_id;
-                            $new_bought_lesson->iniciator_id = auth()->user()->user_id;
-                            $new_bought_lesson->is_free = 1;
-                            $new_bought_lesson->save();
-                        }
-                    }
-                     
                     // Сохранение имен участников
                     $member_names[] = $member->last_name . ' ' . $member->first_name;
+                }
+
+                if(isset($request->first_lesson_free)){
+                    $this->grantFirstFreeLesson($new_group->group_id, collect($group_members)->pluck('user_id')->all());
                 }
 
                 $description = "<p><span>Название группы:</span> <b>{$new_group->group_name}</b></p>
@@ -775,15 +755,6 @@ class GroupController extends Controller
                 $request->schedule_option
             );
 
-            if(isset($request->first_lesson_free)){
-                //Ближайшая конференция
-                $firstLesson = Conference::select('lesson_id')
-                ->where('group_id', $edit_group->group_id)
-                ->where('start_time', '>=', date(now()))
-                ->orderBy('start_time', 'asc')
-                ->first();
-            }
-
             // Извлекаем user_id из переданных данных
             $newMemberIds = collect(json_decode($request->members))->pluck('user_id')->toArray();
 
@@ -812,21 +783,18 @@ class GroupController extends Controller
                 $new_member->member_id = $memberId;
                 $new_member->status_type_id = 1; //$isOwner ? 1 : 12;
                 $new_member->save();
+            }
 
-                if(isset($firstLesson)){
-                    $exists = BoughtLesson::where('lesson_id', $firstLesson->lesson_id)
-                    ->where('learner_id', $memberId)
-                    ->exists();
+            // Бесплатный урок — всем действующим участникам, у кого его ещё нет:
+            // и новым, и тем, кто был в группе, когда галочку включили позже.
+            // После пересборки расписания уроки-конференции могли смениться
+            if(isset($request->first_lesson_free)){
+                $activeMemberIds = GroupMember::where('group_id', $edit_group->group_id)
+                    ->where('status_type_id', '=', 1)
+                    ->pluck('member_id')
+                    ->all();
 
-                    if (!$exists) {
-                        $new_bought_lesson = new BoughtLesson();
-                        $new_bought_lesson->learner_id = $memberId;
-                        $new_bought_lesson->lesson_id = $firstLesson->lesson_id;
-                        $new_bought_lesson->iniciator_id = auth()->user()->user_id;
-                        $new_bought_lesson->is_free = 1;
-                        $new_bought_lesson->save();
-                    }
-                }
+                $this->grantFirstFreeLesson($edit_group->group_id, $activeMemberIds);
             }
 
             // Обрабатываем неизменных участников (если требуется)
@@ -990,5 +958,50 @@ class GroupController extends Controller
         }
 
         return response()->json('success', 200);
+    }
+
+    /**
+     * «Первый урок бесплатно»: ближайший урок группы, который ещё НЕ ЗАКОНЧИЛСЯ.
+     * Раньше брался урок, который ещё не начался: если группу создавали во время
+     * первого урока (или после него в тот же день), бесплатным становился второй,
+     * и в идущий урок ученика не пускало («Доступ разрешён только когда…»).
+     *
+     * Выдаём только тем, у кого среди уроков группы ещё нет бесплатного, —
+     * повторное сохранение группы не раздаёт новые бесплатные уроки.
+     */
+    protected function grantFirstFreeLesson($group_id, array $memberIds): void
+    {
+        $firstConference = Conference::where('group_id', $group_id)
+            ->where('end_time', '>', now())
+            ->orderBy('start_time', 'asc')
+            ->first();
+
+        if (!$firstConference || empty($memberIds)) {
+            return;
+        }
+
+        $groupLessonIds = Conference::where('group_id', $group_id)->pluck('lesson_id');
+
+        foreach (array_unique($memberIds) as $memberId) {
+            $hasFree = BoughtLesson::where('learner_id', $memberId)
+                ->whereIn('lesson_id', $groupLessonIds)
+                ->where('is_free', 1)
+                ->exists();
+
+            $alreadyHasLesson = BoughtLesson::where('learner_id', $memberId)
+                ->where('lesson_id', $firstConference->lesson_id)
+                ->exists();
+
+            if ($hasFree || $alreadyHasLesson) {
+                continue;
+            }
+
+            BoughtLesson::create([
+                'learner_id' => $memberId,
+                'lesson_id' => $firstConference->lesson_id,
+                'iniciator_id' => auth()->user()->user_id,
+                'is_free' => 1,
+            ]);
+        }
     }
 }
