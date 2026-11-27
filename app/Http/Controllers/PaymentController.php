@@ -807,6 +807,14 @@ class PaymentController extends Controller
      */
     public function accept_payment(Request $request)
     {
+        // Подтверждать счета может только суперадминистратор. Операция 30 в
+        // таблице прав открыта и владельцу / администратору школы — без этой
+        // проверки они могли прямым запросом подтвердить свой неоплаченный счёт
+        // и продлить подписку бесплатно
+        if (!auth()->user()->hasRole('super_admin')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $operator_id = auth()->user()->user_id;
 
         $result = DB::transaction(function () use ($request, $operator_id) {
