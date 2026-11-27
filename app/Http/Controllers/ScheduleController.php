@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 use App\Models\Language;
+use App\Models\User;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\Conference;
@@ -153,7 +154,21 @@ class ScheduleController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $rules = [
-            'mentor_id' => 'required|numeric',
+            // Учителем можно назначить только сотрудника своей школы
+            'mentor_id' => [
+                'required',
+                'numeric',
+                function ($attribute, $value, $fail) use ($auth_user) {
+                    $mentor = User::find($value);
+                    if (
+                        !$mentor ||
+                        (int) $mentor->school_id !== (int) $auth_user->school_id ||
+                        !$mentor->hasRole(['super_admin', 'school_owner', 'school_admin', 'mentor'])
+                    ) {
+                        $fail(trans('validation.exists'));
+                    }
+                },
+            ],
             'start_date' => 'required|date',
             'start_time' => 'required|date_format:H:i',
         ];
@@ -173,6 +188,12 @@ class ScheduleController extends Controller
         Conference::where('uuid', '=', $request->uuid)->first();
 
         if(isset($conference)){
+            // Раньше перенести (и сдвинуть всё расписание группы) мог любой
+            // авторизованный, зная uuid конференции
+            if(!$this->canManageConference($conference, $auth_user)){
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+
             // Для уведомления «урок перенесён»
             $isB2c = $this->schoolService->isAiSchoolDomain($auth_user->school_id);
             $oldStart = Carbon::parse($conference->start_time);
@@ -285,5 +306,26 @@ class ScheduleController extends Controller
         else{
             return response()->json('Conference not found', 404);
         }
+    }
+
+    /**
+     * Может ли пользователь переносить урок: его учитель, тот, кто его создал,
+     * либо владелец / администратор той же школы (школа — по учителю урока,
+     * а если его нет — по создателю)
+     */
+    protected function canManageConference($conference, $user): bool
+    {
+        if ((int) $conference->mentor_id === (int) $user->user_id || (int) $conference->operator_id === (int) $user->user_id) {
+            return true;
+        }
+
+        if (!$user->hasRole(['super_admin', 'school_owner', 'school_admin'])) {
+            return false;
+        }
+
+        $schoolId = User::where('user_id', $conference->mentor_id)->value('school_id')
+            ?? User::where('user_id', $conference->operator_id)->value('school_id');
+
+        return $schoolId !== null && (int) $schoolId === (int) $user->school_id;
     }
 }
