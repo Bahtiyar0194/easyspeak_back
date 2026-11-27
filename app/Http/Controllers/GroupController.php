@@ -356,7 +356,7 @@ class GroupController extends Controller
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
                 'is_legal' => 'required|boolean',
-                'lesson_price' => 'required|numeric',
+                'lesson_price' => 'required|numeric|min:0',
                 'step' => 'required|numeric',
             ];
 
@@ -568,7 +568,8 @@ class GroupController extends Controller
                     auth()->user()->user_id
                 );
 
-                return response()->json('success', 200);
+                // Номер новой группы — чтобы подсветить её в списке
+                return response()->json(['success' => true, 'group_id' => $new_group->group_id], 200);
             }
         }
     }
@@ -585,7 +586,7 @@ class GroupController extends Controller
                 'level_id' => 'required|numeric',
                 'mentor_id' => 'required|numeric',
                 'is_legal' => 'required|boolean',
-                'lesson_price' => 'required|numeric',
+                'lesson_price' => 'required|numeric|min:0',
                 'step' => 'required|numeric',
             ];
 
