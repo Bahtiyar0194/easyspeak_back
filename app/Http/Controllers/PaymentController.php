@@ -15,6 +15,7 @@ use App\Models\PromoCode;
 
 use App\Services\PaymentService;
 
+use DB;
 use Validator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -59,14 +60,35 @@ class PaymentController extends Controller
         return response()->json($data, 200);
     }
 
+    // Поля, по которым можно сортировать список счетов (ключ приходит с клиента
+    // и раньше подставлялся в orderBy как есть — опечатка давала ошибку 500)
+    const PAYMENT_SORT_KEYS = [
+        'payments.payment_id',
+        'payments.sum',
+        'payments.created_at',
+        'payments.is_paid',
+        'schools.school_name',
+        'schools.full_school_name',
+        'schools.bin',
+        'types_of_subscription_plans_lang.subscription_plan_name',
+        'payment_methods_lang.payment_method_name',
+    ];
+
+    /** Список счетов школ — только суперадминистратору */
     public function get_payments(Request $request)
     {
+        if (!auth()->user()->hasRole('super_admin')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
-        $per_page = $request->per_page ? $request->per_page : 10;
-        // Получаем параметры сортировки
-        $sortKey = $request->input('sort_key', 'created_at');  // Поле для сортировки по умолчанию
-        $sortDirection = $request->input('sort_direction', 'asc');  // Направление по умолчанию
+        $per_page = min(max((int) ($request->per_page ?: 10), 1), 100);
+        // Сортировка: только разрешённые поля; по умолчанию — новые сверху
+        $sortKey = in_array($request->input('sort_key'), self::PAYMENT_SORT_KEYS, true)
+            ? $request->input('sort_key')
+            : 'payments.created_at';
+        $sortDirection = strtolower($request->input('sort_direction')) === 'asc' ? 'asc' : 'desc';
 
         $payments = Payment::leftJoin('types_of_subscription_plans', 'types_of_subscription_plans.subscription_plan_id', '=', 'payments.subscription_plan_id')
         ->leftJoin('types_of_subscription_plans_lang', 'types_of_subscription_plans.subscription_plan_id', '=', 'types_of_subscription_plans_lang.subscription_plan_id')
@@ -97,7 +119,8 @@ class PaymentController extends Controller
         )
         ->where('types_of_subscription_plans_lang.lang_id', '=', $language->lang_id)
         ->where('payment_methods_lang.lang_id', '=', $language->lang_id)
-        ->orderBy($sortKey, $sortDirection);
+        ->orderBy($sortKey, $sortDirection)
+        ->orderBy('payments.payment_id', 'desc');
 
 
         $payment_id = ltrim($request->payment_id, '0');
@@ -150,7 +173,47 @@ class PaymentController extends Controller
             $payments->where('payments.is_paid', '=', $is_paid);
         }
 
+        // Быстрый фильтр по статусу: ожидает подтверждения (неоплаченный счёт),
+        // оплачен, не прошла (неоплаченная оплата картой)
+        $status = $request->status;
+        if ($status === 'pending') {
+            $payments->where('payments.is_paid', 0)->where('payment_methods.payment_method_slug', 'invoice');
+        } elseif ($status === 'paid') {
+            $payments->where('payments.is_paid', 1);
+        } elseif ($status === 'failed') {
+            $payments->where('payments.is_paid', 0)->where('payment_methods.payment_method_slug', '!=', 'invoice');
+        }
+
         return response()->json($payments->paginate($per_page)->onEachSide(1), 200);
+    }
+
+    /**
+     * Сводка для страницы счетов: сколько счетов ждут подтверждения и на какую
+     * сумму, сколько оплачено в текущем месяце. Только суперадминистратору.
+     */
+    public function get_payments_summary(Request $request)
+    {
+        if (!auth()->user()->hasRole('super_admin')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $pending = Payment::leftJoin('payment_methods', 'payment_methods.payment_method_id', '=', 'payments.payment_method_id')
+            ->where('payments.is_paid', 0)
+            ->where('payment_methods.payment_method_slug', 'invoice')
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(payments.sum), 0) as amount')
+            ->first();
+
+        $paid = Payment::where('is_paid', 1)
+            ->where('updated_at', '>=', Carbon::now()->startOfMonth())
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(sum), 0) as amount')
+            ->first();
+
+        return response()->json([
+            'pending_count' => (int) $pending->total,
+            'pending_amount' => (float) $pending->amount,
+            'paid_month_count' => (int) $paid->total,
+            'paid_month_amount' => (float) $paid->amount,
+        ], 200);
     }
 
     public function school_handle(Request $request)
@@ -737,10 +800,37 @@ class PaymentController extends Controller
         
     }
 
+    /**
+     * Подтверждение оплаты по счёту. Раньше повторное подтверждение (двойной
+     * клик, вторая вкладка) ещё раз продлевало подписку школы — теперь платёж
+     * блокируется на время проверки и оплаченный не принимается.
+     */
     public function accept_payment(Request $request)
     {
         $operator_id = auth()->user()->user_id;
-        $this->paymentService->savePayment($request->payment_id, $operator_id);
+
+        $result = DB::transaction(function () use ($request, $operator_id) {
+            $payment = Payment::where('payment_id', $request->payment_id)->lockForUpdate()->first();
+
+            if (!$payment) {
+                return 404;
+            }
+
+            if ((int) $payment->is_paid === 1) {
+                return 409;
+            }
+
+            $this->paymentService->savePayment($payment->payment_id, $operator_id);
+            return 200;
+        });
+
+        if ($result === 404) {
+            return response()->json(['message' => 'Payment not found'], 404);
+        }
+
+        if ($result === 409) {
+            return response()->json(['message' => 'Payment already accepted'], 409);
+        }
 
         return response()->json(['success' => true], 200);
     }

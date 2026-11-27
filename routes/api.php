@@ -355,6 +355,7 @@ Route::group([
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/get_attributes', [PaymentController::class, 'get_attributes']);
             Route::post('/get_payments', [PaymentController::class, 'get_payments']);
+            Route::get('/get_payments_summary', [PaymentController::class, 'get_payments_summary']);
             Route::post('/school/handle', [PaymentController::class, 'school_handle']);
             Route::post('/lesson/handle', [PaymentController::class, 'lesson_handle']);
             Route::post('/course_level/handle', [PaymentController::class, 'level_handle']);
