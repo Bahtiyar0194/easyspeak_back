@@ -198,6 +198,15 @@ class ScheduleController extends Controller
             $isB2c = $this->schoolService->isAiSchoolDomain($auth_user->school_id);
             $oldStart = Carbon::parse($conference->start_time);
 
+            // У учителя в новое время уже есть другой урок — предупреждаем.
+            // Пользователь может перенести всё равно (force=1)
+            if (!$request->boolean('force')) {
+                $conflict = $this->findMentorConflict($conference, $isB2c, $request);
+                if ($conflict) {
+                    return response()->json(['message' => 'mentor_busy', 'conflict' => $conflict], 409);
+                }
+            }
+
             if($isB2c){
                 $conference->topic = $request->conf_topic;
 
@@ -215,7 +224,9 @@ class ScheduleController extends Controller
                 $referenceDate = Carbon::parse($conference->start_time)->toDateString();
                 $requestDate = Carbon::parse($request->start_date)->toDateString();
 
-                $diffInDays = Carbon::parse($conference->start_time)->diffInDays($request->start_date.' '.$request->start_time);
+                // Разница в днях — по датам. Раньше считалась по дате и времени,
+                // и при более раннем времени сдвиг выходил на день меньше
+                $diffInDays = Carbon::parse($referenceDate)->diffInDays(Carbon::parse($requestDate));
 
                 // Создаем допустимый диапазон: от -2 до +2 дней
                 $minDate = Carbon::parse($referenceDate)->subDays(2);
@@ -313,6 +324,59 @@ class ScheduleController extends Controller
      * либо владелец / администратор той же школы (школа — по учителю урока,
      * а если его нет — по создателю)
      */
+    /**
+     * Другой урок того же учителя, который пересекается с новым временем
+     * переносимого урока. null — пересечений нет.
+     * При сдвиге расписания на неделю меняется только дата, время то же.
+     */
+    protected function findMentorConflict($conference, bool $isB2c, Request $request): ?array
+    {
+        $oldStart = Carbon::parse($conference->start_time);
+        $oldEnd = Carbon::parse($conference->end_time);
+        $shift = !$isB2c && $request->input('date_shift_by_week') == 1;
+
+        // Дата вне допустимых ±2 дней — дальше вернётся ошибка даты, конфликт не ищем
+        if (!$isB2c) {
+            $requestDate = Carbon::parse($request->start_date)->toDateString();
+            $minDate = $oldStart->copy()->subDays(2)->toDateString();
+            $maxDate = $oldStart->copy()->addDays(2)->toDateString();
+            if ($requestDate < $minDate || (!$shift && $requestDate > $maxDate)) {
+                return null;
+            }
+        }
+
+        if ($shift) {
+            $days = Carbon::parse($oldStart->toDateString())->diffInDays(Carbon::parse($request->start_date), false);
+            $newStart = $oldStart->copy()->addDays($days);
+            $newEnd = $oldEnd->copy()->addDays($days);
+        } else {
+            $newStart = Carbon::parse($request->start_date . ' ' . $request->start_time);
+            $newEnd = $newStart->copy()->addMinutes(config('app.conference_minute'));
+        }
+
+        $model = $isB2c ? B2cConference::class : Conference::class;
+
+        $other = $model::where('mentor_id', $request->mentor_id)
+            ->where('conference_id', '!=', $conference->conference_id)
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->orderBy('start_time')
+            ->first();
+
+        if (!$other) {
+            return null;
+        }
+
+        $notifications = app(NotificationService::class);
+
+        return [
+            'title' => $notifications->conferenceTitle($other, $isB2c),
+            'group_name' => $isB2c ? null : Group::where('group_id', $other->group_id)->value('group_name'),
+            'start_time' => $notifications->iso($other->start_time),
+            'end_time' => $notifications->iso($other->end_time),
+        ];
+    }
+
     protected function canManageConference($conference, $user): bool
     {
         if ((int) $conference->mentor_id === (int) $user->user_id || (int) $conference->operator_id === (int) $user->user_id) {
