@@ -501,7 +501,8 @@ class TaskService
                         'task' => Task::where('task_id', $task_id)->value('task_slug'),
                         'lesson' => $lesson['name'],
                     ],
-                    '/dashboard/checking-tasks'
+                    // Ссылка сразу открывает эту работу на странице проверки
+                    '/dashboard/checking-tasks?task=' . $new_completed_task->completed_task_id
                 );
             }
 

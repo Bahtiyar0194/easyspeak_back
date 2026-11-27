@@ -265,6 +265,22 @@ class TaskController extends Controller
         ->select('completed_tasks.*')
         ->findOrFail($request->completed_task_id);
 
+        // Оценить может учитель этой работы, владелец или администратор школы.
+        // Раньше запрос принимал любой сотрудник с правом 26, хотя кнопку
+        // интерфейс показывал только назначенному учителю
+        $auth_user = auth()->user();
+        if (
+            (int) $completed_task->mentor_id !== (int) $auth_user->user_id &&
+            !$auth_user->hasRole(['super_admin', 'school_owner', 'school_admin'])
+        ) {
+            return response()->json('Forbidden', 403);
+        }
+
+        // Уже проверенную работу второй раз не сохраняем (двойной клик, вторая вкладка)
+        if ((int) $completed_task->is_completed === 1) {
+            return response()->json('Task result already checked', 409);
+        }
+
         $answers = json_decode($request->answers);
 
         return $this->taskService->changeTaskResult($completed_task->completed_task_id, $answers);
@@ -379,6 +395,17 @@ class TaskController extends Controller
             $query->where('completed_tasks.mentor_id', $auth_user->user_id);
         }
 
+        // Сколько работ ждут проверки — для вкладки «Ждут проверки», без учёта фильтров
+        $pending_count = (clone $query)
+            ->where('completed_tasks.is_completed', '=', 0)
+            ->distinct()
+            ->count('completed_tasks.completed_task_id');
+
+        // Одна конкретная работа — переход из уведомления
+        if ($request->filled('completed_task_id')) {
+            $query->where('completed_tasks.completed_task_id', '=', (int) $request->completed_task_id);
+        }
+
         // Параметры фильтрации
         $task_name = $request->input('task_name');
         $task_slug = $request->input('task_slug');
@@ -452,8 +479,9 @@ class TaskController extends Controller
             $query->where('completed_tasks.is_completed', '=', (int) $is_completed);
         }
     
-        // Сортировка
-        $query->orderBy($sortKey, $sortDirection);
+        // Сортировка (вторичная — по номеру, чтобы порядок был стабильным)
+        $query->orderBy($sortKey, $sortDirection)
+            ->orderBy('completed_tasks.completed_task_id', $sortDirection);
     
         // Пагинация
         $completed_tasks = $query->paginate($per_page)->onEachSide(1);
@@ -469,7 +497,9 @@ class TaskController extends Controller
             return $task;
         });
     
-        return response()->json($completed_tasks, 200);
+        return response()->json(array_merge($completed_tasks->toArray(), [
+            'pending_count' => $pending_count,
+        ]), 200);
     }    
 
     public function create_missing_letters_task(Request $request)
