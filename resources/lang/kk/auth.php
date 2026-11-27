@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'wrong_current_password' => 'Ағымдағы құпиясөз қате',
     /*
     |--------------------------------------------------------------------------
     | Authentication Language Lines

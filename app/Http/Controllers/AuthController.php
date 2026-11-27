@@ -532,6 +532,9 @@ class AuthController extends Controller
 
         $user->roles = $roles;
 
+        // Для профиля: «Сменить пароль» или «Задать пароль» (вход через Google / Telegram)
+        $user->has_password = !empty($user->getAuthPassword());
+
         return response()->json($user, 200);
     }
 
@@ -586,6 +589,153 @@ class AuthController extends Controller
     {
         auth()->user()->tokens()->delete();
         return response()->json('Logout successful', 200);
+    }
+
+    /**
+     * Свои данные: имя, фамилия, телефон. Почту здесь не меняем — это логин
+     * и адрес для восстановления пароля, её смена требует подтверждения
+     */
+    public function update_profile(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'required|string|between:2,100',
+            'last_name' => 'required|string|between:2,100',
+            // Маска «+7 (###) ###-####»: незаполненные позиции — «_»
+            'phone' => ['nullable', 'string', 'max:30', 'regex:/^((?!_).)*$/s'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $user = User::find(auth()->user()->user_id);
+        $user->first_name = trim($request->first_name);
+        $user->last_name = trim($request->last_name);
+        $user->phone = $request->filled('phone') ? trim($request->phone) : null;
+        $user->save();
+
+        return response()->json('Profile updated', 200);
+    }
+
+    /**
+     * Аватар: клиент присылает уже обрезанный квадрат; на сервере ещё раз
+     * приводим к 512×512 JPEG (заодно убираем EXIF и всё лишнее из файла)
+     */
+    public function upload_avatar(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'avatar' => 'required|file|mimes:jpeg,jpg,png,webp|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $user = User::find(auth()->user()->user_id);
+
+        $fileName = Str::random(40) . '.jpg';
+        $directory = storage_path('app/public/avatars');
+        if (!is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        \Intervention\Image\Facades\Image::make($request->file('avatar')->getRealPath())
+            ->orientate()
+            ->fit(512, 512)
+            ->encode('jpg', 85)
+            ->save($directory . '/' . $fileName);
+
+        $this->deleteLocalAvatar($user->avatar);
+
+        $user->avatar = $fileName;
+        $user->save();
+
+        return response()->json(['avatar' => $fileName], 200);
+    }
+
+    public function delete_avatar(Request $request)
+    {
+        $user = User::find(auth()->user()->user_id);
+
+        $this->deleteLocalAvatar($user->avatar);
+
+        $user->avatar = null;
+        $user->save();
+
+        return response()->json('Avatar deleted', 200);
+    }
+
+    /**
+     * Картинка аватара. Без авторизации: её показывает <img>, который не
+     * передаёт токен. Имя файла — только [A-Za-z0-9].jpg, иначе 404
+     */
+    public function get_avatar(Request $request)
+    {
+        $fileName = (string) $request->file_name;
+
+        if (!preg_match('/^[A-Za-z0-9]{20,64}\.jpg$/', $fileName)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        $path = storage_path('app/public/avatars/' . $fileName);
+
+        if (!is_file($path)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        return response()->file($path, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+        ]);
+    }
+
+    /**
+     * Смена пароля. Если пароль уже есть — нужен текущий. Вошедшие через
+     * Google / Telegram пароля не имеют — им можно задать его впервые
+     */
+    public function change_password(Request $request)
+    {
+        $user = User::find(auth()->user()->user_id);
+        $hasPassword = !empty($user->password);
+
+        $rules = [
+            'password' => 'required|string|min:8',
+            'password_confirmation' => 'required_with:password|same:password|min:8',
+        ];
+
+        if ($hasPassword) {
+            $rules['current_password'] = 'required|string';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        if ($hasPassword && !\Illuminate\Support\Facades\Hash::check($request->current_password, $user->password)) {
+            return response()->json(['current_password' => [trans('auth.wrong_current_password')]], 422);
+        }
+
+        $user->password = bcrypt($request->password);
+        $user->save();
+
+        return response()->json('Password changed', 200);
+    }
+
+    /** Удаляет файл прежнего аватара, если он загружен к нам (не ссылка Google / Telegram) */
+    private function deleteLocalAvatar($avatar): void
+    {
+        if (!$avatar || Str::startsWith($avatar, ['http://', 'https://'])) {
+            return;
+        }
+
+        if (preg_match('/^[A-Za-z0-9]{20,64}\.jpg$/', $avatar)) {
+            $path = storage_path('app/public/avatars/' . $avatar);
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
     }
 
     private function check_telegram_hash(array $data, string $hash): bool

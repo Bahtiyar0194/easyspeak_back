@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'wrong_current_password' => 'The current password is incorrect',
 
     /*
     |--------------------------------------------------------------------------

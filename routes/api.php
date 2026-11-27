@@ -71,16 +71,19 @@ Route::group([
 
         Route::post('/one_time_code', [AuthController::class, 'one_time_code']);
 
+        // Картинка аватара — без авторизации, её запрашивает <img>
+        Route::get('/get_avatar/{file_name}', [AuthController::class, 'get_avatar']);
+
         Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/change_mode/{role_type_id}', [AuthController::class, 'change_mode']);
             Route::post('/change_language/{lang_tag}', [AuthController::class, 'change_language']);
             //Route::post('/change_theme/{theme_slug}', [AuthController::class, 'change_theme']);
             //Route::post('/change_location/{location_id}', [AuthController::class, 'change_location']);
-            // Route::post('/update', [AuthController::class, 'update']);
-            // Route::post('/upload_avatar', [AuthController::class, 'upload_avatar']);
-            // Route::post('/delete_avatar', [AuthController::class, 'delete_avatar']);
-            // Route::post('/change_password', [AuthController::class, 'change_password']);
+            Route::post('/update', [AuthController::class, 'update_profile']);
+            Route::post('/upload_avatar', [AuthController::class, 'upload_avatar']);
+            Route::post('/delete_avatar', [AuthController::class, 'delete_avatar']);
+            Route::post('/change_password', [AuthController::class, 'change_password'])->middleware('throttle:10,1');
             Route::post('/logout', [AuthController::class, 'logout']);
         });
     });
