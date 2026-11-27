@@ -17,6 +17,7 @@ use App\Models\UserRequest;
 
 use App\Services\ConferenceService;
 use App\Services\ScheduleService;
+use App\Services\NotificationService;
 
 use Illuminate\Http\Request;
 use Validator;
@@ -563,6 +564,30 @@ class GroupController extends Controller
                 $user_operation->description = $description;
                 $user_operation->save();
 
+                // Ученикам — «вас добавили в группу», учителю — «вы учитель группы»
+                $notifications = app(NotificationService::class);
+                $groupParams = [
+                    'group' => $new_group->group_name,
+                    'level' => $level->level_name,
+                    'mentor' => trim($mentor->last_name . ' ' . $mentor->first_name),
+                ];
+
+                $notifications->send(
+                    collect($group_members)->pluck('user_id')->all(),
+                    'group_added',
+                    $groupParams,
+                    '/dashboard/schedule',
+                    auth()->user()->user_id
+                );
+
+                $notifications->send(
+                    [$new_group->mentor_id],
+                    'group_mentor_assigned',
+                    $groupParams + ['members' => count($group_members)],
+                    '/dashboard/users-groups',
+                    auth()->user()->user_id
+                );
+
                 return response()->json('success', 200);
             }
         }
@@ -726,6 +751,8 @@ class GroupController extends Controller
             }
 
             $edit_group = Group::find($request->group_id);
+            // Для уведомления «вас назначили учителем группы»
+            $previousMentorId = $edit_group->mentor_id;
             $edit_group->operator_id = auth()->user()->user_id;
             $edit_group->mentor_id = $request->mentor_id;
             $edit_group->is_legal = $request->is_legal;
@@ -847,6 +874,41 @@ class GroupController extends Controller
             $user_operation->operation_type_id = 4;
             $user_operation->description = $description;
             $user_operation->save();
+
+            // Новым ученикам — «вас добавили в группу»; новому учителю —
+            // «вы учитель группы»; прежнему учителю — «в группу добавлены ученики»
+            $notifications = app(NotificationService::class);
+            $groupParams = [
+                'group' => $edit_group->group_name,
+                'level' => $level->level_name,
+                'mentor' => trim($mentor->last_name . ' ' . $mentor->first_name),
+            ];
+
+            $notifications->send(
+                array_values($newMembersToAdd),
+                'group_added',
+                $groupParams,
+                '/dashboard/schedule',
+                auth()->user()->user_id
+            );
+
+            if ((int) $previousMentorId !== (int) $edit_group->mentor_id) {
+                $notifications->send(
+                    [$edit_group->mentor_id],
+                    'group_mentor_assigned',
+                    $groupParams + ['members' => count($newMemberIds)],
+                    '/dashboard/users-groups',
+                    auth()->user()->user_id
+                );
+            } elseif (count($newMembersToAdd) > 0) {
+                $notifications->send(
+                    [$edit_group->mentor_id],
+                    'group_members_added',
+                    $groupParams + ['count' => count($newMembersToAdd)],
+                    '/dashboard/users-groups',
+                    auth()->user()->user_id
+                );
+            }
 
             // $owner =
 

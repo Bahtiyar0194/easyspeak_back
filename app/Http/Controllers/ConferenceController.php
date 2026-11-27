@@ -26,6 +26,7 @@ use App\Services\SchoolService;
 use App\Services\ConferenceService;
 use App\Services\CourseService;
 use App\Services\TaskService;
+use App\Services\NotificationService;
 
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -159,7 +160,11 @@ class ConferenceController extends Controller
      */
     public function live_status(Request $request)
     {
-        return response()->json($this->conferenceService->getLiveStatus($request), 200);
+        $status = $this->conferenceService->getLiveStatus($request);
+        // Счётчик колокольчика — тем же опросом, без отдельного запроса
+        $status['notifications_unread'] = auth()->user()->unreadNotifications()->count();
+
+        return response()->json($status, 200);
     }
 
     public function get_current_conferences(Request $request)
@@ -749,6 +754,7 @@ class ConferenceController extends Controller
             ->firstOrFail();
 
             if(isset($conference) && $conference->operator_id === $auth_user->user_id){
+                $this->notifyLessonCancelled($conference, true, $auth_user->user_id);
                 $conference->delete();
                 return response()->json('Delete conference is success', 200);
             }
@@ -760,12 +766,34 @@ class ConferenceController extends Controller
             ->firstOrFail();
 
             if(isset($conference) && $conference->operator_id === $auth_user->user_id){
+                $this->notifyLessonCancelled($conference, false, $auth_user->user_id);
                 $conference->delete();
                 return response()->json('Delete conference is success', 200);
             }
 
             return response()->json('Delete conference is failed', 404);
         }
+    }
+
+    /** Урок отменён (удалён) — сообщаем участникам и учителю, кроме того, кто удалил */
+    protected function notifyLessonCancelled($conference, bool $isB2c, $actor_id): void
+    {
+        // Уже прошедший урок удаляют из расписания — это не «отмена»
+        if (Carbon::parse($conference->end_time)->isPast()) {
+            return;
+        }
+
+        $notifications = app(NotificationService::class);
+        $notifications->send(
+            $notifications->conferenceRecipientIds($conference, $isB2c),
+            'lesson_cancelled',
+            [
+                'lesson' => $notifications->conferenceTitle($conference, $isB2c),
+                'start' => $notifications->iso($conference->start_time),
+            ],
+            '/dashboard/schedule',
+            $actor_id
+        );
     }
 
     public function accept(Request $request)

@@ -30,6 +30,7 @@ use Illuminate\Validation\ValidationException;
 
 use App\Services\UploadFileService;
 use App\Services\SchoolService;
+use App\Services\NotificationService;
 use App\Jobs\ProcessVideoJob;
 use App\Jobs\LessonProgressJob;
 
@@ -487,6 +488,23 @@ class TaskService
             $save_task_progress->is_completed = $get_task_result->completed;
             $save_task_progress->save();
 
+            // Есть ответы, которые должен оценить учитель, — сообщаем ему
+            if(!$get_task_result->completed && $mentor_id && (int) $mentor_id !== (int) $auth_user->user_id){
+                $notifications = app(NotificationService::class);
+                $lesson = $notifications->lessonInfo($lesson_id);
+
+                $notifications->send(
+                    [$mentor_id],
+                    'task_submitted',
+                    [
+                        'learner' => trim($auth_user->last_name . ' ' . $auth_user->first_name),
+                        'task' => Task::where('task_id', $task_id)->value('task_slug'),
+                        'lesson' => $lesson['name'],
+                    ],
+                    '/dashboard/checking-tasks'
+                );
+            }
+
             //Сохранить общий прогресс урока
             $lesson_tasks = $this->getLessonTasksProgress($lesson_id);
 
@@ -570,6 +588,26 @@ class TaskService
                 $completed_task->is_completed = true;
                 $completed_task->save();
             });
+
+            // Ученику: учитель проверил задание (с итоговым процентом)
+            $checked = CompletedTask::find($completed_task_id);
+            if($checked && (int) $checked->learner_id !== (int) $auth_user->user_id){
+                $notifications = app(NotificationService::class);
+                $task = Task::find($checked->task_id);
+                $lesson = $task ? $notifications->lessonInfo($task->lesson_id) : ['name' => null, 'link' => null];
+                $result = $task ? $this->getTaskResult($task->task_id, $checked->learner_id) : null;
+
+                $notifications->send(
+                    [$checked->learner_id],
+                    'task_checked',
+                    [
+                        'task' => $task ? $task->task_slug : null,
+                        'lesson' => $lesson['name'],
+                        'percentage' => $result ? round($result->percentage) : null,
+                    ],
+                    $lesson['link']
+                );
+            }
 
             return response()->json('success', 200);
         }

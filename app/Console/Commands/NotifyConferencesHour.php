@@ -6,6 +6,7 @@ use App\Models\Conference;
 use App\Models\GroupMember;
 use App\Models\TelegramToken;
 use App\Jobs\SendTelegramMessage;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Log;
 
 use Illuminate\Console\Command;
@@ -114,6 +115,19 @@ class NotifyConferencesHour extends Command
                             null
                         );
                     }
+
+                    // Колокольчик в кабинете: участникам и учителю (в т.ч. без Telegram)
+                    $notifications = app(NotificationService::class);
+                    $notifications->send(
+                        $notifications->conferenceRecipientIds($conference),
+                        'lesson_reminder',
+                        [
+                            'when' => 'hour',
+                            'lesson' => $notifications->conferenceTitle($conference),
+                            'start' => $notifications->iso($conference->start_time),
+                        ],
+                        '/dashboard/conference/' . $conference->uuid
+                    );
 
                     $conference->update([
                         'notification_sent_hour_before' => 1

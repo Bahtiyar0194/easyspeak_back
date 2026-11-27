@@ -15,6 +15,7 @@ use Carbon\Carbon;
 
 use App\Services\ScheduleService;
 use App\Services\SchoolService;
+use App\Services\NotificationService;
 
 class ScheduleController extends Controller
 {
@@ -172,7 +173,11 @@ class ScheduleController extends Controller
         Conference::where('uuid', '=', $request->uuid)->first();
 
         if(isset($conference)){
-            if($this->schoolService->isAiSchoolDomain($auth_user->school_id)){
+            // Для уведомления «урок перенесён»
+            $isB2c = $this->schoolService->isAiSchoolDomain($auth_user->school_id);
+            $oldStart = Carbon::parse($conference->start_time);
+
+            if($isB2c){
                 $conference->topic = $request->conf_topic;
 
                 if(isset($request->conf_topic_description)){
@@ -252,6 +257,28 @@ class ScheduleController extends Controller
             }
 
             $conference->save();
+
+            // Время изменилось — сообщаем участникам и учителю. При сдвиге на
+            // неделю конференции меняются отдельными моделями, поэтому новое
+            // время берём из базы
+            $newStart = Carbon::parse(optional($conference->fresh())->start_time ?? $conference->start_time);
+
+            if(!$oldStart->equalTo($newStart)){
+                $notifications = app(NotificationService::class);
+                $shifted = !$isB2c && isset($request->date_shift_by_week) && $request->date_shift_by_week == 1;
+
+                $notifications->send(
+                    $notifications->conferenceRecipientIds($conference, $isB2c),
+                    $shifted ? 'lessons_shifted' : 'lesson_moved',
+                    [
+                        'lesson' => $notifications->conferenceTitle($conference, $isB2c),
+                        'from' => $notifications->iso($oldStart),
+                        'to' => $notifications->iso($newStart),
+                    ],
+                    '/dashboard/schedule',
+                    $auth_user->user_id
+                );
+            }
 
             return response()->json('Conference saved sucessfully', 200);
         }

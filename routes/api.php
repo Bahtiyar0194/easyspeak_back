@@ -10,6 +10,7 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ConferenceController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\OperationController;
@@ -139,6 +140,16 @@ Route::group([
             Route::post('/upload_favicon', [SchoolController::class, 'upload_favicon']);
             Route::post('/delete_favicon', [SchoolController::class, 'delete_favicon']);
         });
+    });
+
+    // Уведомления в личном кабинете (колокольчик)
+    Route::group([
+        'prefix' => 'notifications',
+        'middleware' => ['auth:sanctum'],
+    ], function ($router) {
+        Route::get('/get', [NotificationController::class, 'get']);
+        Route::post('/read/{notification_id}', [NotificationController::class, 'read']);
+        Route::post('/read_all', [NotificationController::class, 'read_all']);
     });
 
     Route::group([

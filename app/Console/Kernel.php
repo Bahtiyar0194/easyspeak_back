@@ -29,6 +29,12 @@ class Kernel extends ConsoleKernel
         ->everyMinute()
         ->withoutOverlapping()
         ->onOneServer();
+
+        // Подписка школы скоро закончится / истекла — раз в день утром
+        $schedule->command('subscriptions:notify')
+        ->dailyAt('09:00')
+        ->withoutOverlapping()
+        ->onOneServer();
     }
 
     /**

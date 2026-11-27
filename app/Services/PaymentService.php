@@ -35,6 +35,15 @@ class PaymentService
         $school->subscription_plan_id = $selectedPlan->subscription_plan_id;
         $school->subscription_expiration_at = $end_date;
         $school->save();
+
+        // Владельцам и администраторам школы: оплата подтверждена, подписка до …
+        $notifications = app(NotificationService::class);
+        $notifications->send(
+            $notifications->schoolManagerIds($school->school_id),
+            'payment_confirmed',
+            ['expires_at' => $notifications->iso($end_date)],
+            '/dashboard/school'
+        );
     }
 
     public function saveLearnerPayment($payment_id, $lesson_ids){
