@@ -246,18 +246,14 @@ class ConferenceController extends Controller
         $conference->lesson_type_slug = 'conference';
 
         if(!$this->schoolService->isAiSchoolDomain($auth_user->school_id)){
-            if($isOnlyLearner === true){
-                $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
-            }
-
             if($isOwner && $auth_user->school_id === $conference->school_id){
                 $allowed = true;
             }
-        
+
             if($conference->mentor_id == $auth_user->user_id || $conference->operator_id == $auth_user->user_id) {
                 $allowed = true;
             }
-        
+
             $isMember = GroupMember::where('group_id', $conference->group_id)
             ->where('status_type_id', '=', 1)
             ->where('member_id', $auth_user->user_id)
@@ -267,7 +263,12 @@ class ConferenceController extends Controller
                 $conference->is_member = true;
             }
 
-            if(isset($conference->is_bought_status)){
+            // Ученик этого урока: доступ по оплате / бесплатному уроку.
+            // Раньше проверка шла только для пользователей с единственной ролью
+            // «ученик»: участник группы, у которого есть ещё роль (например,
+            // учитель), не проходил вовсе — даже с оплаченным уроком
+            if(!$allowed && ($isOnlyLearner === true || $isMember)){
+                $conference->is_bought_status = $this->courseService->lessonIsBoughtStatus($conference->lesson_id, $auth_user->user_id);
                 $allowed = $conference->is_bought_status->is_bought;
             }
         }
