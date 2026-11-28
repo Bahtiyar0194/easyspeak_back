@@ -120,6 +120,8 @@ class TaskController extends Controller
         ->leftJoin('course_levels', 'course_sections.level_id', '=', 'course_levels.level_id')
         ->leftJoin('courses', 'course_levels.course_id', '=', 'courses.course_id')
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->select(
             'courses.course_id',

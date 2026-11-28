@@ -41,6 +41,8 @@ class GroupController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->where('courses.show_status_id', '=', 1)
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->select(
@@ -353,7 +355,14 @@ class GroupController extends Controller
             $rules = [
                 'group_name' => 'required|string|between:3,300',
                 'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
+                // Уровень курса, который школа видит (свой курс или курс платформы)
+                'level_id' => ['required', 'numeric', function ($attribute, $value, $fail) {
+                    $access = app(\App\Services\CourseAccess::class);
+                    $course = $access->findCourse($access->courseIdByLevel($value));
+                    if (!$access->canView(auth()->user(), $course)) {
+                        $fail(trans('validation.exists'));
+                    }
+                }],
                 'mentor_id' => 'required|numeric',
                 'is_legal' => 'required|boolean',
                 'lesson_price' => 'required|numeric|min:0',
@@ -583,7 +592,14 @@ class GroupController extends Controller
             $rules = [
                 'group_name' => 'required|string|between:3,300',
                 'course_id' => 'required|numeric',
-                'level_id' => 'required|numeric',
+                // Уровень курса, который школа видит (свой курс или курс платформы)
+                'level_id' => ['required', 'numeric', function ($attribute, $value, $fail) {
+                    $access = app(\App\Services\CourseAccess::class);
+                    $course = $access->findCourse($access->courseIdByLevel($value));
+                    if (!$access->canView(auth()->user(), $course)) {
+                        $fail(trans('validation.exists'));
+                    }
+                }],
                 'mentor_id' => 'required|numeric',
                 'is_legal' => 'required|boolean',
                 'lesson_price' => 'required|numeric|min:0',

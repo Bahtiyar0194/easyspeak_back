@@ -90,6 +90,9 @@ class MediaController extends Controller
         ->distinct()
         ->orderBy($sortKey, $sortDirection);
 
+        // Библиотека школы: только её файлы (у суперадмина — файлы платформы)
+        app(\App\Services\CourseAccess::class)->scopeOwnFiles($files, auth()->user());
+
         // Применяем фильтрацию по параметрам из запроса
         $file_name = $request->file_name;
         $material_type_slug = $request->material_type_slug;
@@ -262,6 +265,11 @@ class MediaController extends Controller
 
         $findFile = MediaFile::findOrFail($request->file_id);
 
+        // Заменить можно только файл своей школы (суперадмин — файл платформы)
+        if (!app(\App\Services\CourseAccess::class)->canEditFile(auth()->user(), $findFile)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $material_type = MaterialType::where('material_type_id', '=', $findFile->material_type_id)
         ->first();
 
@@ -320,6 +328,7 @@ class MediaController extends Controller
         $file = MediaFile::leftJoin('types_of_materials', 'files.material_type_id', '=', 'types_of_materials.material_type_id')
         ->select(
             'files.file_id',
+            'files.school_id',
             'files.processing',
             'files.target',
             'types_of_materials.material_type_slug'
@@ -329,6 +338,11 @@ class MediaController extends Controller
 
         if (!isset($file)) {
             return response()->json(['status' => 'error', 'message' => 'File not found in DB'], 404);
+        }
+
+        // Конвертировать можно только файл своей школы (суперадмин — файл платформы)
+        if (!app(\App\Services\CourseAccess::class)->canEditFile(auth()->user(), $file)) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $path = storage_path('app/public/' . $file->target);

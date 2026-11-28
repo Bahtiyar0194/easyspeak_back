@@ -41,6 +41,8 @@ class SentenceController extends Controller
 
         $courses = Sentence::leftJoin('courses', 'sentences.course_id', '=', 'courses.course_id')
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->select(
             'courses.course_id',
@@ -51,6 +53,8 @@ class SentenceController extends Controller
         ->get();
 
         $all_courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->where('courses.show_status_id', '=', 1)
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->select(
@@ -96,6 +100,8 @@ class SentenceController extends Controller
 
         $sentences = Sentence::leftJoin('courses', 'sentences.course_id', '=', 'courses.course_id')
         ->leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->leftJoin('users as operator', 'sentences.operator_id', '=', 'operator.user_id')
         ->leftJoin('types_of_status', 'sentences.status_type_id', '=', 'types_of_status.status_type_id')
         ->leftJoin('types_of_status_lang', 'types_of_status.status_type_id', '=', 'types_of_status_lang.status_type_id')

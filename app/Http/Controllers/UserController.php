@@ -79,14 +79,10 @@ class UserController extends Controller
             );
 
         // Применяем фильтры ролей в зависимости от роли пользователя
-        if ($isOwner) {
-            $roles->whereIn('types_of_user_roles.role_type_slug', ['school_admin', 'mentor', 'learner']);
-        } 
-        elseif ($isAdmin) {
-            $roles->whereIn('types_of_user_roles.role_type_slug', ['mentor', 'learner']);
-        }
-        elseif ($isMentor) {
-            $roles->whereIn('types_of_user_roles.role_type_slug', ['learner']);
+        // То же правило проверяется при приглашении и правке (assignableRoleSlugs)
+        $assignable = $this->assignableRoleSlugs($auth_user);
+        if ($assignable !== null) {
+            $roles->whereIn('types_of_user_roles.role_type_slug', $assignable);
         }
 
         // Получаем список ролей
@@ -99,6 +95,59 @@ class UserController extends Controller
 
         // Возвращаем данные в JSON-формате
         return response()->json($attributes, 200);
+    }
+
+    /**
+     * Роли, которые пользователь может назначать другим. null — любые
+     * (суперадминистратор). Владелец школы назначает и методиста
+     */
+    private function assignableRoleSlugs($actor): ?array
+    {
+        if ($actor->hasRole('super_admin')) {
+            return null;
+        }
+        if ($actor->hasRole('school_owner')) {
+            return ['school_admin', 'methodist', 'mentor', 'learner'];
+        }
+        if ($actor->hasRole('school_admin')) {
+            return ['mentor', 'learner'];
+        }
+        if ($actor->hasRole('mentor')) {
+            return ['learner'];
+        }
+        return [];
+    }
+
+    /**
+     * Ошибка в запрошенных ролях или null. Роли, которыми пользователь не
+     * управляет, у редактируемого должны остаться как есть: их нельзя ни
+     * добавить, ни снять (например, роль владельца)
+     */
+    private function rolesRequestError($actor, $requestedIds, array $currentIds = []): ?array
+    {
+        $assignable = $this->assignableRoleSlugs($actor);
+        if ($assignable === null) {
+            return null;
+        }
+
+        $requestedIds = array_map('intval', (array) $requestedIds);
+        $currentIds = array_map('intval', $currentIds);
+        $slugs = RoleType::pluck('role_type_slug', 'role_type_id');
+
+        $isManaged = function ($id) use ($slugs, $assignable) {
+            return isset($slugs[$id]) && in_array($slugs[$id], $assignable, true);
+        };
+
+        $added = array_diff($requestedIds, $currentIds);
+        $removed = array_diff($currentIds, $requestedIds);
+
+        foreach (array_merge($added, $removed) as $id) {
+            if (!$isManaged($id)) {
+                return ['roles_count' => [trans('validation.in', ['attribute' => 'roles'])]];
+            }
+        }
+
+        return null;
     }
 
     public function get_users(Request $request)
@@ -338,6 +387,12 @@ class UserController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
+        // Назначать можно только разрешённые роли (раньше сервер принимал любые,
+        // например роль суперадминистратора, переданную в обход формы)
+        if ($rolesError = $this->rolesRequestError($auth_user, $request->roles)) {
+            return response()->json($rolesError, 422);
+        }
+
         $find_email = User::where('school_id', '=', $auth_user->school_id)
             ->where('email', '=', $request->email)
             ->first();
@@ -419,6 +474,15 @@ class UserController extends Controller
         $user = User::where('school_id', '=', auth()->user()->school_id)
             ->where('user_id', '=', $request->user_id)
             ->first();
+
+        if (!isset($user)) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $currentRoleIds = UserRole::where('user_id', $user->user_id)->pluck('role_type_id')->all();
+        if ($rolesError = $this->rolesRequestError(auth()->user(), $request->roles, $currentRoleIds)) {
+            return response()->json($rolesError, 422);
+        }
 
         if (isset($user)) {
             if ($user->email != $request->email) {

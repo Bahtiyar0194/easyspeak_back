@@ -35,6 +35,8 @@ class ScheduleController extends Controller
         $language = Language::where('lang_tag', '=', $request->header('Accept-Language'))->first();
 
         $courses = Course::leftJoin('courses_lang', 'courses.course_id', '=', 'courses_lang.course_id')
+        // Курсы платформы и своей школы (\App\Services\CourseAccess)
+        ->where(fn ($q) => app(\App\Services\CourseAccess::class)->scopeVisible($q, auth('sanctum')->user()))
         ->where('courses.show_status_id', '=', 1)
         ->where('courses_lang.lang_id', '=', $language->lang_id)
         ->select(
